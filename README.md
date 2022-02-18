@@ -16,13 +16,13 @@ A simple Plugin to visualize STORM data with napari
 
 I would recommend instaling this into a virtual enviorment, e.g. using conda prompt with 
 
-    conda create --name napari-STORM
+    conda create --name napari-storm
     
-    activate napari-STORM
+    activate napari-storm
 
-You can install `napari-STORM` via [pip]:
+You can install `napari-storm` via [pip]:
 
-    pip install napari-STORM
+    pip install napari-strom
     
 
     
@@ -33,7 +33,7 @@ Best functionality is provided when you start it from python (e.g. type python.e
     import napari
     from napari_storm import *
     v = napari.Viewer()
-    widget=SMLMQW(v)
+    widget=napari-storm(v)
     print(widget)
     v.window.qt_viewer.dockLayerControls.setVisible(False)
     v.window.add_dock_widget(widget,area='left',name='napari-STORM')
