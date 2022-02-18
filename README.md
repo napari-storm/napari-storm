@@ -1,6 +1,6 @@
 # napari-storm
 
-[![License](https://img.shields.io/pypi/l/napari-STORM.svg?color=green)](https://github.com/napari-storm/napari-storm/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/napari-storm.svg?color=green)](https://github.com/napari-storm/napari-storm/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/napari-STORM.svg?color=green)](https://pypi.org/project/napari-storm)
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-STORM.svg?color=green)](https://python.org)
 [![tests](https://github.com/LREIN663/napari-STORM/workflows/tests/badge.svg)](https://github.com/napari-storm/napari-storm/actions)
