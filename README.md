@@ -46,10 +46,7 @@ but in principle the widget should be available whenever you start napari in the
     
 in you conda command prompt. For furhter information stick to https://github.com/napari/napari
 
-## License
 
-Distributed under the terms of the [GNU GPL v3.0] license,
-"napari-STORM" is free and open source software
 
 ## Issues
 
