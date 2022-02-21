@@ -36,7 +36,7 @@ Best functionality is provided when you start it from python (e.g. type python.e
     widget=napari-storm(v)
     print(widget)
     v.window.qt_viewer.dockLayerControls.setVisible(False)
-    v.window.add_dock_widget(widget,area='left',name='napari-STORM')
+    v.window.add_dock_widget(widget,area='left',name='napari-storm')
     napari.run()
     
     
