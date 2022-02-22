@@ -327,11 +327,11 @@ class napari_storm(QWidget):
         self.Bspecial_colorcoding = QCheckBox()
         self.Bspecial_colorcoding.setText("Activate Rainbow colorcoding in Z")
         self.Bspecial_colorcoding.stateChanged.connect(self.colorcoding)
-        layout.addWidget(self.Bspecial_colorcoding,13,0)
+        layout.addWidget(self.Bspecial_colorcoding,13,0,1,2)
 
         self.Bmerge_with_additional_file = QPushButton()
         self.Bmerge_with_additional_file.setText("Merge with additional file")
-        layout.addWidget(self.Bmerge_with_additional_file,14,0)
+        layout.addWidget(self.Bmerge_with_additional_file,14,0,1,2)
         self.Bmerge_with_additional_file.clicked.connect(lambda: open_STORM_data(self,merge=True))
 
         ########################################## visual_control_tab
