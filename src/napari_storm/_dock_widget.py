@@ -398,33 +398,34 @@ class napari_storm(QWidget):
         #####
 
     def right_click_pan(self):
-        self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
-        print(self.copy_on_mouse_press)
+        #self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
+        #print(self.copy_on_mouse_press)
         self.mouse_down=False
         def our_mouse_press(event=None):
-            print(event.type,QMouseEvent,event.button)
+            #print(event.type,QMouseEvent,event.button)
             if event.type == "mouse_press":
-                print("almost")
-                if event.button == 3:
+                if event.button == 2:
+                    self.viewer.camera
                     self.start_x = event.native.x()
                     self.start_y = event.native.y()
                     self.zoom = self.viewer.camera.zoom
                     self.mouse_down=True
-                    print("we're in")
                 else:
                     pass
-                    #super().mousePressEvent(self,event)
 
-        def our_mouse_move(event=None):
+
+        def our_mouse_move(event : QtGui.QMouseEvent) -> None:
             if not self.mouse_down:
                 return
+            event.blocked=True
             #print("mouse move", event.native.x(), event.native.y(), event.native.button())
             self._handle_move(event.native.x(), event.native.y())
 
+
+
         def our_mouse_release(event=None):
-            print("release")
-            if event.type == "mouse_press":
-                if event.button == "mouse_press":
+            if event.type == "mouse_release":
+                if event.button == 2:
                     if not self.mouse_down:
                         return
                     #print("mouse release", event.native.x(), event.native.y(), event.native.button())
@@ -439,14 +440,18 @@ class napari_storm(QWidget):
         delta_x = x - self.start_x
         delta_y = y - self.start_y
         alpha, beta, gamma = self.viewer.camera.angles
-        relative_x = delta_x / self.viewer.window.qt_viewer.width() * 7.5
-        relative_y = delta_y / self.viewer.window.qt_viewer.height() * 7.5
-        gamma -= relative_y
-        beta -= relative_x
+        alpha=alpha/360*2*np.pi
+        beta=beta/360*2*np.pi
+        gamma=gamma/360*2*np.pi
+        rx=delta_x*np.cos(alpha)*np.cos(beta)+delta_y*(-np.sin(alpha))*np.cos(beta)*np.sin(gamma)
+        ry=delta_x*np.sin(alpha)*np.cos(beta)*np.sin(gamma)+delta_x*np.cos(alpha)*np.sin(beta)+\
+           delta_y*np.cos(alpha)*np.cos(beta)*np.sin(gamma)
+        rz=-delta_x*np.sin(alpha)*np.cos(gamma)-delta_y*np.cos(alpha)*np.cos(gamma)
         z, y, x = self.viewer.camera.center
-        y -= np.cos(2 * 3.14145 * gamma / 360) * self.viewer.window.qt_viewer.height()
-        x += np.sin(2 * 3.14145 * beta / 360) * self.viewer.window.qt_viewer.width()
-        print((z, y, x))
+        y -= ry
+        x -= rx
+        z -= rz
+        #print((z, y, x))
         self.viewer.camera.center = (z, y, x)
         self.viewer.camera.zoom=self.zoom
         # print(alpha,beta,gamma)
