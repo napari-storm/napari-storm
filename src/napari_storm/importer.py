@@ -76,10 +76,11 @@ def load_h5(self, file_path):
     num_channel = max(data['CHANNEL']) + 1
     offset = look_for_offset(locs, zdim)
     for i in range(num_channel):
-        filename = check_namespace(self,filename+f" Channel {i+1}")
+        filename_pluschannel = check_namespace(self,filename+f" Channel {i+1}")
         locs_in_ch=locs[data['CHANNEL']==i]
-        self.list_of_datasets.append(dataset(locs=locs_in_ch, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,offset=offset))
-        create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
+        self.list_of_datasets.append(dataset(locs=locs_in_ch, zdim=zdim, parent=self, pixelsize=pixelsize,
+                                             name=filename_pluschannel,offset=offset,index=len(self.list_of_datasets)))
+        create_new_layer(self=self, aas=0.1,  layer_name=filename_pluschannel, idx=len(self.list_of_datasets)-1)
 
 def load_mfx_json(self,file_path):
     """Loads MFX Data from json files -> Really needs improvement in performance"""
@@ -121,7 +122,8 @@ def load_mfx_json(self,file_path):
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
 
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
+                                         index=len(self.list_of_datasets), name=filename,offset=offset))
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -167,7 +169,8 @@ def load_mfx_npy(self,file_path):
             dtype=LOCS_DTYPE_2D, )
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
+                                         index=len(self.list_of_datasets), name=filename,offset=offset))
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -200,7 +203,8 @@ def load_csv(self, file_path):
         zdim = False
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize
+                                         ,index=len(self.list_of_datasets), name=filename,offset=offset))
     create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -323,8 +327,8 @@ def load_SMLM(self, file_path):
         zdim = False
     offset=look_for_offset(locs,zdim)
     filename=check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,
-                                         offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename
+                                         ,index=len(self.list_of_datasets),offset=offset))
     create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 ##### Lowest Order functions
@@ -334,22 +338,24 @@ def start_testing(self):
     zdim=True
     locs = np.rec.array((np.repeat(np.arange(1,n+1),2),np.repeat(np.arange(1,n+1),2),np.arange(1,2*n+1),
                          np.repeat(np.arange(0,2),n),np.repeat(np.ones(n),2)),dtype=LOCS_DTYPE_3D)
+    locs.z[0]=2
+    print(len(locs.z))
     pixelsize=100
     filename=check_namespace(self,'a.tester')
     offset=look_for_offset(locs=locs,zdim=zdim)
     self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,
-                                         offset=offset))
+                                         offset=offset,index=len(self.list_of_datasets)))
     #print(self.list_of_datasets[-1].name,len(self.list_of_datasets),self.list_of_datasets[0].locs.x)
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 def look_for_offset(locs,zdim):
     if zdim: # remove negative values without having an offset between channels
-        if np.min(locs.z)<0 or np.min(locs.y)<0 or np.min(locs.x)<0:
+        if np.min(locs.z)<=0 or np.min(locs.y)<=0 or np.min(locs.x)<=0:
             offset=[np.min(locs.x),np.min(locs.y),np.min(locs.z)]
         else:
             offset=[0,0,0]
     else:
-        if np.min(locs.y)<0 or np.min(locs.x)<0:
+        if np.min(locs.y)<=0 or np.min(locs.x)<=0:
             offset=[np.min(locs.x),np.min(locs.y)]
         else:
             offset=[0,0,0]
@@ -359,5 +365,5 @@ def look_for_offset(locs,zdim):
 def check_namespace(self,name,idx=1):
     for i in range(len(self.list_of_datasets)):
         if self.list_of_datasets[i].name == name:
-            return check_namespace(self,name+str(idx+1),idx+1)
+            return check_namespace(self,name+"_"+str(idx+1),idx+1)
     return name

@@ -13,12 +13,12 @@ from .utils import generate_billboards_2d
 
 class dataset():
     """An Object where the localisation data is stored, updated and things like Sigma get calculated"""
-    def __init__(self, locs=None, zdim=False, parent=None, name=None, pixelsize=130,offset=None):
+    def __init__(self, locs=None, zdim=False, parent=None, name=None, pixelsize=130,offset=None,index=0):
         self.zdim = zdim
         self.locs = locs
         self.locs_backup = locs  # Needed if dataset is cut with sliders and then you want the data back
         self.coords=None
-        self.index= None
+        self.index= index
         self.layer = None
         self.name = name
         self.sigma = None
@@ -57,8 +57,13 @@ class dataset():
         if self.zdim and self.parent.Bspecial_colorcoding.isChecked():
             if self.parent.Brenderoptions.currentText()=="variable gaussian":
                 self.values=self.locs.photons**(1/3)
+                self.values/=np.max(self.values)
+                self.parent.list_of_datasets[self.index].contrast_limits=(0,1)
             else:
-                self.values=1/(self.locs.z+1)
+                self.values=(self.locs.z-np.min(self.locs.z))/(np.max(self.locs.z)-np.min(self.locs.z))
+                #self.values=1/(self.locs.z+1)
+                #self.values /= np.max(self.values)
+                self.parent.list_of_datasets[self.index].contrast_limits = (0, 1)
             if np.min(self.values)==np.max(self.values):
                 self.values=1
             else:
@@ -83,7 +88,6 @@ class dataset():
         LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
         LOCS_DTYPE_3D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("z", "f4"), ("photons", "f4")]
         self.locs = self.locs_backup
-        self.index = np.arange(0, len(self.locs.x))
         x0, x1 = self.parent.Srender_rangey.getRange()  # x and y are swapped in napari
         y0, y1 = self.parent.Srender_rangex.getRange()
         xscale = max(self.locs.x) - min(self.locs.x)
@@ -113,13 +117,10 @@ class dataset():
             self.locs = np.rec.array((self.locs.frame[~ np.isnan(filterer)], self.locs.x[~ np.isnan(filterer)],
                                       self.locs.y[~ np.isnan(filterer)], self.locs.z[~ np.isnan(filterer)],
                                       self.locs.photons[~ np.isnan(filterer)]), dtype=LOCS_DTYPE_3D)
-            self.index=self.index[~ np.isnan(filterer)]
         else:
             self.locs = np.rec.array((self.locs.frame[~ np.isnan(filterer)], self.locs.x[~ np.isnan(filterer)],
                                       self.locs.y[~ np.isnan(filterer)],
                                       self.locs.photons[~ np.isnan(filterer)]), dtype=LOCS_DTYPE_2D)
-            self.index = self.index[~ np.isnan(filterer)]
-        self.index=np.arange(0,len(self.index))
         #print("Filtering done",f"len filt {np.shape(filterer)} len idx {np.shape(self.index)} len locs x {np.shape(self.locs.x)}")
         self.calc_sigmas()
         self.calc_values()
@@ -231,7 +232,7 @@ class napari_storm(QWidget):
         self.Bopen = QPushButton()
         self.Bopen.clicked.connect(lambda: open_STORM_data(self))
         self.Bopen.setText("Import File Dialog")
-        layout.addWidget(self.Bopen, 0, 1)
+        layout.addWidget(self.Bopen, 0, 1,1,4)
 
         self.Limport = QLabel()
         self.Limport.setText("Import \nSTORM Data")
@@ -240,16 +241,31 @@ class napari_storm(QWidget):
         self.Lnumberoflocs = TestListView(self, parent=self)
         self.Lnumberoflocs.addItem("STATISTICS \nWaiting for Data... \nImport or drag file here")
         self.Lnumberoflocs.itemDoubleClicked.connect(self.Lnumberoflocs.remove_dataset)
-        layout.addWidget(self.Lnumberoflocs, 1, 0, 1, 2)
+        layout.addWidget(self.Lnumberoflocs, 1, 0, 1, 4)
 
         self.Lresetview = QLabel()
         self.Lresetview.setText("Reset view:")
         layout.addWidget(self.Lresetview, 2, 0)
-
+        """
         self.Baxis = QComboBox()
         self.Baxis.addItems(["XY", "XZ", "YZ"])
         self.Baxis.currentIndexChanged.connect(self.change_camera)
-        layout.addWidget(self.Baxis, 2, 1)
+        layout.addWidget(self.Baxis, 2, 1)"""
+        self.Baxis_xy=QPushButton()
+        self.Baxis_xy.setText("XY")
+        self.Baxis_xy.clicked.connect(lambda: self.change_camera(type="XY"))
+        layout.addWidget(self.Baxis_xy,2,1)
+
+        self.Baxis_yz = QPushButton()
+        self.Baxis_yz.setText("YZ")
+        self.Baxis_yz.clicked.connect(lambda: self.change_camera(type="YZ"))
+        layout.addWidget(self.Baxis_yz, 2, 2)
+
+        self.Baxis_xz = QPushButton()
+        self.Baxis_xz.setText("XZ")
+        self.Baxis_xz.clicked.connect(lambda: self.change_camera(type="XZ"))
+        layout.addWidget(self.Baxis_xz, 2, 3)
+
 
         self.Lrenderoptions = QLabel()
         self.Lrenderoptions.setText("Rendering options:")
@@ -258,7 +274,7 @@ class napari_storm(QWidget):
         self.Brenderoptions = QComboBox()
         self.Brenderoptions.addItems(["fixed gaussian", "variable gaussian"])
         self.Brenderoptions.currentIndexChanged.connect(self.render_options_changed)
-        layout.addWidget(self.Brenderoptions, 3, 1)
+        layout.addWidget(self.Brenderoptions, 3, 1,1,3)
 
         self.Lsigma = QLabel()
         self.Lsigma.setText("PSF FWHM in XY [nm]:")
@@ -271,7 +287,7 @@ class napari_storm(QWidget):
         self.Esigma = QLineEdit()
         self.Esigma.setText("10")
         self.Esigma.textChanged.connect(lambda: self.start_typing_timer(self.typing_timer_sigma))
-        layout.addWidget(self.Esigma, 4, 1)
+        layout.addWidget(self.Esigma, 4, 1,1,3)
         self.typing_timer_sigma = QtCore.QTimer()
         self.typing_timer_sigma.setSingleShot(True)
         self.typing_timer_sigma.timeout.connect(lambda: update_layers(self))
@@ -279,7 +295,7 @@ class napari_storm(QWidget):
         self.Esigma2 = QLineEdit()
         self.Esigma2.setText("750")
         self.Esigma2.textChanged.connect(lambda: self.start_typing_timer(self.typing_timer_sigma))
-        layout.addWidget(self.Esigma2, 5, 1)
+        layout.addWidget(self.Esigma2, 5, 1,1,3)
 
         self.Lrangex = QLabel()
         self.Lrangex.setText("X-range")
@@ -296,13 +312,13 @@ class napari_storm(QWidget):
         from .RangeSlider2 import RangeSlider2
         self.Srender_rangex = RangeSlider2(parent=self,type='x')
         # self.Srender_rangex.mouseReleaseEvent.connect()
-        layout.addWidget(self.Srender_rangex, 6, 1)
+        layout.addWidget(self.Srender_rangex, 6, 1,1,3)
 
         self.Srender_rangey = RangeSlider2(parent=self,type='y')
-        layout.addWidget(self.Srender_rangey, 7, 1)
+        layout.addWidget(self.Srender_rangey, 7, 1,1,3)
 
         self.Srender_rangez = RangeSlider2(parent=self,type='z')
-        layout.addWidget(self.Srender_rangez, 8, 1)
+        layout.addWidget(self.Srender_rangez, 8, 1,1,3)
 
         self.Lscalebar = QLabel()
         self.Lscalebar.setText("Scalebar?")
@@ -310,16 +326,16 @@ class napari_storm(QWidget):
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar)
-        layout.addWidget(self.Cscalebar, 9, 1)
+        layout.addWidget(self.Cscalebar, 9, 1,1,3)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText("Size of Scalebar [nm]:")
         layout.addWidget(self.Lscalebarsize, 10, 0)
 
         self.Esbsize = QLineEdit()
-        self.Esbsize.setText("1000")
+        self.Esbsize.setText("500")
         self.Esbsize.textChanged.connect(lambda: self.start_typing_timer(self.typing_timer_sbscale))
-        layout.addWidget(self.Esbsize, 10, 1)
+        layout.addWidget(self.Esbsize, 10, 1,1,3)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.scalebar)
@@ -327,11 +343,11 @@ class napari_storm(QWidget):
         self.Bspecial_colorcoding = QCheckBox()
         self.Bspecial_colorcoding.setText("Activate Rainbow colorcoding in Z")
         self.Bspecial_colorcoding.stateChanged.connect(self.colorcoding)
-        layout.addWidget(self.Bspecial_colorcoding,13,0,1,2)
+        layout.addWidget(self.Bspecial_colorcoding,13,0,1,4)
 
         self.Bmerge_with_additional_file = QPushButton()
         self.Bmerge_with_additional_file.setText("Merge with additional file")
-        layout.addWidget(self.Bmerge_with_additional_file,14,0,1,2)
+        layout.addWidget(self.Bmerge_with_additional_file,14,0,1,4)
         self.Bmerge_with_additional_file.clicked.connect(lambda: open_STORM_data(self,merge=True))
 
         ########################################## visual_control_tab
@@ -348,10 +364,10 @@ class napari_storm(QWidget):
         self.setLayout(self.layout)
 
         self.custom_controlls = MouseControlls()
-        layout.setColumnStretch(0, 2)
+        layout.setColumnStretch(0, 4)
         self.data_control_tab.setLayout(layout)
         self.visual_control_tab.setLayout(self.layout2)
-
+        self.right_click_pan()
         custom_keys_and_scalebar(self)
         self.hide_stuff()
 
@@ -380,7 +396,62 @@ class napari_storm(QWidget):
         else:
             event.ignore()
         #####
-    #
+
+    def right_click_pan(self):
+        self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
+        print(self.copy_on_mouse_press)
+        self.mouse_down=False
+        def our_mouse_press(event=None):
+            print(event.type,QMouseEvent,event.button)
+            if event.type == "mouse_press":
+                print("almost")
+                if event.button == 3:
+                    self.start_x = event.native.x()
+                    self.start_y = event.native.y()
+                    self.zoom = self.viewer.camera.zoom
+                    self.mouse_down=True
+                    print("we're in")
+                else:
+                    pass
+                    #super().mousePressEvent(self,event)
+
+        def our_mouse_move(event=None):
+            if not self.mouse_down:
+                return
+            #print("mouse move", event.native.x(), event.native.y(), event.native.button())
+            self._handle_move(event.native.x(), event.native.y())
+
+        def our_mouse_release(event=None):
+            print("release")
+            if event.type == "mouse_press":
+                if event.button == "mouse_press":
+                    if not self.mouse_down:
+                        return
+                    #print("mouse release", event.native.x(), event.native.y(), event.native.button())
+                    self._handle_move(event.native.x(), event.native.y())
+                    self.mouse_down = False
+
+        self.viewer.window.qt_viewer.on_mouse_press = our_mouse_press
+        self.viewer.window.qt_viewer.on_mouse_move = our_mouse_move
+        self.viewer.window.qt_viewer.on_mouse_release = our_mouse_release
+
+    def _handle_move(self, x, y):
+        delta_x = x - self.start_x
+        delta_y = y - self.start_y
+        alpha, beta, gamma = self.viewer.camera.angles
+        relative_x = delta_x / self.viewer.window.qt_viewer.width() * 7.5
+        relative_y = delta_y / self.viewer.window.qt_viewer.height() * 7.5
+        gamma -= relative_y
+        beta -= relative_x
+        z, y, x = self.viewer.camera.center
+        y -= np.cos(2 * 3.14145 * gamma / 360) * self.viewer.window.qt_viewer.height()
+        x += np.sin(2 * 3.14145 * beta / 360) * self.viewer.window.qt_viewer.width()
+        print((z, y, x))
+        self.viewer.camera.center = (z, y, x)
+        self.viewer.camera.zoom=self.zoom
+        # print(alpha,beta,gamma)
+        # print(self.viewer.camera.center)
+
 
     def hide_stuff(self):
         """Hide controls which are better untouched atm"""
@@ -403,7 +474,10 @@ class napari_storm(QWidget):
         self.Srender_rangez.hide()
         self.Lrangez.hide()
         self.Lresetview.hide()
-        self.Baxis.hide()
+        #self.Baxis.hide()
+        self.Baxis_xy.hide()
+        self.Baxis_yz.hide()
+        self.Baxis_xz.hide()
         self.BAutoContrast.hide()
 
     def show_stuff(self):
@@ -466,25 +540,36 @@ class napari_storm(QWidget):
         l = int(self.Esbsize.text())
         if self.Cscalebar.isChecked() and not not all(self.list_of_datasets[-1].locs):
             if self.list_of_datasets[-1].zdim:
-                list=[l/2,.05*l/2,.05*l/2]
+                list=[l,.125*l/2,.125*l/2]
                 faces =np.asarray([[0, 1, 2], [1, 2, 3], [4, 5, 6], [5, 6, 7], [0, 2, 4], [4, 6, 2], [1, 3, 7], [1, 5, 7], [2, 3, 6],
                      [3, 6, 7], [4, 5, 0], [0, 1, 5]])
                 vertices=[]
+                """
                 for c in range(3):
                     i=list[c%3]
                     j=list[(c+1)%3]
                     k=list[(c+2)%3]
+                    m=0
                     verts = [[-i,-k,-j],[-i,k,-j],[-i,-k,j],[-i,k,j],[i,-k,-j],[i,k,-j],[i,-k,j],[i,k,j]]
-                    vertices.append(np.asarray(verts + cpos*np.ones_like(verts)))
+                    vertices.append(np.asarray(verts + cpos*np.ones_like(verts)))"""
+                vertices=np.asarray([[0,list[1],list[2]],[0,-list[1],list[2]],[0,list[1],-list[2]],[0,-list[1],-list[2]],
+                       [l,list[1],list[2]],[ l,-list[1],list[2]],[ l,list[1],-list[2]],[ l,-list[1],-list[2]],
+                       [list[1],0,list[2]],[-list[1],0,list[2]],[list[1],0,-list[2]],[-list[1],0,-list[2]],
+                       [list[1],l,list[2]],[-list[1],l,list[2]],[list[1],l,-list[2]],[-list[1],l,-list[2]],
+                       [list[1],list[2],0],[-list[1],list[2],0],[list[1],-list[2],0],[-list[1],-list[2],0],
+                       [list[1],list[2],l],[-list[1],list[2],l],[list[1],-list[2],l],[-list[1],-list[2],l]])
+                for i in range(len(vertices)):
+                    vertices[i]=vertices[i]+cpos-(l/2,0,0)
+
                 faces=np.asarray(np.vstack((faces,faces+8,faces+16)))
-                vertices=np.reshape(np.asarray(vertices),(24,3))
+                #vertices=np.reshape(np.asarray(vertices),(24,3))
             else:
-                list=[l/2,0.05*l]
+                list=[l,0.05*l]
 
                 faces=np.asarray([[0,1,3],[1,2,3],[4,5,7],[5,6,7]])
-                verts=[[cpos[1]-list[0],cpos[2]-list[1]],[cpos[1]+list[0],cpos[2]-list[1]],
-                       [cpos[1]+list[0],cpos[2]+list[1]],[cpos[1]-list[0],cpos[2]+list[1]],
-                       [cpos[1]-list[1],cpos[2]-list[0]],[cpos[1]+list[1],cpos[2]-list[0]],
+                verts=[[cpos[1] ,cpos[2]-list[1]],[cpos[1]+list[0],cpos[2]-list[1]],
+                       [cpos[1]+list[0],cpos[2]+list[1]],[cpos[1] ,cpos[2]+list[1]],
+                       [cpos[1]-list[1],cpos[2] ],[cpos[1]+list[1],cpos[2] ],
                        [cpos[1]+list[1],cpos[2]+list[0]],[cpos[1]-list[1],cpos[2]+list[0]]]
                 vertices=np.reshape(np.asarray(verts),(8,2))
             if self.scalebar_exists:
@@ -506,7 +591,10 @@ class napari_storm(QWidget):
         if self.list_of_datasets[-1].zdim:
             self.Lrangez.show()
             self.Srender_rangez.show()
-            self.Baxis.show()
+            #self.Baxis.show()
+            self.Baxis_xy.show()
+            self.Baxis_xz.show()
+            self.Baxis_yz.show()
             self.Lresetview.show()
             self.Bspecial_colorcoding.show()
             v.dims.ndisplay = 3
@@ -519,12 +607,12 @@ class napari_storm(QWidget):
     def start_typing_timer(self, timer):
         timer.start(500)
 
-    def change_camera(self):
+    def change_camera(self,type="XY"):
         v = napari.current_viewer()
         values= {}
-        if self.Baxis.currentText() == "XY":
+        if type == "XY":
             v.camera.angles=(0,0,90)
-        elif self.Baxis.currentText() == "XZ":
+        elif type == "XZ":
             v.camera.angles=(0,0,180)
         else:
             v.camera.angles=(-90,-90,-90)
@@ -638,13 +726,19 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
     if not self.list_of_datasets[idx].zdim: # Hide 3D Options if 2D Dataset
         self.Srender_rangez.hide()
         self.Lrangez.hide()
-        self.Baxis.hide()
+        #self.Baxis.hide()
+        self.Baxis_xy.hide()
+        self.Baxis_yz.hide()
+        self.Baxis_xz.hide()
         self.Lresetview.hide()
         self.Bspecial_colorcoding.hide()
     else:
         self.Srender_rangez.show()
         self.Lrangez.show()
-        self.Baxis.show()
+        #self.Baxis.show()
+        self.Baxis_xy.show()
+        self.Baxis_yz.show()
+        self.Baxis_xz.show()
         self.Lresetview.show()
         self.Bspecial_colorcoding.show()
     self.list_of_datasets[idx].update_locs()
