@@ -58,12 +58,12 @@ class dataset():
             if self.parent.Brenderoptions.currentText()=="variable gaussian":
                 self.values=self.locs.photons**(1/3)
                 self.values/=np.max(self.values)
-                self.parent.list_of_datasets[self.index].contrast_limits=(0,1)
+                #self.parent.list_of_datasets[self.index].contrast_limits=(0,1)
             else:
                 self.values=(self.locs.z-np.min(self.locs.z))/(np.max(self.locs.z)-np.min(self.locs.z))
                 #self.values=1/(self.locs.z+1)
                 #self.values /= np.max(self.values)
-                self.parent.list_of_datasets[self.index].contrast_limits = (0, 1)
+                #self.parent.list_of_datasets[self.index].contrast_limits = (0, 1)
             if np.min(self.values)==np.max(self.values):
                 self.values=1
             else:
@@ -173,10 +173,13 @@ class ChannelControls(QWidget):
 
     def adjust_contrast(self):
         """...adjust contrast limits"""
-        if self.parent.Bspecial_colorcoding.isChecked():
+        #print("is it checked ?",not self.Bhide_channel.isChecked())
+        if self.parent.Bspecial_colorcoding.isChecked() and not self.Bhide_channel.isChecked():
             self.parent.list_of_datasets[self.idx].layer.opacity=self.Slider.value()/50-1
-        else:
+        elif not self.Bhide_channel.isChecked():
             self.parent.list_of_datasets[self.idx].layer.contrast_limits=(0,149/np.exp(self.Slider.value()/100 * 5))
+        else:
+            self.hide_channel()
 
     def adjust_cmap(self):
         """...adjust colormap"""
@@ -751,6 +754,7 @@ def update_layers(self, aas=0,  layer_name="SMLM Data"):
         self.list_of_datasets[i].layer.add_to_viewer(v)
         self.channel[i].adjust_contrast()
         self.channel[i].adjust_cmap()
+        self.channel[i].hide_channel()
         #if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
         #                                                        np.max(self.list_of_datasets[i].values))

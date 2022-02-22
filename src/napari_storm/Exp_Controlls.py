@@ -146,6 +146,10 @@ def custom_keys_and_scalebar(self):
                 if layer.name != "scalebar":
                     layer.translate += [0, 0, -50]
         v.scale_bar.visible = True
+
+        """@v.bind_key('Shift')
+        def sphere(v):
+            pass"""
         placeholder=RightClickPaninng(parent=self,viewer=v)
 
 class MouseControlls(QWidget):  # Experimental Fly through mode
