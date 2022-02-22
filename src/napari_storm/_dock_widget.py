@@ -135,12 +135,16 @@ class ChannelControls(QWidget):
         self.Label = QLabel()
         self.Label.setText(name)
 
+        self.Bhide_channel=QCheckBox()
+        self.Bhide_channel.setChecked(True)
+        self.Bhide_channel.stateChanged.connect(self.hide_channel)
+
         self.Slider = QSlider(Qt.Horizontal) # Contrast
         self.Slider.setMinimum(50)
         self.Slider.setMaximum(100)
         self.Slider.setSingleStep(1)
         self.Slider.setValue(100)
-        self.Slider.valueChanged.connect(lambda: self.start_typing_timer(self.typing_timer_slider))
+        self.Slider.valueChanged.connect(self.adjust_contrast)
 
         self.Colormap = QComboBox()
         items=[]
@@ -160,15 +164,11 @@ class ChannelControls(QWidget):
 
         self.layout=QGridLayout()
         self.layout.addWidget(self.Label,0,0)
-        self.layout.addWidget(self.Colormap,1,0)
-        self.layout.addWidget(self.Slider,2,0)
+        self.layout.addWidget(self.Bhide_channel,0,1)
+        self.layout.addWidget(self.Colormap,1,0,1,2)
+        self.layout.addWidget(self.Slider,2,0,1,2)
+        self.layout.setColumnStretch(0,2)
         self.setLayout(self.layout)
-
-
-        self.typing_timer_slider = QtCore.QTimer()
-        self.typing_timer_slider.setSingleShot(True)
-        self.typing_timer_slider.timeout.connect(lambda: self.adjust_contrast())
-
 
     def adjust_contrast(self):
         """...adjust contrast limits"""
@@ -180,12 +180,26 @@ class ChannelControls(QWidget):
     def adjust_cmap(self):
         """...adjust colormap"""
         if self.parent.Bspecial_colorcoding.isChecked():
-            self.parent.list_of_datasets[self.idx].layer.colormap = 'hsv'
+            if self.parent.Brenderoptions.currentText() == "fixed gaussian":
+                self.parent.list_of_datasets[self.idx].layer.colormap = 'hsv'
+            else:
+                self.parent.list_of_datasets[self.idx].layer.colormap = self.parent.colormaps[-1]
         else:
             self.parent.list_of_datasets[self.idx].layer.colormap = self.parent.colormaps[self.Colormap.currentIndex()]
 
-    def start_typing_timer(self, timer):
-        timer.start(50)
+    def hide_channel(self):
+        if not self.Bhide_channel.isChecked():
+            self.parent.list_of_datasets[self.idx].layer.opacity=0
+            self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1E5)
+            self.Slider.hide()
+            self.Colormap.hide()
+        else:
+            self.parent.list_of_datasets[self.idx].layer.opacity = 1
+            self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
+            self.Colormap.show()
+            self.Slider.show()
+            self.Slider.setValue(100)
+
 
 class napari_storm(QWidget):
     """The Heart of this code: A Dock Widget, but also an object where everthing runs together"""
