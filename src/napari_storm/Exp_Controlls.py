@@ -1,7 +1,79 @@
+from qtpy import QtGui
 from qtpy.QtWidgets import QWidget, QPushButton, QLabel, QComboBox, QListWidget, QWidget
 import napari
 import numpy as np
 from PyQt5.QtCore import Qt
+
+
+
+class RightClickPaninng(QWidget):
+    def __init__(self,parent,viewer):
+        super().__init__()
+        self.mouse_down = False
+        self.start_x=0
+        self.start_y=0
+        self.parent=parent
+        self.viewer=viewer
+
+    def right_click_pan(self):
+        #self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
+        #print(self.copy_on_mouse_press)
+        self.mouse_down=False
+        def our_mouse_press(event=None):
+            #print(event.type,QMouseEvent,event.button)
+            if event.type == "mouse_press":
+                if event.button == 2:
+                    self.viewer.camera
+                    self.start_x = event.native.x()
+                    self.start_y = event.native.y()
+                    self.zoom = self.viewer.camera.zoom
+                    self.mouse_down=True
+                else:
+                    pass
+
+
+        def our_mouse_move(event : QtGui.QMouseEvent) -> None:
+            if not self.mouse_down:
+                return
+            event.blocked=True
+            #print("mouse move", event.native.x(), event.native.y(), event.native.button())
+            self._handle_move(event.native.x(), event.native.y())
+
+
+
+        def our_mouse_release(event=None):
+            if event.type == "mouse_release":
+                if event.button == 2:
+                    if not self.mouse_down:
+                        return
+                    #print("mouse release", event.native.x(), event.native.y(), event.native.button())
+                    self._handle_move(event.native.x(), event.native.y())
+                    self.mouse_down = False
+
+        self.viewer.window.qt_viewer.on_mouse_press = our_mouse_press
+        self.viewer.window.qt_viewer.on_mouse_move = our_mouse_move
+        self.viewer.window.qt_viewer.on_mouse_release = our_mouse_release
+    def _handle_move(self, x, y):
+        delta_x = x - self.start_x
+        delta_y = y - self.start_y
+        alpha, beta, gamma = self.viewer.camera.angles
+        alpha=alpha/360*2*np.pi
+        beta=beta/360*2*np.pi
+        gamma=gamma/360*2*np.pi
+        rx=delta_x*np.cos(alpha)*np.cos(beta)+delta_y*(-np.sin(alpha))*np.cos(beta)*np.sin(gamma)
+        ry=delta_x*np.sin(alpha)*np.cos(beta)*np.sin(gamma)+delta_x*np.cos(alpha)*np.sin(beta)+\
+           delta_y*np.cos(alpha)*np.cos(beta)*np.sin(gamma)
+        rz=-delta_x*np.sin(alpha)*np.cos(gamma)-delta_y*np.cos(alpha)*np.cos(gamma)
+        z, y, x = self.viewer.camera.center
+        y -= ry
+        x -= rx
+        z -= rz
+        #print((z, y, x))
+        self.viewer.camera.center = (z, y, x)
+        self.viewer.camera.zoom=self.zoom
+        # print(alpha,beta,gamma)
+        # print(self.viewer.camera.center)
+
 def custom_keys_and_scalebar(self):
 # Custom Keys : w and s for zoom
         # q and e to switch trough axis
@@ -74,8 +146,7 @@ def custom_keys_and_scalebar(self):
                 if layer.name != "scalebar":
                     layer.translate += [0, 0, -50]
         v.scale_bar.visible = True
-
-
+        placeholder=RightClickPaninng(parent=self,viewer=v)
 
 class MouseControlls(QWidget):  # Experimental Fly through mode
     def __init__(self):

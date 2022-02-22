@@ -347,8 +347,13 @@ class napari_storm(QWidget):
 
         self.Bmerge_with_additional_file = QPushButton()
         self.Bmerge_with_additional_file.setText("Merge with additional file")
-        layout.addWidget(self.Bmerge_with_additional_file,14,0,1,4)
+        layout.addWidget(self.Bmerge_with_additional_file,14,0,1,2)
         self.Bmerge_with_additional_file.clicked.connect(lambda: open_STORM_data(self,merge=True))
+
+        self.Breset_render_range = QPushButton()
+        self.Breset_render_range.setText("Reset Render Range")
+        self.Breset_render_range.clicked.connect(self.reset_render_range)
+        layout.addWidget(self.Breset_render_range,14,2,1,2)
 
         ########################################## visual_control_tab
         self.layout2 = QFormLayout()
@@ -367,9 +372,15 @@ class napari_storm(QWidget):
         layout.setColumnStretch(0, 4)
         self.data_control_tab.setLayout(layout)
         self.visual_control_tab.setLayout(self.layout2)
-        self.right_click_pan()
+        #self.right_click_pan()
         custom_keys_and_scalebar(self)
         self.hide_stuff()
+
+    def reset_render_range(self):
+        self.Srender_rangex.setValue((0,100))
+        self.Srender_rangey.setValue((0, 100))
+        self.Srender_rangez.setValue((0, 100))
+        update_layers(self)
 
     #### D and D
     def dragEnterEvent(self, event):
@@ -397,65 +408,6 @@ class napari_storm(QWidget):
             event.ignore()
         #####
 
-    def right_click_pan(self):
-        #self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
-        #print(self.copy_on_mouse_press)
-        self.mouse_down=False
-        def our_mouse_press(event=None):
-            #print(event.type,QMouseEvent,event.button)
-            if event.type == "mouse_press":
-                if event.button == 2:
-                    self.viewer.camera
-                    self.start_x = event.native.x()
-                    self.start_y = event.native.y()
-                    self.zoom = self.viewer.camera.zoom
-                    self.mouse_down=True
-                else:
-                    pass
-
-
-        def our_mouse_move(event : QtGui.QMouseEvent) -> None:
-            if not self.mouse_down:
-                return
-            event.blocked=True
-            #print("mouse move", event.native.x(), event.native.y(), event.native.button())
-            self._handle_move(event.native.x(), event.native.y())
-
-
-
-        def our_mouse_release(event=None):
-            if event.type == "mouse_release":
-                if event.button == 2:
-                    if not self.mouse_down:
-                        return
-                    #print("mouse release", event.native.x(), event.native.y(), event.native.button())
-                    self._handle_move(event.native.x(), event.native.y())
-                    self.mouse_down = False
-
-        self.viewer.window.qt_viewer.on_mouse_press = our_mouse_press
-        self.viewer.window.qt_viewer.on_mouse_move = our_mouse_move
-        self.viewer.window.qt_viewer.on_mouse_release = our_mouse_release
-
-    def _handle_move(self, x, y):
-        delta_x = x - self.start_x
-        delta_y = y - self.start_y
-        alpha, beta, gamma = self.viewer.camera.angles
-        alpha=alpha/360*2*np.pi
-        beta=beta/360*2*np.pi
-        gamma=gamma/360*2*np.pi
-        rx=delta_x*np.cos(alpha)*np.cos(beta)+delta_y*(-np.sin(alpha))*np.cos(beta)*np.sin(gamma)
-        ry=delta_x*np.sin(alpha)*np.cos(beta)*np.sin(gamma)+delta_x*np.cos(alpha)*np.sin(beta)+\
-           delta_y*np.cos(alpha)*np.cos(beta)*np.sin(gamma)
-        rz=-delta_x*np.sin(alpha)*np.cos(gamma)-delta_y*np.cos(alpha)*np.cos(gamma)
-        z, y, x = self.viewer.camera.center
-        y -= ry
-        x -= rx
-        z -= rz
-        #print((z, y, x))
-        self.viewer.camera.center = (z, y, x)
-        self.viewer.camera.zoom=self.zoom
-        # print(alpha,beta,gamma)
-        # print(self.viewer.camera.center)
 
 
     def hide_stuff(self):
