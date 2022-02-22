@@ -57,7 +57,6 @@ class RangeSlider2(QDoubleRangeSlider):
         self.remove_visual_feedback()
 
     def virtual_feedback(self):
-        napari.current_viewer().camera.perspective = 25
         if self.created_feedback_layer:
             if self.value()[0] != self.backup[0]:
                 self.update_visual_feedback(1)
@@ -89,7 +88,6 @@ class RangeSlider2(QDoubleRangeSlider):
         except:
             print("something went wrong while removing feedback layer")
         self.created_feedback_layer=False
-        napari.current_viewer().camera.perspective = 50
         update_layers(self.parent())
 
     def calc_backup(self):
