@@ -1,11 +1,11 @@
-# napari-STORM
+# napari-storm
 
-[![License](https://img.shields.io/pypi/l/napari-STORM.svg?color=green)](https://github.com/LREIN663/napari-STORM/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/napari-STORM.svg?color=green)](https://pypi.org/project/napari-STORM)
+[![License](https://img.shields.io/pypi/l/napari-storm.svg?color=green)](https://github.com/napari-storm/napari-storm/raw/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/napari-STORM.svg?color=green)](https://pypi.org/project/napari-storm)
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-STORM.svg?color=green)](https://python.org)
-[![tests](https://github.com/LREIN663/napari-STORM/workflows/tests/badge.svg)](https://github.com/LREIN663/napari-STORM/actions)
-[![codecov](https://codecov.io/gh/LREIN663/napari-STORM/branch/main/graph/badge.svg)](https://codecov.io/gh/LREIN663/napari-STORM)
-[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-STORM)](https://napari-hub.org/plugins/napari-STORM)
+[![tests](https://github.com/LREIN663/napari-STORM/workflows/tests/badge.svg)](https://github.com/napari-storm/napari-storm/actions)
+[![codecov](https://codecov.io/gh/LREIN663/napari-STORM/branch/main/graph/badge.svg)](https://codecov.io/gh/napari-storm/napari-STORM)
+[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-storm)](https://napari-hub.org/plugins/napari-storm)
 
 A simple Plugin to visualize STORM data with napari
 
@@ -16,13 +16,13 @@ A simple Plugin to visualize STORM data with napari
 
 I would recommend instaling this into a virtual enviorment, e.g. using conda prompt with 
 
-    conda create --name napari-STORM
+    conda create --name napari-storm
     
-    activate napari-STORM
+    activate napari-storm
 
-You can install `napari-STORM` via [pip]:
+You can install `napari-storm` via [pip]:
 
-    pip install napari-STORM
+    pip install napari-strom
     
 
     
@@ -33,10 +33,10 @@ Best functionality is provided when you start it from python (e.g. type python.e
     import napari
     from napari_storm import *
     v = napari.Viewer()
-    widget=SMLMQW(v)
+    widget=napari-storm(v)
     print(widget)
     v.window.qt_viewer.dockLayerControls.setVisible(False)
-    v.window.add_dock_widget(widget,area='left',name='napari-STORM')
+    v.window.add_dock_widget(widget,area='left',name='napari-storm')
     napari.run()
     
     
@@ -46,10 +46,7 @@ but in principle the widget should be available whenever you start napari in the
     
 in you conda command prompt. For furhter information stick to https://github.com/napari/napari
 
-## License
 
-Distributed under the terms of the [GNU GPL v3.0] license,
-"napari-STORM" is free and open source software
 
 ## Issues
 
