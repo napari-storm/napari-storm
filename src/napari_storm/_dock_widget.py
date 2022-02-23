@@ -142,6 +142,10 @@ class ChannelControls(QWidget):
         self.Bhide_channel.setChecked(True)
         self.Bhide_channel.stateChanged.connect(self.hide_channel)
 
+        self.Breset=QPushButton()
+        self.Breset.setText("Reset")
+        self.Breset.clicked.connect(self.reset_contrast_opacity)
+
         from .RangeSlider import RangeSlider
         self.Slider = RangeSlider(parent=parent) # Contrast
         self.Slider.valueChanged.connect(self.adjust_contrast)
@@ -170,12 +174,17 @@ class ChannelControls(QWidget):
 
         self.layout=QGridLayout()
         self.layout.addWidget(self.Label,0,0)
-        self.layout.addWidget(self.Bhide_channel,0,1)
-        self.layout.addWidget(self.Colormap,1,0,1,2)
-        self.layout.addWidget(self.Slider,2,0,1,2)
-        self.layout.addWidget(self.Slider2,3,0,1,2)
-        self.layout.setColumnStretch(0,2)
+        self.layout.addWidget(self.Breset,0,1)
+        self.layout.addWidget(self.Bhide_channel,0,2)
+        self.layout.addWidget(self.Colormap,1,0,1,3)
+        self.layout.addWidget(self.Slider,2,0,1,3)
+        self.layout.addWidget(self.Slider2,3,0,1,3)
+        self.layout.setColumnStretch(0,3)
         self.setLayout(self.layout)
+
+    def reset_contrast_opacity(self):
+        self.Slider.setValue((10, 90))
+        self.Slider2.setValue(100)
 
     def adjust_opacity(self):
         """...adjust opacity limits, only in colording mode"""
@@ -198,17 +207,22 @@ class ChannelControls(QWidget):
 
     def hide_channel(self):
         if not self.Bhide_channel.isChecked():
-            self.parent.auto_contrast()
+            #self.parent.auto_contrast()
             self.parent.list_of_datasets[self.idx].layer.opacity = 0
+            self.Slider2.setValue(0)
             self.Slider.hide()
             self.Slider2.hide()
             self.Colormap.hide()
         else:
             #self.parent.list_of_datasets[self.idx].layer.opacity = 1
             #self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
-            self.Colormap.show()
-            self.Slider.show()
-            self.Slider2.show()
+            self.Slider2.setValue(100)
+            if self.parent.Bspecial_colorcoding.isChecked():
+                self.Slider2.show()
+            else:
+                self.Slider.show()
+                self.Colormap.show()
+        #update_layers(self=self.parent)
             #self.Slider.setValue((10,90))
 
 
@@ -368,11 +382,6 @@ class napari_storm(QWidget):
         ########################################## visual_control_tab
         self.layout2 = QFormLayout()
 
-        self.BAutoContrast = QPushButton()
-        self.BAutoContrast.setText("reset contrast")
-        self.layout2.addRow(self.BAutoContrast)
-        self.BAutoContrast.clicked.connect(self.auto_contrast)
-
         ##############################################
         self.layout=QGridLayout()
         self.layout.addWidget(self.tabs)
@@ -446,7 +455,6 @@ class napari_storm(QWidget):
         self.Baxis_xy.hide()
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
-        self.BAutoContrast.hide()
 
     def show_stuff(self):
         """Show the Controls usable atm"""
@@ -465,7 +473,6 @@ class napari_storm(QWidget):
         self.Lscalebar.show()
         self.Lscalebarsize.show()
         self.Esbsize.show()
-        self.BAutoContrast.show()
         self.Bmerge_with_additional_file.show()
 
     def add_channel(self,name="Channel"):
@@ -473,11 +480,6 @@ class napari_storm(QWidget):
         self.channel.append(ChannelControls(parent=self,name=name,idx=len(self.channel)))
         self.layout2.addRow(self.channel[-1])
 
-    def auto_contrast(self):
-        """Actually atm just resets the contrast"""
-        for i in range(len(self.list_of_datasets)):
-            self.channel[i].Slider.setValue((10,90))
-            self.channel[i].Slider2.setValue(100)
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
@@ -494,7 +496,7 @@ class napari_storm(QWidget):
                 self.channel[i].Slider2.hide()
                 self.channel[i].Slider.show()
                 self.channel[i].Label.setText("Opacity " + self.channel[i].name)
-        self.auto_contrast()
+                self.channel[i].reset_contrast_opacity()
         update_layers(self)
 
     def render_options_changed(self):
@@ -771,6 +773,7 @@ def update_layers(self, aas=0,  layer_name="SMLM Data"):
                                                    sigmas=self.list_of_datasets[i].sigma,
                                                    filter=None,
                                                    name=self.list_of_datasets[i].name,
+                                                   opacity=self.channel[i].Slider2.value()
                                                    )
         self.list_of_datasets[i].layer.add_to_viewer(v)
         self.channel[i].adjust_contrast()
