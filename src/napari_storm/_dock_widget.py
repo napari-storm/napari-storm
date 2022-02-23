@@ -59,9 +59,8 @@ class dataset():
                 self.values =1/((float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons) / 2.354)**2)\
                         /float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354/((2*np.pi)**(1.5))
                 self.values/=np.max(self.values)
-                print(np.mean(self.values))
-                self.values /= np.mean(self.values)
-                self.values[self.values>1]=1
+                #self.values /= np.mean(self.values)
+                #self.values[self.values>1]=1
             elif self.parent.Bspecial_colorcoding.isChecked():
                 self.values=(self.locs.z-np.min(self.locs.z))/(np.max(self.locs.z)-np.min(self.locs.z))
             else:
@@ -78,7 +77,6 @@ class dataset():
             sigmaz = float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354
             self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
             self.size = 5 * np.max(self.sigma)
-            print(self.size)
             self.sigma = self.sigma / np.max(self.sigma)
 
         else:
@@ -86,7 +84,6 @@ class dataset():
             sigmaz = float(self.parent.Esigma2.text()) * np.ones_like(self.locs.photons)
             self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
             self.size = 5 * np.max(self.sigma)
-            print(self.size)
             self.sigma = self.sigma / np.max(self.sigma)
 
     def update_locs(self):
@@ -139,18 +136,21 @@ class ChannelControls(QWidget):
         self.name=name
         self.idx=idx # Number of channel corresponds to number of dataset
         self.Label = QLabel()
-        self.Label.setText(name)
+        self.Label.setText("Contrast "+name)
 
         self.Bhide_channel=QCheckBox()
         self.Bhide_channel.setChecked(True)
         self.Bhide_channel.stateChanged.connect(self.hide_channel)
 
-        self.Slider = QSlider(Qt.Horizontal) # Contrast
-        self.Slider.setMinimum(50)
-        self.Slider.setMaximum(100)
-        self.Slider.setSingleStep(1)
-        self.Slider.setValue(100)
+        from .RangeSlider import RangeSlider
+        self.Slider = RangeSlider(parent=parent) # Contrast
         self.Slider.valueChanged.connect(self.adjust_contrast)
+
+        self.Slider2 = QSlider(Qt.Horizontal)
+        self.Slider2.setRange(0,100)
+        self.Slider2.setValue(100)
+        self.Slider2.hide()
+        self.Slider2.valueChanged.connect(self.adjust_opacity)
 
         self.Colormap = QComboBox()
         items=[]
@@ -173,18 +173,18 @@ class ChannelControls(QWidget):
         self.layout.addWidget(self.Bhide_channel,0,1)
         self.layout.addWidget(self.Colormap,1,0,1,2)
         self.layout.addWidget(self.Slider,2,0,1,2)
+        self.layout.addWidget(self.Slider2,3,0,1,2)
         self.layout.setColumnStretch(0,2)
         self.setLayout(self.layout)
 
+    def adjust_opacity(self):
+        """...adjust opacity limits, only in colording mode"""
+        self.parent.list_of_datasets[self.idx].layer.opacity=self.Slider2.value()/100
+
     def adjust_contrast(self):
         """...adjust contrast limits"""
-        #print("is it checked ?",not self.Bhide_channel.isChecked())
-        if self.parent.Bspecial_colorcoding.isChecked() and not self.Bhide_channel.isChecked():
-            self.parent.list_of_datasets[self.idx].layer.opacity=self.Slider.value()/50-1
-        elif not self.Bhide_channel.isChecked():
-            self.parent.list_of_datasets[self.idx].layer.contrast_limits=(0,149/np.exp(self.Slider.value()/100 * 5))
-        else:
-            self.hide_channel()
+        self.parent.list_of_datasets[self.idx].layer.contrast_limits=(self.Slider.getRange())
+
 
     def adjust_cmap(self):
         """...adjust colormap"""
@@ -198,16 +198,18 @@ class ChannelControls(QWidget):
 
     def hide_channel(self):
         if not self.Bhide_channel.isChecked():
-            self.parent.list_of_datasets[self.idx].layer.opacity=0
-            self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1E5)
+            self.parent.auto_contrast()
+            self.parent.list_of_datasets[self.idx].layer.opacity = 0
             self.Slider.hide()
+            self.Slider2.hide()
             self.Colormap.hide()
         else:
             #self.parent.list_of_datasets[self.idx].layer.opacity = 1
             #self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
             self.Colormap.show()
             self.Slider.show()
-            self.Slider.setValue(100)
+            self.Slider2.show()
+            #self.Slider.setValue((10,90))
 
 
 class napari_storm(QWidget):
@@ -473,31 +475,42 @@ class napari_storm(QWidget):
     def auto_contrast(self):
         """Actually atm just resets the contrast"""
         for i in range(len(self.list_of_datasets)):
-            self.channel[i].Slider.setValue(100)
+            self.channel[i].Slider.setValue((10,90))
+            self.channel[i].Slider2.setValue(100)
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
+        print(self.Bspecial_colorcoding.isChecked())
         if self.Bspecial_colorcoding.isChecked():
             for i in range(len(self.channel)):
                 self.channel[i].Colormap.hide()
+                self.channel[i].Slider2.show()
+                self.channel[i].Slider.hide()
+                self.channel[i].Label.setText("Contrast "+self.channel[i].name)
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap.show()
+                self.channel[i].Slider2.hide()
+                self.channel[i].Slider.show()
+                self.channel[i].Label.setText("Opacity " + self.channel[i].name)
+        self.auto_contrast()
         update_layers(self)
 
     def render_options_changed(self):
         if self.Brenderoptions.currentText() == "variable gaussian":
-            self.Bspecial_colorcoding.setText("normalize Gaussian Intensity")
             self.Lsigma.setText("PSF FWHM in XY [nm]")
             self.Lsigma2.setText("PSF FWHM in Z [nm]")
             self.Esigma.setText("300")
             self.Esigma2.setText("700")
-        else:
             self.Bspecial_colorcoding.hide()
+            self.Bspecial_colorcoding.setCheckState(False)
+
+        else:
             self.Lsigma2.setText("FWHM in Z [nm]")
             self.Lsigma.setText("FWHM in XY [nm]")
             self.Esigma.setText("10")
             self.Esigma2.setText("10")
+            self.Bspecial_colorcoding.show()
         update_layers(self)
 
     def scalebar(self):
@@ -761,7 +774,6 @@ def update_layers(self, aas=0,  layer_name="SMLM Data"):
         self.list_of_datasets[i].layer.add_to_viewer(v)
         self.channel[i].adjust_contrast()
         self.channel[i].adjust_cmap()
-        self.channel[i].hide_channel()
         #if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
         #                                                        np.max(self.list_of_datasets[i].values))

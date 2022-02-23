@@ -21,17 +21,19 @@ class RangeSlider2(QDoubleRangeSlider):
         self.Range=100
         self.range = None
         self.setSingleStep(1)
-        self.setValue((0,100))
+        self.setValue((1,100))
         self.type = type
         self.backup=self.value()
         self.created_feedback_layer=False
         self.valueChanged.connect(self.virtual_feedback)
+
 
     def getRange(self):
         return self.value()
 
     def parent(self):
         return self._parent
+
 
 
     """
