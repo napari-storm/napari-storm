@@ -54,35 +54,40 @@ class dataset():
 
     def calc_values(self):
         """Update Values which are mapped to colormap"""
-        if self.zdim and self.parent.Bspecial_colorcoding.isChecked():
+        if self.zdim:
             if self.parent.Brenderoptions.currentText()=="variable gaussian":
-                self.values=self.locs.photons**(1/3)
+                self.values =1/((float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons) / 2.354)**2)\
+                        /float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354/((2*np.pi)**(1.5))
                 self.values/=np.max(self.values)
-                #self.parent.list_of_datasets[self.index].contrast_limits=(0,1)
-            else:
+                print(np.mean(self.values))
+                self.values /= np.mean(self.values)
+                self.values[self.values>1]=1
+            elif self.parent.Bspecial_colorcoding.isChecked():
                 self.values=(self.locs.z-np.min(self.locs.z))/(np.max(self.locs.z)-np.min(self.locs.z))
-                #self.values=1/(self.locs.z+1)
-                #self.values /= np.max(self.values)
-                #self.parent.list_of_datasets[self.index].contrast_limits = (0, 1)
+            else:
+                self.values=1
             if np.min(self.values)==np.max(self.values):
                 self.values=1
-            else:
-                self.values=(self.values-np.min(self.values))/(max(self.values)-np.min(self.values))
         else:
             self.values=1
 
     def calc_sigmas(self):
         """Update sigmas"""
         if self.parent.Brenderoptions.currentText() == "variable gaussian":
-            sigma = float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons / 10) / 2.354
-            sigmaz = float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons / 10) / 2.354
-            self.size = 5 * max(sigma[:])
+            sigma = float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons) / 2.354
+            sigmaz = float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354
             self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
+            self.size = 5 * np.max(self.sigma)
+            print(self.size)
             self.sigma = self.sigma / np.max(self.sigma)
 
         else:
-            self.size = 5 * float(self.parent.Esigma.text()) / 2.354
-            self.sigma = 1
+            sigma=float(self.parent.Esigma.text())*np.ones_like(self.locs.photons)
+            sigmaz = float(self.parent.Esigma2.text()) * np.ones_like(self.locs.photons)
+            self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
+            self.size = 5 * np.max(self.sigma)
+            print(self.size)
+            self.sigma = self.sigma / np.max(self.sigma)
 
     def update_locs(self):
         LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
@@ -198,8 +203,8 @@ class ChannelControls(QWidget):
             self.Slider.hide()
             self.Colormap.hide()
         else:
-            self.parent.list_of_datasets[self.idx].layer.opacity = 1
-            self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
+            #self.parent.list_of_datasets[self.idx].layer.opacity = 1
+            #self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
             self.Colormap.show()
             self.Slider.show()
             self.Slider.setValue(100)
@@ -280,11 +285,11 @@ class napari_storm(QWidget):
         layout.addWidget(self.Brenderoptions, 3, 1,1,3)
 
         self.Lsigma = QLabel()
-        self.Lsigma.setText("PSF FWHM in XY [nm]:")
+        self.Lsigma.setText("FWHM in XY [nm]:")
         layout.addWidget(self.Lsigma, 4, 0)
 
         self.Lsigma2 = QLabel()
-        self.Lsigma2.setText("PSF FWHM in Z [nm]:")
+        self.Lsigma2.setText("FWHM in Z [nm]:")
         layout.addWidget(self.Lsigma2, 5, 0)
 
         self.Esigma = QLineEdit()
@@ -296,7 +301,7 @@ class napari_storm(QWidget):
         self.typing_timer_sigma.timeout.connect(lambda: update_layers(self))
 
         self.Esigma2 = QLineEdit()
-        self.Esigma2.setText("750")
+        self.Esigma2.setText("10")
         self.Esigma2.textChanged.connect(lambda: self.start_typing_timer(self.typing_timer_sigma))
         layout.addWidget(self.Esigma2, 5, 1,1,3)
 
@@ -452,6 +457,8 @@ class napari_storm(QWidget):
         self.Lrenderoptions.show()
         self.Lsigma.show()
         self.Esigma.show()
+        self.Lsigma2.show()
+        self.Esigma2.show()
         self.Lscalebar.show()
         self.Lscalebarsize.show()
         self.Esbsize.show()
@@ -481,16 +488,16 @@ class napari_storm(QWidget):
     def render_options_changed(self):
         if self.Brenderoptions.currentText() == "variable gaussian":
             self.Bspecial_colorcoding.setText("normalize Gaussian Intensity")
-            self.Lsigma2.show()
-            self.Esigma2.show()
             self.Lsigma.setText("PSF FWHM in XY [nm]")
+            self.Lsigma2.setText("PSF FWHM in Z [nm]")
             self.Esigma.setText("300")
+            self.Esigma2.setText("700")
         else:
-            self.Bspecial_colorcoding.setText("Activate Rainbow colorcoding in Z")
-            self.Lsigma2.hide()
-            self.Esigma2.hide()
+            self.Bspecial_colorcoding.hide()
+            self.Lsigma2.setText("FWHM in Z [nm]")
             self.Lsigma.setText("FWHM in XY [nm]")
             self.Esigma.setText("10")
+            self.Esigma2.setText("10")
         update_layers(self)
 
     def scalebar(self):
