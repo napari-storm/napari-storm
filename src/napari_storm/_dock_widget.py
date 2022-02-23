@@ -59,6 +59,7 @@ class dataset():
                 self.values =1/((float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons) / 2.354)**2)\
                         /float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354/((2*np.pi)**(1.5))
                 self.values/=np.max(self.values)
+                self.values/=np.percentile(self.values,99)
                 #self.values /= np.mean(self.values)
                 #self.values[self.values>1]=1
             elif self.parent.Bspecial_colorcoding.isChecked():
@@ -395,12 +396,13 @@ class napari_storm(QWidget):
         custom_keys_and_scalebar(self)
         self.hide_stuff()
 
-    def reset_render_range(self):
+    def reset_render_range(self,full_reset=False):
         v=napari.current_viewer()
         self.Srender_rangex.reset()
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
-        update_layers(self)
+        if not full_reset:
+            update_layers(self)
 
     #### D and D
     def dragEnterEvent(self, event):
@@ -655,17 +657,12 @@ def colormaps():
 def open_STORM_data(self, file_path=None, merge=False):
     """Deciding which filetype and the calling the corresponding Importer"""
     self.show_stuff()
-    if len(self.list_of_datasets)!=0 and merge==False:
-        reset(self)
     from .importer import load_hdf5,load_csv,load_SMLM,load_h5,load_mfx_json,load_mfx_npy,start_testing
     v=napari.current_viewer()
     if not self.list_of_datasets:
         self.Lnumberoflocs.clear()
     elif merge == False:
-        for i in range(len(self.list_of_datasets)):
-            v.layers.remove(self.list_of_datasets[i].name)
-        self.list_of_datasets = []
-        self.Lnumberoflocs.clear()
+        reset(self)
     Tk().withdraw()
     if not file_path:
         file_path = fd.askopenfilename()
@@ -694,15 +691,21 @@ def open_STORM_data(self, file_path=None, merge=False):
 
 def reset(self):
     """Funktion which is called when a file has aready been opened and a new one ovverrides it"""
+    v=napari.current_viewer()
+    for i in range(len(self.list_of_datasets)):
+        v.layers.remove(self.list_of_datasets[i].name)
+    self.list_of_datasets = []
+    self.Lnumberoflocs.clear()
     if not len(self.channel) == 0:  # Remove Channel of older files
         for i in range(len(self.channel)):
             self.channel[i].hide()
         self.channel = []
-    if self.Bspecial_colorcoding.isChecked():  # Remove Colorcoding
-        self.Bspecial_colorcoding.setCheckState(False)
     if self.Cscalebar.isChecked():  # Remove Scalebar
         self.Cscalebar.setCheckState(False)
         self.scalebar()
+    self.reset_render_range(full_reset=True)
+    if self.Bspecial_colorcoding.isChecked():  # Remove Colorcoding
+        self.Bspecial_colorcoding.setCheckState(False)
 
 def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
     """Creating a Particle Layer """
@@ -777,6 +780,7 @@ def update_layers(self, aas=0,  layer_name="SMLM Data"):
                                                    )
         self.list_of_datasets[i].layer.add_to_viewer(v)
         self.channel[i].adjust_contrast()
+        self.channel[i].adjust_opacity()
         self.channel[i].adjust_cmap()
         #if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
