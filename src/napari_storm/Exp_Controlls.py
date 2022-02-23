@@ -14,6 +14,7 @@ class RightClickPaninng(QWidget):
         self.start_y=0
         self.parent=parent
         self.viewer=viewer
+        self.right_click_pan()
 
     def right_click_pan(self):
         #self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
@@ -38,6 +39,8 @@ class RightClickPaninng(QWidget):
             event.blocked=True
             #print("mouse move", event.native.x(), event.native.y(), event.native.button())
             self._handle_move(event.native.x(), event.native.y())
+            self.start_x = event.native.x()
+            self.start_y = event.native.y()
 
 
 
@@ -47,8 +50,9 @@ class RightClickPaninng(QWidget):
                     if not self.mouse_down:
                         return
                     #print("mouse release", event.native.x(), event.native.y(), event.native.button())
-                    self._handle_move(event.native.x(), event.native.y())
                     self.mouse_down = False
+                    self.start_x = event.native.x()
+                    self.start_y = event.native.y()
 
         self.viewer.window.qt_viewer.on_mouse_press = our_mouse_press
         self.viewer.window.qt_viewer.on_mouse_move = our_mouse_move
@@ -65,14 +69,11 @@ class RightClickPaninng(QWidget):
            delta_y*np.cos(alpha)*np.cos(beta)*np.sin(gamma)
         rz=-delta_x*np.sin(alpha)*np.cos(gamma)-delta_y*np.cos(alpha)*np.cos(gamma)
         z, y, x = self.viewer.camera.center
-        y -= ry
-        x -= rx
-        z -= rz
-        #print((z, y, x))
+        y -= ry*10
+        x -= rx*10
+        z -= rz*10
         self.viewer.camera.center = (z, y, x)
-        self.viewer.camera.zoom=self.zoom
-        # print(alpha,beta,gamma)
-        # print(self.viewer.camera.center)
+
 
 def custom_keys_and_scalebar(self):
 # Custom Keys : w and s for zoom
