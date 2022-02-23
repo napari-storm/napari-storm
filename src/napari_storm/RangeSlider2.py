@@ -21,11 +21,17 @@ class RangeSlider2(QDoubleRangeSlider):
         self.Range=100
         self.range = None
         self.setSingleStep(1)
-        self.setValue((1,100))
+        self.setValue((0,100))
         self.type = type
         self.backup=self.value()
         self.created_feedback_layer=False
         self.valueChanged.connect(self.virtual_feedback)
+        self.reset_in_progress=False
+
+    def reset(self):
+        self.reset_in_progress=True
+        self.setValue((0, 100))
+        self.reset_in_progress=False
 
 
     def getRange(self):
@@ -59,16 +65,17 @@ class RangeSlider2(QDoubleRangeSlider):
         self.remove_visual_feedback()
 
     def virtual_feedback(self):
-        if self.created_feedback_layer:
-            if self.value()[0] != self.backup[0]:
-                self.update_visual_feedback(1)
-            elif self.value()[1] != self.backup[1]:
-                self.update_visual_feedback(2)
+        if not self.reset_in_progress:
+            if self.created_feedback_layer:
+                if self.value()[0] != self.backup[0]:
+                    self.update_visual_feedback(1)
+                elif self.value()[1] != self.backup[1]:
+                    self.update_visual_feedback(2)
+                else:
+                    pass
             else:
-                pass
-        else:
-            self.created_feedback_layer=True
-            self.create_visual_feedback(0)
+                self.created_feedback_layer=True
+                self.create_visual_feedback(0)
 
     def create_visual_feedback(self,slider):
         v = napari.current_viewer()

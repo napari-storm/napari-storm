@@ -387,9 +387,10 @@ class napari_storm(QWidget):
         self.hide_stuff()
 
     def reset_render_range(self):
-        self.Srender_rangex.setValue((0,100))
-        self.Srender_rangey.setValue((0, 100))
-        self.Srender_rangez.setValue((0, 100))
+        v=napari.current_viewer()
+        self.Srender_rangex.reset()
+        self.Srender_rangey.reset()
+        self.Srender_rangez.reset()
         update_layers(self)
 
     #### D and D
