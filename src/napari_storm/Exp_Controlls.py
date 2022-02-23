@@ -16,6 +16,27 @@ class RightClickPaninng(QWidget):
         self.viewer=viewer
         self.right_click_pan()
 
+        self.anker=None
+        self.anker_coords=None
+        self.anker_faces=None
+
+
+    def create_anker(self):
+        center = self.viewer.camera.center
+        h=200
+        self.anker_coords=np.asarray([[h,0,0],[0,h/2,h/2],[0,h/2,-h/2],[0,-h/2,h/2],[0,-h/2,-h/2],[-h,0,0]])
+        #self.anker_faces=np.asarray([[1,2,3],[1,4,5],[1,3,4],[1,5,2],[2,3,6],[4,5,6],[3,4,6],[5,2,6]])-1
+        self.anker_faces=np.asarray([[0,1,2],[0,2,4],[0,4,3],[0,3,1],[5,1,2],[5,2,4],[5,4,3],[5,3,1]])
+        verts=np.reshape(self.anker_coords+center,(6,3))
+        self.anker = self.viewer.add_surface((verts, self.anker_faces), name='anker', shading='smooth',blending='opaque')
+
+    def move_anker(self):
+        center = self.viewer.camera.center
+        self.viewer.layers['anker'].data=(np.reshape(self.anker_coords+center,(6,3)),self.anker_faces,np.ones(6))
+
+    def remove_anker(self):
+        self.viewer.layers.remove('anker')
+
     def right_click_pan(self):
         #self.copy_on_mouse_press = self.viewer.window.qt_viewer.on_mouse_press
         #print(self.copy_on_mouse_press)
@@ -24,11 +45,11 @@ class RightClickPaninng(QWidget):
             #print(event.type,QMouseEvent,event.button)
             if event.type == "mouse_press":
                 if event.button == 2:
-                    self.viewer.camera
                     self.start_x = event.native.x()
                     self.start_y = event.native.y()
                     self.zoom = self.viewer.camera.zoom
                     self.mouse_down=True
+                    self.create_anker()
                 else:
                     pass
 
@@ -41,6 +62,7 @@ class RightClickPaninng(QWidget):
             self._handle_move(event.native.x(), event.native.y())
             self.start_x = event.native.x()
             self.start_y = event.native.y()
+            self.move_anker()
 
 
 
@@ -53,13 +75,16 @@ class RightClickPaninng(QWidget):
                     self.mouse_down = False
                     self.start_x = event.native.x()
                     self.start_y = event.native.y()
+                    self.remove_anker()
 
         self.viewer.window.qt_viewer.on_mouse_press = our_mouse_press
         self.viewer.window.qt_viewer.on_mouse_move = our_mouse_move
         self.viewer.window.qt_viewer.on_mouse_release = our_mouse_release
     def _handle_move(self, x, y):
-        delta_x = x - self.start_x
-        delta_y = y - self.start_y
+        v = napari.current_viewer()
+        delta_x = (x - self.start_x)/v.window.qt_viewer.width()
+        delta_y = (y - self.start_y)/v.window.qt_viewer.height()
+        #print(delta_x,delta_y)
         alpha, beta, gamma = self.viewer.camera.angles
         alpha=alpha/360*2*np.pi
         beta=beta/360*2*np.pi
@@ -68,10 +93,15 @@ class RightClickPaninng(QWidget):
         ry=delta_x*np.sin(alpha)*np.cos(beta)*np.sin(gamma)+delta_x*np.cos(alpha)*np.sin(beta)+\
            delta_y*np.cos(alpha)*np.cos(beta)*np.sin(gamma)
         rz=-delta_x*np.sin(alpha)*np.cos(gamma)-delta_y*np.cos(alpha)*np.cos(gamma)
+        e = v.layers.extent[1][1]
+        rx=rx*e[2]
+        ry=ry*e[1]
+        rz=rz*e[0]
         z, y, x = self.viewer.camera.center
-        y -= ry*10
-        x -= rx*10
-        z -= rz*10
+        #print(rx,ry,rz)
+        y -= ry
+        x -= rx
+        z -= rz
         self.viewer.camera.center = (z, y, x)
 
 
