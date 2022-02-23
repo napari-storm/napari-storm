@@ -181,7 +181,7 @@ def custom_keys_and_scalebar(self):
         """@v.bind_key('Shift')
         def sphere(v):
             pass"""
-        placeholder=RightClickPaninng(parent=self,viewer=v)
+        #placeholder=RightClickPaninng(parent=self,viewer=v)
 
 class MouseControlls(QWidget):  # Experimental Fly through mode
     def __init__(self):
