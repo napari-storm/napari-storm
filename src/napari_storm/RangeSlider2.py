@@ -100,14 +100,14 @@ class RangeSlider2(QDoubleRangeSlider):
         update_layers(self.parent())
 
     def calc_backup(self):
-        if self.parent().list_of_datasets[-1].zdim:
+        if self.parent().list_of_datasets[-1].zdim_present:
             x_backup = []
             y_backup = []
             z_backup = []
             for data in self.parent().list_of_datasets:
-                x_backup.append(np.max(data.locs_backup.x))
-                y_backup.append(np.max(data.locs_backup.y))
-                z_backup.append(np.max(data.locs_backup.z))
+                x_backup.append(np.max(data.locs_all.x))
+                y_backup.append(np.max(data.locs_all.y))
+                z_backup.append(np.max(data.locs_all.z))
             self.x_backup = np.max(x_backup)
             self.y_backup = np.max(y_backup)
             self.z_backup = np.max(z_backup)
@@ -115,13 +115,13 @@ class RangeSlider2(QDoubleRangeSlider):
             x_backup = []
             y_backup = []
             for data in self.parent().list_of_datasets:
-                x_backup.append(np.max(data.locs_backup.x))
-                y_backup.append(np.max(data.locs_backup.y))
+                x_backup.append(np.max(data.locs_all.x))
+                y_backup.append(np.max(data.locs_all.y))
             self.x_backup = np.max(x_backup)
             self.y_backup = np.max(y_backup)
 
     def get_coords_faces(self, slider_type, create=False):
-        if self.parent().list_of_datasets[-1].zdim:
+        if self.parent().list_of_datasets[-1].zdim_present:
             #print("in",self.type)
             x = []
             y = []
@@ -129,12 +129,12 @@ class RangeSlider2(QDoubleRangeSlider):
             if create:
                 self.calc_backup()
             for data in self.parent().list_of_datasets:
-                x.append(np.max(data.locs.x))
-                y.append(np.max(data.locs.y))
-                z.append(np.max(data.locs.z))
-                x.append(np.min(data.locs.x))
-                y.append(np.min(data.locs.y))
-                z.append(np.min(data.locs.z))
+                x.append(np.max(data.locs_active.x))
+                y.append(np.max(data.locs_active.y))
+                z.append(np.max(data.locs_active.z))
+                x.append(np.min(data.locs_active.x))
+                y.append(np.min(data.locs_active.y))
+                z.append(np.min(data.locs_active.z))
             tmp = x
             x = y
             y = tmp
@@ -169,10 +169,10 @@ class RangeSlider2(QDoubleRangeSlider):
             if create:
                 self.calc_backup()
             for data in self.parent().list_of_datasets:
-                x.append(np.max(data.locs.x))
-                y.append(np.max(data.locs.y))
-                x.append(np.min(data.locs.x))
-                y.append(np.min(data.locs.y))
+                x.append(np.max(data.locs_active.x))
+                y.append(np.max(data.locs_active.y))
+                x.append(np.min(data.locs_active.x))
+                y.append(np.min(data.locs_active.y))
             tmp = x
             x = y
             y = tmp

@@ -50,174 +50,288 @@ from .utils import generate_billboards_2d
 import numpy as np
 
 
-class dataset:
-    """An Object where the localization data is stored,
-    updated and things like Sigma get calculated"""
+class localization_data:
+    """An Object which contains the localization data,
+    as well as rendering parameters used by the napari
+    particles layer"""
 
     def __init__(
         self,
-        locs=None,
-        zdim_present=False,
-        parent=None,
+        parent,
+        locs,
         name=None,
-        pixelsize_nm=130.0,
-        offset=None,
-        index=0,
+        pixelsize_nm=None,
+        offset_pixels=None,
+        zdim_present=False,
+        sigma_present=False,
+        photon_count_present=False,
     ):
-        self.zdim = zdim_present
-        self.locs = locs
-        self.locs_backup = locs
-        self.coords = None
-        self.index = index
-        self.layer = None
-        self.name = name
-        self.sigma = None
-        self.size = None
-        self.values = None
-        self.pixelsize_nm = pixelsize_nm
+
+        assert isinstance(parent, napari_storm) == True
+
+        LOCS_DTYPE = [('frame_number', 'i4'),
+                      ('x_pos_pixels', 'f4'),
+                      ('y_pos_pixels', 'f4'),
+                      ('z_pos_pixels', 'f4'),
+                      ('sigma_x_pixels', 'f4'),
+                      ('sigma_y_pixels', 'f4'),
+                      ('sigma_z_pixels', 'f4'),
+                      ('photon_count', 'f4')]
+
+        assert isinstance(locs, np.recarray)
+        assert locs.dtype == LOCS_DTYPE
+
+        if name == None :
+            name = 'Untitled'
+
+        if pixelsize_nm == None :
+            pixelsize_nm = 100.0
+
+        if offset_pixels == None :
+            offset_pixels = np.zeros(3)
+
         self.parent = parent
-        self.camera_center = None
-        self.colormap = None
-        self.aas = 0
-        self.offset = offset
-        self.check_offset()
-        self.calc_sigmas()
-        self.calc_values()
+        self.napari_layer_ref = None
 
-    def check_offset(self):
-        """First check which dataset needs the highest
-        offset and then adjust every dataset"""
+        self.name = name
 
-        if len(self.parent.list_of_datasets) != 0:
+        self.locs_active = locs
+        self.locs_all = locs.copy()
+        self.pixelsize_nm = pixelsize_nm
+        self.offset_pixels = offset_pixels
+        self.zdim_present = zdim_present
+        self.sigma_present = sigma_present
+        self.photon_count_present = photon_count_present
+        self.uncertainty_defined = sigma_present or photon_count_present
 
-            for i in range(len(self.parent.list_of_datasets)):
-                for j in range(len(self.parent.list_of_datasets[i].offset)):
-                    if self.parent.list_of_datasets[i].offset[j] > self.offset[j]:
-                        self.offset[j] = self.parent.list_of_datasets[i].offset[j]
+        self.render_sigma = None
+        self.render_size = None
+        self.render_values = None
+        self.render_colormap = None
+        self.render_anti_alias = 0
 
-            for i in range(len(self.parent.list_of_datasets)):
-                for j in range(len(self.parent.list_of_datasets[i].offset)):
-                    self.parent.list_of_datasets[i].locs.x -= self.offset[0]
-                    self.parent.list_of_datasets[i].locs.y -= self.offset[1]
-                    if self.zdim:
-                        self.parent.list_of_datasets[i].locs.z -= self.offset[2]
-        self.locs_backup.x -= self.offset[0]
-        self.locs_backup.y -= self.offset[1]
-        if self.zdim:
-            self.locs_backup.z -= self.offset[2]
+        self.set_render_sigmas()
+        self.set_render_values()
 
-    def calc_values(self):
-        """Update Values which are mapped to colormap"""
-        if self.zdim:
-            if self.parent.Brenderoptions.currentText() == "variable gaussian":
-                self.values = (
-                    1
-                    / (
-                        (
-                            float(self.parent.Esigma.text())
-                            / np.sqrt(self.locs.photons)
-                            / 2.354
-                        )
-                        ** 2
-                    )
-                    / float(self.parent.Esigma2.text())
-                    / np.sqrt(self.locs.photons)
-                    / 2.354
-                    / ((2 * np.pi) ** (1.5))
-                )
-                self.values /= np.max(self.values)
-                self.values /= np.percentile(self.values, 99)
-                # self.values /= np.mean(self.values)
-                # self.values[self.values>1]=1
-            elif self.parent.Bspecial_colorcoding.isChecked():
-                self.values = (self.locs.z - np.min(self.locs.z)) / (
-                    np.max(self.locs.z) - np.min(self.locs.z)
-                )
+
+    def get_coords(self):
+        # Returns the coordinates of the active localizations, with
+        # the offset applied.
+
+        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
+                        ('y_pos_pixels', 'f4'),
+                        ('z_pos_pixels', 'f4')]
+
+        tmp_x = self.locs_active.x_pos_pixels + self.offset_pixels[0]
+        tmp_y = self.locs_active.y_pos_pixels + self.offset_pixels[1]
+        tmp_z = self.locs_active.z_pos_pixels + self.offset_pixels[2]
+
+        tmp_records = np.recarray((tmp_x.size,), dtype = COORDS_DTYPE)
+        tmp_records.x_pos_pixels = tmp_x
+        tmp_records.y_pos_pixels = tmp_y
+        tmp_records.z_pos_pixels = tmp_z
+
+        return tmp_records
+
+
+    def set_render_values(self):
+        """Update values, which are used to determine the rendered
+        color and intensity of each localization"""
+
+        if (self.parent.render_gaussian_mode == 0) :
+            # Fixed gaussian mode
+
+            tmp_values = np.ones((self.locs_active.size,))
+
+        else if (self.parent.render_gaussian_mode == 1) :
+            # Variable gaussian mode
+
+            assert self.uncertainty_defined == True
+
+            if self.zdim_present :
+                # 3D data
+
+                if self.sigma_present :
+                    # Sigma values present
+
+                    sigma_x_pixels = self.locs_active.sigma_x_pixels
+                    sigma_y_pixels = self.locs_active.sigma_y_pixels
+                    sigma_z_pixels = self.locs_active.sigma_z_pixels
+
+                    tmp_product = sigma_x_pixels * sigma_y_pixels * sigma_z_pixels
+
+                    tmp_values = 1.0 / tmp_product
+
+                else :
+                    #Calculate sigma according to photon count
+
+                    psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
+                    psf_sigma_z_nm = self.parent.render_var_gauss_PSF_sigma_z_nm
+
+                    psf_sigma_xy_pixels = psf_sigma_xy_nm / self.pixelsize_nm
+                    psf_sigma_z_pixels = psf_sigma_z_nm / self.pixelsize_nm
+
+                    sigma_xy_pixels = psf_sigma_xy_pixels / sqrt(self.locs_active.photons)
+                    sigma_z_pixels = psf_sigma_z_pixels / sqrt(self.locs_active.photons)
+
+                    tmp_product = sigma_xy_pixels**2 * sigma_z_pixels
+
+                    tmp_values = 1.0 / tmp_product
+
             else:
-                self.values = 1
-            if np.min(self.values) == np.max(self.values):
-                self.values = 1
-        else:
-            self.values = 1
+                # 2D data
 
-    def calc_sigmas(self):
-        """Update sigmas"""
-        if self.parent.Brenderoptions.currentText() == "variable gaussian":
-            sigma = (
-                float(self.parent.Esigma.text()) / np.sqrt(self.locs.photons) / 2.354
-            )
-            sigmaz = (
-                float(self.parent.Esigma2.text()) / np.sqrt(self.locs.photons) / 2.354
-            )
-            self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
-            self.size = 5 * np.max(self.sigma)
-            self.sigma = self.sigma / np.max(self.sigma)
+                if self.sigma_present :
+                    # Sigma values present
 
-        else:
-            sigma = float(self.parent.Esigma.text()) * np.ones_like(self.locs.photons)
-            sigmaz = float(self.parent.Esigma2.text()) * np.ones_like(self.locs.photons)
-            self.sigma = np.swapaxes([sigmaz, sigma, sigma], 0, 1)
-            self.size = 5 * np.max(self.sigma)
-            self.sigma = self.sigma / np.max(self.sigma)
+                    sigma_x_pixels = self.locs_active.sigma_x_pixels
+                    sigma_y_pixels = self.locs_active.sigma_y_pixels
+
+                    tmp_product = sigma_x_pixels * sigma_y_pixels
+
+                    tmp_values = 1.0 / tmp_product
+
+                else :
+                    #Calculate sigma according to photon count
+
+                    psf_sigma_xy_pixels = psf_sigma_xy_nm / self.pixelsize_nm
+
+                    sigma_xy_pixels = psf_sigma_xy_pixels / sqrt(self.locs_active.photons)
+
+                    tmp_product = sigma_xy_pixels**2
+
+                    tmp_values = 1.0 / tmp_product
+
+
+        if self.parent.z_color_encoding == 1 :
+            # Color the localizations according to their Z-coordinate
+            #
+            # In this case, it is not possible to render unit volume gaussians
+            # by adjusting their "intensity" via the value parameter.  Rather,
+            # the value parameter is used in conjunction with the color map to
+            # assign a z-dependent color to each localization.
+
+            assert self.zdim_present == True
+
+            tmp_coords = self.get_coords()
+
+            tmp_values = tmp_coords.z_pos_pixels
+
+            tmp_values = tmp_values - np.min(tmp_values)
+
+
+        # Normalize values to 1.0
+        assert np.max(tmp_values) > 0
+        tmp_values = tmp_values / np.max(tmp_values)
+
+        # Store values
+        self.render_values = tmp_values
+
+
+    def set_render_sigmas(self):
+        """Update rendered sigma values"""
+
+        if (self.parent.render_gaussian_mode == 0) :
+            # Fixed gaussian mode
+
+            sigma_xy_nm = self.parent.render_fixed_gauss_sigma_xy_nm
+            sigma_z_nm = self.parent.render_fixed_gauss_sigma_z_nm
+
+            sigma_xy_pixels = sigma_xy_nm / self.pixelsize_nm
+            sigma_z_pixels = sigma_z_nm / self.pixelsize_nm
+
+            tmp_sigma_xy = sigma_xy_pixels * np.ones_like(self.locs_active.x_pos_pixels)
+            tmp_sigma_z = sigma_z_pixels * np.ones_like(self.locs_active.x_pos_pixels)
+
+            tmp_render_sigma = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
+            tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
+
+
+        else if (self.parent.render_gaussian_mode == 1) :
+            # Variable gaussian mode
+
+            if self.sigma_present:
+                # Sigma values present
+
+                sigma_x_pixels = self.locs_active.sigma_x_pixels
+                sigma_y_pixels = self.locs_active.sigma_y_pixels
+                sigma_z_pixels = self.locs_active.sigma_z_pixels
+
+                tmp_render_sigma = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
+                tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
+
+            else :
+                # Calculate sigma values based on photon counts
+
+                psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
+                psf_sigma_z_nm = self.parent.render_var_gauss_PSF_sigma_z_nm
+
+                psf_sigma_xy_pixels = psf_sigma_xy_nm / self.pixelsize_nm
+                psf_sigma_z_pixels = psf_sigma_z_nm / self.pixelsize_nm
+
+                sigma_xy_pixels = psf_sigma_xy_pixels / sqrt(self.locs_active.photons)
+                sigma_z_pixels = psf_sigma_z_pixels / sqrt(self.locs_active.photons)
+
+                tmp_render_sigma = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
+                tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
+
+        # Store sigma values and set render size
+
+        self.render_sigma = tmp_render_sigma
+        self.render_size = 5 * np.max(self.render_sigma)
+
 
     def update_locs(self):
-        LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
-        LOCS_DTYPE_3D = [
-            ("frame", "f4"),
-            ("x", "f4"),
-            ("y", "f4"),
-            ("z", "f4"),
-            ("photons", "f4"),
-        ]
-        self.locs = self.locs_backup
+
+        self.locs_active = self.locs_all
         x0, x1 = self.parent.Srender_rangey.getRange()  # x and y are swapped in napari
         y0, y1 = self.parent.Srender_rangex.getRange()
-        xscale = max(self.locs.x) - min(self.locs.x)
-        yscale = max(self.locs.y) - min(self.locs.y)
+        xscale = max(self.locs_active.x) - min(self.locs_active.x)
+        yscale = max(self.locs_active.y) - min(self.locs_active.y)
 
         x0 = x0 * xscale / 100
         x1 = x1 * xscale / 100
         y0 = y0 * yscale / 100
         y1 = y1 * yscale / 100
-        filterer = np.ones(self.locs.x.shape)
-        if len(np.unique(self.locs.x)) > 2:
-            filterer[self.locs.x < x0] = np.nan
-            filterer[self.locs.x > x1] = np.nan
-        if len(np.unique(self.locs.y)) > 2:
-            filterer[self.locs.y < y0] = np.nan
-            filterer[self.locs.y > y1] = np.nan
+        filterer = np.ones(self.locs_active.x.shape)
+        if len(np.unique(self.locs_active.x)) > 2:
+            filterer[self.locs_active.x < x0] = np.nan
+            filterer[self.locs_active.x > x1] = np.nan
+        if len(np.unique(self.locs_active.y)) > 2:
+            filterer[self.locs_active.y < y0] = np.nan
+            filterer[self.locs_active.y > y1] = np.nan
         # print(f"len filt {np.shape(filterer)} len idx {np.shape(self.index)} len locs x {np.shape(self.locs.x)}")
-        if self.zdim:
+        if self.zdim_present:
             z0, z1 = self.parent.Srender_rangez.getRange()
-            zscale = max(self.locs.z) - min(self.locs.z)
+            zscale = max(self.locs_active.z) - min(self.locs_active.z)
             z0 = z0 * zscale / 100
             z1 = z1 * zscale / 100
-            if len(np.unique(self.locs.z)) > 2:
-                filterer[self.locs.z < z0] = np.nan
-                filterer[self.locs.z > z1] = np.nan
-            self.locs = np.rec.array(
+            if len(np.unique(self.locs_active.z)) > 2:
+                filterer[self.locs_active.z < z0] = np.nan
+                filterer[self.locs_active.z > z1] = np.nan
+            self.locs_active = np.rec.array(
                 (
-                    self.locs.frame[~np.isnan(filterer)],
-                    self.locs.x[~np.isnan(filterer)],
-                    self.locs.y[~np.isnan(filterer)],
-                    self.locs.z[~np.isnan(filterer)],
-                    self.locs.photons[~np.isnan(filterer)],
+                    self.locs_active.frame[~np.isnan(filterer)],
+                    self.locs_active.x[~np.isnan(filterer)],
+                    self.locs_active.y[~np.isnan(filterer)],
+                    self.locs_active.z[~np.isnan(filterer)],
+                    self.locs_active.photons[~np.isnan(filterer)],
                 ),
                 dtype=LOCS_DTYPE_3D,
             )
         else:
-            self.locs = np.rec.array(
+            self.locs_active = np.rec.array(
                 (
-                    self.locs.frame[~np.isnan(filterer)],
-                    self.locs.x[~np.isnan(filterer)],
-                    self.locs.y[~np.isnan(filterer)],
-                    self.locs.photons[~np.isnan(filterer)],
+                    self.locs_active.frame[~np.isnan(filterer)],
+                    self.locs_active.x[~np.isnan(filterer)],
+                    self.locs_active.y[~np.isnan(filterer)],
+                    self.locs_active.photons[~np.isnan(filterer)],
                 ),
                 dtype=LOCS_DTYPE_2D,
             )
         # print("Filtering done",f"len filt {np.shape(filterer)} len idx {np.shape(self.index)} len locs x {np.shape(self.locs.x)}")
-        self.calc_sigmas()
-        self.calc_values()
+        self.set_render_sigmas()
+        self.set_render_values()
 
 
 class ChannelControls(QWidget):
@@ -286,7 +400,7 @@ class ChannelControls(QWidget):
 
     def adjust_opacity(self):
         """...adjust opacity limits, only in colording mode"""
-        self.parent.list_of_datasets[self.idx].layer.opacity = (
+        self.parent.list_of_datasets[self.idx].napari_layer_ref.opacity = (
             self.Slider2.value() / 100
         )
 
@@ -294,26 +408,26 @@ class ChannelControls(QWidget):
         """...adjust contrast limits"""
         self.parent.list_of_datasets[
             self.idx
-        ].layer.contrast_limits = self.Slider.getRange()
+        ].napari_layer_ref.contrast_limits = self.Slider.getRange()
 
     def adjust_cmap(self):
         """...adjust colormap"""
         if self.parent.Bspecial_colorcoding.isChecked():
             if self.parent.Brenderoptions.currentText() == "fixed gaussian":
-                self.parent.list_of_datasets[self.idx].layer.colormap = "hsv"
+                self.parent.list_of_datasets[self.idx].napari_layer_ref.render_colormap = "hsv"
             else:
                 self.parent.list_of_datasets[
                     self.idx
-                ].layer.colormap = self.parent.colormaps[-1]
+                ].napari_layer_ref.render_colormap = self.parent.colormaps[-1]
         else:
             self.parent.list_of_datasets[
                 self.idx
-            ].layer.colormap = self.parent.colormaps[self.Colormap.currentIndex()]
+            ].napari_layer_ref.render_colormap = self.parent.colormaps[self.Colormap.currentIndex()]
 
     def hide_channel(self):
         if not self.Bhide_channel.isChecked():
             # self.parent.auto_contrast()
-            self.parent.list_of_datasets[self.idx].layer.opacity = 0
+            self.parent.list_of_datasets[self.idx].napari_layer_ref.opacity = 0
             self.Slider2.setValue(0)
             self.Slider.hide()
             self.Slider2.hide()
@@ -332,11 +446,13 @@ class ChannelControls(QWidget):
 
 
 class napari_storm(QWidget):
-    """The Heart of this code: A Dock Widget, but also an object where everthing runs together"""
+    """The Heart of this code: A Dock Widget, but also
+    an object where everthing runs together"""
 
     def __init__(self, napari_viewer):
+
         super().__init__()
-        ###### D and D
+
         self.setAcceptDrops(True)
 
         self.tabs = QTabWidget()
@@ -346,7 +462,15 @@ class napari_storm(QWidget):
         self.tabs.addTab(self.data_control_tab, "Data Controls")
         self.tabs.addTab(self.visual_control_tab, "Visual Controls")
 
-        self.list_of_datasets = []
+        gaussian_render_modes = ['Fixed-size gaussian', 'Variable-size gaussian']
+
+        self.localization_datasets = []
+        self.n_datasets = 0
+        self.render_gaussian_mode = 0
+        self.render_fixed_gauss_sigma_xy_nm
+        self.render_fixed_gauss_sigma_z_nm
+        self.render_var_gauss_PSF_sigma_xy_nm
+        self.render_var_gauss_PSF_sigma_z_nm
         self.pixelsize = []
         self.layer = []
         self.layer_names = []
@@ -637,8 +761,8 @@ class napari_storm(QWidget):
         v = napari.current_viewer()
         cpos = v.camera.center
         l = int(self.Esbsize.text())
-        if self.Cscalebar.isChecked() and not not all(self.list_of_datasets[-1].locs):
-            if self.list_of_datasets[-1].zdim:
+        if self.Cscalebar.isChecked() and not not all(self.localization_datasets[-1].locs_active):
+            if self.localization_datasets[-1].zdim_present:
                 list = [l, 0.125 * l / 2, 0.125 * l / 2]
                 faces = np.asarray(
                     [
@@ -732,7 +856,7 @@ class napari_storm(QWidget):
         """3D or 2D Mode"""
         v = napari.current_viewer()
         # print(v.camera.view_direction)
-        if self.list_of_datasets[-1].zdim:
+        if self.localization_datasets[-1].zdim_present:
             self.Lrangez.show()
             self.Srender_rangez.show()
             # self.Baxis.show()
@@ -760,8 +884,8 @@ class napari_storm(QWidget):
             v.camera.angles = (0, 0, 180)
         else:
             v.camera.angles = (-90, -90, -90)
-        v.camera.center = self.list_of_datasets[-1].camera_center[0]
-        v.camera.zoom = self.list_of_datasets[-1].camera_center[1]
+        v.camera.center = self.localization_datasets[-1].camera_center[0]
+        v.camera.zoom = self.localization_datasets[-1].camera_center[1]
         v.camera.update(values)
 
 
@@ -831,7 +955,7 @@ def open_STORM_data(self, file_path=None, merge=False):
     )
 
     v = napari.current_viewer()
-    if not self.list_of_datasets:
+    if not self.localization_datasets:
         self.Lnumberoflocs.clear()
     elif merge == False:
         reset(self)
@@ -865,9 +989,9 @@ def open_STORM_data(self, file_path=None, merge=False):
 def reset(self):
     """Funktion which is called when a file has aready been opened and a new one ovverrides it"""
     v = napari.current_viewer()
-    for i in range(len(self.list_of_datasets)):
-        v.layers.remove(self.list_of_datasets[i].name)
-    self.list_of_datasets = []
+    for i in range(len(self.localization_datasets)):
+        v.layers.remove(self.localization_datasets[i].name)
+    self.localization_datasets = []
     self.Lnumberoflocs.clear()
     if not len(self.channel) == 0:  # Remove Channel of older files
         for i in range(len(self.channel)):
@@ -883,7 +1007,7 @@ def reset(self):
 
 def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
     """Creating a Particle Layer"""
-    if not self.list_of_datasets[idx].zdim:  # Hide 3D Options if 2D Dataset
+    if not self.localization_datasets[idx].zdim_present:  # Hide 3D Options if 2D Dataset
         self.Srender_rangez.hide()
         self.Lrangez.hide()
         # self.Baxis.hide()
@@ -901,34 +1025,34 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         self.Baxis_xz.show()
         self.Lresetview.show()
         self.Bspecial_colorcoding.show()
-    self.list_of_datasets[idx].update_locs()
-    coords = get_coords_from_locs(self, self.list_of_datasets[idx].pixelsize_nm, idx)
+    self.localization_datasets[idx].update_locs()
+    coords = get_coords_from_locs(self, self.localization_datasets[idx].pixelsize_nm, idx)
     v = napari.current_viewer()  # Just to get the sigmas
     """print(f"Create:\n #################\n"
           f"size = {self.list_of_datasets[idx].size}\n values = {self.list_of_datasets[idx].values}\n "
           f"sigmas {self.list_of_datasets[idx].sigma}\n Pixelsize {self.list_of_datasets[idx].pixelsize}"
           f"\n coords ={coords}\n##############")"""
-    self.list_of_datasets[idx].layer = Particles(
+    self.localization_datasets[idx].napari_layer_ref = Particles(
         coords,
-        size=self.list_of_datasets[idx].size,
-        values=self.list_of_datasets[idx].values,
-        antialias=self.list_of_datasets[idx].aas,
+        size=self.localization_datasets[idx].render_size,
+        values=self.localization_datasets[idx].render_values,
+        antialias=self.localization_datasets[idx].render_anti_alias,
         colormap=self.colormaps[idx],
-        sigmas=self.list_of_datasets[idx].sigma,
+        sigmas=self.localization_datasets[idx].render_sigma,
         filter=None,
         name=layer_name,
     )
-    self.list_of_datasets[idx].name = layer_name
-    self.list_of_datasets[idx].layer.add_to_viewer(v)
+    self.localization_datasets[idx].name = layer_name
+    self.localization_datasets[idx].napari_layer_ref.add_to_viewer(v)
     # v.window.qt_viewer.layer_to_visual[self.layer[-1]].node.canvas.measure_fps()
-    if self.list_of_datasets[idx].zdim:
+    if self.localization_datasets[idx].zdim_present:
         v.dims.ndisplay = 3
     else:
         v.dims.ndisplay = 2
     v.camera.perspective = 50
-    self.list_of_datasets[idx].layer.shading = "gaussian"
+    self.localization_datasets[idx].napari_layer_ref.shading = "gaussian"
     show_infos(self, layer_name, idx)
-    self.list_of_datasets[idx].camera_center = [
+    self.localization_datasets[idx].camera_center = [
         v.camera.center,
         v.camera.zoom,
         v.camera.angles,
@@ -942,47 +1066,47 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
 def update_layers(self, aas=0, layer_name="SMLM Data"):
     """Updating a Particle Layer"""
     v = napari.current_viewer()
-    self.list_of_datasets[-1].camera = [v.camera.zoom, v.camera.center, v.camera.angles]
-    for i in range(len(self.list_of_datasets)):
-        self.list_of_datasets[i].update_locs()
-        v.layers.remove(self.list_of_datasets[i].name)
-        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize_nm, i)
+    self.localization_datasets[-1].camera = [v.camera.zoom, v.camera.center, v.camera.angles]
+    for i in range(len(self.localization_datasets)):
+        self.localization_datasets[i].update_locs()
+        v.layers.remove(self.localization_datasets[i].name)
+        coords = get_coords_from_locs(self, self.localization_datasets[i].pixelsize_nm, i)
         """print(f"Update:\n #################\n"
           f"size = {self.list_of_datasets[i].size}\n values = {self.list_of_datasets[i].values}\n "
           f"sigmas ={self.list_of_datasets[i].sigma}\n Pixelsize ={self.list_of_datasets[i].pixelsize}"
           f"\n coords ={coords}\n##############")"""
-        self.list_of_datasets[i].layer = Particles(
+        self.localization_datasets[i].napari_layer_ref = Particles(
             coords,
-            size=self.list_of_datasets[i].size,
-            values=self.list_of_datasets[i].values,
+            size=self.localization_datasets[i].render_size,
+            values=self.localization_datasets[i].render_values,
             antialias=aas,
-            sigmas=self.list_of_datasets[i].sigma,
+            sigmas=self.localization_datasets[i].render_sigma,
             filter=None,
-            name=self.list_of_datasets[i].name,
+            name=self.localization_datasets[i].name,
             opacity=self.channel[i].Slider2.value(),
         )
-        self.list_of_datasets[i].layer.add_to_viewer(v)
+        self.localization_datasets[i].napari_layer_ref.add_to_viewer(v)
         self.channel[i].adjust_contrast()
         self.channel[i].adjust_opacity()
         self.channel[i].adjust_cmap()
         # if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
         #                                                        np.max(self.list_of_datasets[i].values))
-        self.list_of_datasets[i].layer.shading = "gaussian"
-    v.camera.angles = self.list_of_datasets[-1].camera[2]
-    v.camera.zoom = self.list_of_datasets[-1].camera[0]
-    v.camera.center = self.list_of_datasets[-1].camera[1]
+        self.localization_datasets[i].napari_layer_ref.shading = "gaussian"
+    v.camera.angles = self.localization_datasets[-1].camera[2]
+    v.camera.zoom = self.localization_datasets[-1].camera[0]
+    v.camera.center = self.localization_datasets[-1].camera[1]
     v.camera.update({})
 
 
 def update_layers2(self):
     """Still doesn't work"""
     v = napari.current_viewer()
-    for i in range(len(self.list_of_datasets)):
-        self.list_of_datasets[i].update_locs()
-        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize_nm, i)
-        values = self.list_of_datasets[i].values
-        size = self.list_of_datasets[i].size
+    for i in range(len(self.localization_datasets)):
+        self.localization_datasets[i].update_locs()
+        coords = get_coords_from_locs(self, self.localization_datasets[i].pixelsize_nm, i)
+        values = self.localization_datasets[i].render_values
+        size = self.localization_datasets[i].render_size
 
         coords = np.asarray(coords)
         if np.isscalar(values):
@@ -996,54 +1120,54 @@ def update_layers2(self):
 
         values = np.repeat(values, 4, axis=0)
         vertices_old, faces_old, values_old = v.layers[
-            self.list_of_datasets[i].name
+            self.localization_datasets[i].name
         ].data
         print(f"before: {len(vertices_old),len(faces_old),len(values_old)}")
         print(f"after: {len(vertices), len(faces), len(values)}")
-        v.layers[self.list_of_datasets[i].name].data = (vertices, faces, values)
+        v.layers[self.localization_datasets[i].name].data = (vertices, faces, values)
 
 
 def get_coords_from_locs(self, pixelsize, idx):
     """Calculating Particle Coordinates from Locs"""
-    if self.list_of_datasets[idx].zdim:
-        num_of_locs = len(self.list_of_datasets[idx].locs.x)
+    if self.localization_datasets[idx].zdim_present:
+        num_of_locs = len(self.localization_datasets[idx].locs_active.x)
         coords = np.zeros([num_of_locs, 3])
-        coords[:, 0] = self.list_of_datasets[idx].locs.z * pixelsize
-        coords[:, 1] = self.list_of_datasets[idx].locs.x * pixelsize
-        coords[:, 2] = self.list_of_datasets[idx].locs.y * pixelsize
+        coords[:, 0] = self.localization_datasets[idx].locs_active.z * pixelsize
+        coords[:, 1] = self.localization_datasets[idx].locs_active.x * pixelsize
+        coords[:, 2] = self.localization_datasets[idx].locs_active.y * pixelsize
     else:
-        num_of_locs = len(self.list_of_datasets[idx].locs.x)
+        num_of_locs = len(self.localization_datasets[idx].locs_active.x)
         coords = np.zeros([num_of_locs, 2])
-        coords[:, 0] = self.list_of_datasets[idx].locs.x * pixelsize
-        coords[:, 1] = self.list_of_datasets[idx].locs.y * pixelsize
+        coords[:, 0] = self.localization_datasets[idx].locs_active.x * pixelsize
+        coords[:, 1] = self.localization_datasets[idx].locs_active.y * pixelsize
     return coords
 
 
 ##### Semi Order Functions
 def show_infos(self, filename, idx):
     """Print Infos about files in Log"""
-    if self.list_of_datasets[idx].zdim:
+    if self.localization_datasets[idx].zdim_present:
         self.Lnumberoflocs.addItem(
             "Statistics\n"
             + f"File: {filename}\n"
-            + f"Number of locs: {len(self.list_of_datasets[idx].locs.x)}\n"
-            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imagedepth: {np.round((max(self.list_of_datasets[idx].locs.z) - min(self.list_of_datasets[idx].locs.z)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Intensity per localisation\nmean: {np.round(np.mean(self.list_of_datasets[idx].locs.photons),3)}\nmax: "
-            + f"{np.round(max(self.list_of_datasets[idx].locs.photons),3)}\nmin:"
-            + f" {np.round(min(self.list_of_datasets[idx].locs.photons),3)}\n"
+            + f"Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n"
+            f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imagedepth: {np.round((max(self.localization_datasets[idx].locs_active.z) - min(self.localization_datasets[idx].locs_active.z)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: "
+            + f"{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:"
+            + f" {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n"
         )
     else:
         self.Lnumberoflocs.addItem(
             "Statistics\n"
             + f"File: {filename}\n"
-            + f"Number of locs: {len(self.list_of_datasets[idx].locs.x)}\n"
-            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Intensity per localisation\nmean: {np.round(np.mean(self.list_of_datasets[idx].locs.photons),3)}\nmax: "
-            + f"{np.round(max(self.list_of_datasets[idx].locs.photons),3)}\nmin:"
-            + f" {np.round(min(self.list_of_datasets[idx].locs.photons),3)}\n"
+            + f"Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n"
+            f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: "
+            + f"{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:"
+            + f" {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n"
         )
 
 
