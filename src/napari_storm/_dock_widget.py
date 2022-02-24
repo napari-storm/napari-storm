@@ -47,6 +47,8 @@ import napari
 
 from .utils import generate_billboards_2d
 
+import numpy as np
+
 
 class dataset:
     """An Object where the localization data is stored,
@@ -55,16 +57,16 @@ class dataset:
     def __init__(
         self,
         locs=None,
-        zdim=False,
+        zdim_present=False,
         parent=None,
         name=None,
-        pixelsize=130,
+        pixelsize_nm=130.0,
         offset=None,
         index=0,
     ):
-        self.zdim = zdim
+        self.zdim = zdim_present
         self.locs = locs
-        self.locs_backup = locs  # Needed if dataset is cut with sliders and then you want the data back
+        self.locs_backup = locs
         self.coords = None
         self.index = index
         self.layer = None
@@ -72,7 +74,7 @@ class dataset:
         self.sigma = None
         self.size = None
         self.values = None
-        self.pixelsize = pixelsize
+        self.pixelsize_nm = pixelsize_nm
         self.parent = parent
         self.camera_center = None
         self.colormap = None
@@ -83,12 +85,16 @@ class dataset:
         self.calc_values()
 
     def check_offset(self):
-        """First check which dataset needs the highest offset and then adjust every dataset"""
+        """First check which dataset needs the highest
+        offset and then adjust every dataset"""
+
         if len(self.parent.list_of_datasets) != 0:
+
             for i in range(len(self.parent.list_of_datasets)):
                 for j in range(len(self.parent.list_of_datasets[i].offset)):
                     if self.parent.list_of_datasets[i].offset[j] > self.offset[j]:
                         self.offset[j] = self.parent.list_of_datasets[i].offset[j]
+
             for i in range(len(self.parent.list_of_datasets)):
                 for j in range(len(self.parent.list_of_datasets[i].offset)):
                     self.parent.list_of_datasets[i].locs.x -= self.offset[0]
@@ -896,7 +902,7 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         self.Lresetview.show()
         self.Bspecial_colorcoding.show()
     self.list_of_datasets[idx].update_locs()
-    coords = get_coords_from_locs(self, self.list_of_datasets[idx].pixelsize, idx)
+    coords = get_coords_from_locs(self, self.list_of_datasets[idx].pixelsize_nm, idx)
     v = napari.current_viewer()  # Just to get the sigmas
     """print(f"Create:\n #################\n"
           f"size = {self.list_of_datasets[idx].size}\n values = {self.list_of_datasets[idx].values}\n "
@@ -940,7 +946,7 @@ def update_layers(self, aas=0, layer_name="SMLM Data"):
     for i in range(len(self.list_of_datasets)):
         self.list_of_datasets[i].update_locs()
         v.layers.remove(self.list_of_datasets[i].name)
-        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize, i)
+        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize_nm, i)
         """print(f"Update:\n #################\n"
           f"size = {self.list_of_datasets[i].size}\n values = {self.list_of_datasets[i].values}\n "
           f"sigmas ={self.list_of_datasets[i].sigma}\n Pixelsize ={self.list_of_datasets[i].pixelsize}"
@@ -974,7 +980,7 @@ def update_layers2(self):
     v = napari.current_viewer()
     for i in range(len(self.list_of_datasets)):
         self.list_of_datasets[i].update_locs()
-        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize, i)
+        coords = get_coords_from_locs(self, self.list_of_datasets[i].pixelsize_nm, i)
         values = self.list_of_datasets[i].values
         size = self.list_of_datasets[i].size
 
@@ -1021,9 +1027,9 @@ def show_infos(self, filename, idx):
             "Statistics\n"
             + f"File: {filename}\n"
             + f"Number of locs: {len(self.list_of_datasets[idx].locs.x)}\n"
-            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize / 1000,3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize / 1000,3)} µm\n"
-            + f"Imagedepth: {np.round((max(self.list_of_datasets[idx].locs.z) - min(self.list_of_datasets[idx].locs.z)) * self.list_of_datasets[idx].pixelsize / 1000,3)} µm\n"
+            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imagedepth: {np.round((max(self.list_of_datasets[idx].locs.z) - min(self.list_of_datasets[idx].locs.z)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
             + f"Intensity per localisation\nmean: {np.round(np.mean(self.list_of_datasets[idx].locs.photons),3)}\nmax: "
             + f"{np.round(max(self.list_of_datasets[idx].locs.photons),3)}\nmin:"
             + f" {np.round(min(self.list_of_datasets[idx].locs.photons),3)}\n"
@@ -1033,8 +1039,8 @@ def show_infos(self, filename, idx):
             "Statistics\n"
             + f"File: {filename}\n"
             + f"Number of locs: {len(self.list_of_datasets[idx].locs.x)}\n"
-            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize / 1000,3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize / 1000,3)} µm\n"
+            f"Imagewidth: {np.round((max(self.list_of_datasets[idx].locs.x) - min(self.list_of_datasets[idx].locs.x)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+            + f"Imageheigth: {np.round((max(self.list_of_datasets[idx].locs.y) - min(self.list_of_datasets[idx].locs.y)) * self.list_of_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
             + f"Intensity per localisation\nmean: {np.round(np.mean(self.list_of_datasets[idx].locs.photons),3)}\nmax: "
             + f"{np.round(max(self.list_of_datasets[idx].locs.photons),3)}\nmin:"
             + f" {np.round(min(self.list_of_datasets[idx].locs.photons),3)}\n"

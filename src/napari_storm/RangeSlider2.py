@@ -162,7 +162,7 @@ class RangeSlider2(QDoubleRangeSlider):
             faces = [[1, 2, 5], [2, 5, 6], [3, 4, 7], [4, 7, 8], [1, 3, 7], [1, 7, 5], [5, 6, 8],
                                      [5, 7, 8], [2, 6, 8], [2, 4, 8], [1, 2, 4], [1, 3, 4]]
             return np.reshape(np.asarray(coords), (8, 3)) * self.parent().list_of_datasets[
-                -1].pixelsize, np.asarray(faces) - 1
+                -1].pixelsize_nm, np.asarray(faces) - 1
         else:
             x = []
             y = []
@@ -190,7 +190,7 @@ class RangeSlider2(QDoubleRangeSlider):
                     for k in [np.max(x), np.min(x)]:
                         coords.append([j, k])
             faces = [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]
-            return np.reshape(np.asarray(coords), (4, 2)) * self.parent().list_of_datasets[-1].pixelsize, np.asarray(
+            return np.reshape(np.asarray(coords), (4, 2)) * self.parent().list_of_datasets[-1].pixelsize_nm, np.asarray(
                 faces) - 1
 
 

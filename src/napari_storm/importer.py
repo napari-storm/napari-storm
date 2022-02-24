@@ -42,10 +42,10 @@ def load_hdf5(self, file_path):
     filename = file_path.split('/')[-1]
     locs, info = load_locs(file_path)
     try:
-        pixelsize = locs.pixelsize
+        pixelsize = locs.pixelsize_nm
     except:
         pixelsize = int(easygui.enterbox("Pixelsize?"))
-    self.pixelsize = pixelsize
+    self.pixelsize_nm = pixelsize
     try:
         locs.z
         zdim = True
@@ -53,7 +53,7 @@ def load_hdf5(self, file_path):
         zdim=False
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, parent=self, zdim=zdim, pixelsize=pixelsize, name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, parent=self, zdim_present=zdim, pixelsize_nm=pixelsize, name=filename, offset=offset))
     create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -78,8 +78,8 @@ def load_h5(self, file_path):
     for i in range(num_channel):
         filename_pluschannel = check_namespace(self,filename+f" Channel {i+1}")
         locs_in_ch=locs[data['CHANNEL']==i]
-        self.list_of_datasets.append(dataset(locs=locs_in_ch, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                             name=filename_pluschannel,offset=offset,index=len(self.list_of_datasets)))
+        self.list_of_datasets.append(dataset(locs=locs_in_ch, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
+                                             name=filename_pluschannel, offset=offset, index=len(self.list_of_datasets)))
         create_new_layer(self=self, aas=0.1,  layer_name=filename_pluschannel, idx=len(self.list_of_datasets)-1)
 
 def load_mfx_json(self,file_path):
@@ -122,8 +122,8 @@ def load_mfx_json(self,file_path):
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
 
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                         index=len(self.list_of_datasets), name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
+                                         index=len(self.list_of_datasets), name=filename, offset=offset))
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -169,8 +169,8 @@ def load_mfx_npy(self,file_path):
             dtype=LOCS_DTYPE_2D, )
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                         index=len(self.list_of_datasets), name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
+                                         index=len(self.list_of_datasets), name=filename, offset=offset))
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -203,8 +203,8 @@ def load_csv(self, file_path):
         zdim = False
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize
-                                         ,index=len(self.list_of_datasets), name=filename,offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize
+                                         , index=len(self.list_of_datasets), name=filename, offset=offset))
     create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 
@@ -327,8 +327,8 @@ def load_SMLM(self, file_path):
         zdim = False
     offset=look_for_offset(locs,zdim)
     filename=check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename
-                                         ,index=len(self.list_of_datasets),offset=offset))
+    self.list_of_datasets.append(dataset(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize, name=filename
+                                         , index=len(self.list_of_datasets), offset=offset))
     create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
 
 ##### Lowest Order functions
@@ -343,8 +343,8 @@ def start_testing(self):
     pixelsize=100
     filename=check_namespace(self,'a.tester')
     offset=look_for_offset(locs=locs,zdim=zdim)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,
-                                         offset=offset,index=len(self.list_of_datasets)))
+    self.list_of_datasets.append(dataset(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize, name=filename,
+                                         offset=offset, index=len(self.list_of_datasets)))
     #print(self.list_of_datasets[-1].name,len(self.list_of_datasets),self.list_of_datasets[0].locs.x)
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
 
