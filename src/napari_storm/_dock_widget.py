@@ -712,7 +712,8 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
     if not self.list_of_datasets[idx].zdim: # Hide 3D Options if 2D Dataset
         self.Srender_rangez.hide()
         self.Lrangez.hide()
-        #self.Baxis.hide()
+        self.Esigma2.hide()
+        self.Lsigma2.hide()
         self.Baxis_xy.hide()
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
@@ -727,6 +728,7 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         self.Baxis_xz.show()
         self.Lresetview.show()
         self.Bspecial_colorcoding.show()
+        self.zdim=True
     self.list_of_datasets[idx].update_locs()
     coords = get_coords_from_locs(self, self.list_of_datasets[idx].pixelsize, idx)
     v = napari.current_viewer()  # Just to get the sigmas
