@@ -316,13 +316,20 @@ class localization_data:
 
 
 class ChannelControls(QWidget):
-    """A QT widget that is created for every channel, which provides the visual controls"""
+    """A QT widget that is created for every channel,
+    which provides the visual controls"""
 
-    def __init__(self, parent, name, idx):
+    def __init__(
+        self,
+        parent,
+        name,
+        channel_index,
+    ):
+
         super().__init__()
         self.parent = parent
         self.name = name
-        self.idx = idx  # Number of channel corresponds to number of dataset
+        self.channel_index = channel_index
         self.Label = QLabel()
         self.Label.setText("Contrast " + name)
 
@@ -362,7 +369,7 @@ class ChannelControls(QWidget):
         self.Colormap.addItems(items)
         for i in range(len(items)):
             self.Colormap.setItemIcon(i, icons[i])
-        self.Colormap.setCurrentText(items[idx])
+        self.Colormap.setCurrentText(items[channel_index])
         self.Colormap.currentIndexChanged.connect(self.adjust_cmap)
 
         self.layout = QGridLayout()
@@ -381,34 +388,34 @@ class ChannelControls(QWidget):
 
     def adjust_opacity(self):
         """...adjust opacity limits, only in colording mode"""
-        self.parent.list_of_datasets[self.idx].napari_layer_ref.opacity = (
+        self.parent.list_of_datasets[self.channel_index].napari_layer_ref.opacity = (
             self.Slider2.value() / 100
         )
 
     def adjust_contrast(self):
         """...adjust contrast limits"""
         self.parent.list_of_datasets[
-            self.idx
+            self.channel_index
         ].napari_layer_ref.contrast_limits = self.Slider.getRange()
 
     def adjust_cmap(self):
         """...adjust colormap"""
         if self.parent.Bspecial_colorcoding.isChecked():
             if self.parent.Brenderoptions.currentText() == "fixed gaussian":
-                self.parent.list_of_datasets[self.idx].napari_layer_ref.render_colormap = "hsv"
+                self.parent.list_of_datasets[self.channel_index].napari_layer_ref.render_colormap = "hsv"
             else:
                 self.parent.list_of_datasets[
-                    self.idx
+                    self.channel_index
                 ].napari_layer_ref.render_colormap = self.parent.colormaps[-1]
         else:
             self.parent.list_of_datasets[
-                self.idx
+                self.channel_index
             ].napari_layer_ref.render_colormap = self.parent.colormaps[self.Colormap.currentIndex()]
 
     def hide_channel(self):
         if not self.Bhide_channel.isChecked():
             # self.parent.auto_contrast()
-            self.parent.list_of_datasets[self.idx].napari_layer_ref.opacity = 0
+            self.parent.list_of_datasets[self.channel_index].napari_layer_ref.opacity = 0
             self.Slider2.setValue(0)
             self.Slider.hide()
             self.Slider2.hide()
@@ -704,7 +711,7 @@ class napari_storm(QWidget):
     def add_channel(self, name="Channel"):
         """Adds a Channel in the visual controlls"""
         self.channel.append(
-            ChannelControls(parent=self, name=name, idx=len(self.channel))
+            ChannelControls(parent=self, name=name, channel_index=len(self.channel))
         )
         self.layout2.addRow(self.channel[-1])
 
