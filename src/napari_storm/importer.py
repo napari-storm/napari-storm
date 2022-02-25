@@ -2,12 +2,8 @@ import h5py
 import numpy as np
 import yaml as _yaml
 import os.path as _ospath
-from tkinter import filedialog as fd
-from tkinter import Tk
-import napari
-import matplotlib.pyplot as plt
 import easygui
-from ._dock_widget import localization_data,create_new_layer
+from ._dock_widget import localization_data, create_new_layer
 
 
 def load_info(path):
@@ -57,30 +53,7 @@ def load_hdf5(self, file_path):
     create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 
-def load_h5(self, file_path):
-    """Loads localisations from .h5 files"""
-    filename = file_path.split('/')[-1]
-    LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
-    LOCS_DTYPE_3D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("z", "f4"), ("photons", "f4")]
-    with h5py.File(file_path, "r") as locs_file:
-        data = locs_file['molecule_set_data']['datatable'][...]
-        pixelsize = locs_file['molecule_set_data']['xy_pixel_size_um'][...] * 1E3  # to µm to nm
-    try:
-        locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'], data['Y_POS_PIXELS'], data['Z_POS_PIXELS'],
-                             data['PHOTONS']), dtype=LOCS_DTYPE_3D)
-        zdim = True
-    except:
-        locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'], data['Y_POS_PIXELS'],
-                             data['PHOTONS']), dtype=LOCS_DTYPE_2D)
-        zdim = False
-    num_channel = max(data['CHANNEL']) + 1
-    offset = look_for_offset(locs, zdim)
-    for i in range(num_channel):
-        filename_pluschannel = check_namespace(self,filename+f" Channel {i+1}")
-        locs_in_ch=locs[data['CHANNEL']==i]
-        self.localization_datasets.append(localization_data(locs=locs_in_ch, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
-                                                            name=filename_pluschannel, offset=offset, channel_index=len(self.localization_datasets)))
-        create_new_layer(self=self, aas=0.1, layer_name=filename_pluschannel, idx=len(self.localization_datasets) - 1)
+
 
 def load_mfx_json(self,file_path):
     """Loads MFX Data from json files -> Really needs improvement in performance"""

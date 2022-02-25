@@ -1,4 +1,3 @@
-import numpy
 from PyQt5.QtGui import (
     QPaintEvent,
     QPainter,
@@ -42,14 +41,21 @@ from PyQt5.QtCore import Qt, QRect, QSize
 
 import easygui
 
-from .Exp_Controlls import *
+import numpy as np
+import yaml as _yaml
+import os.path as _ospath
+import h5py
+
+from tkinter import filedialog as fd
+from tkinter import Tk
+import matplotlib.pyplot as plt
 
 import napari
 
+from .ns_constants import *
+from .particles import Particles, BillboardsFilter
 from .utils import generate_billboards_2d
-
-import numpy as np
-
+from .Exp_Controlls import *
 
 class localization_data:
     """An Object which contains the localization data,
@@ -69,15 +75,6 @@ class localization_data:
     ):
 
         assert isinstance(parent, napari_storm) == True
-
-        LOCS_DTYPE = [('frame_number', 'i4'),
-                      ('x_pos_pixels', 'f4'),
-                      ('y_pos_pixels', 'f4'),
-                      ('z_pos_pixels', 'f4'),
-                      ('sigma_x_pixels', 'f4'),
-                      ('sigma_y_pixels', 'f4'),
-                      ('sigma_z_pixels', 'f4'),
-                      ('photon_count', 'f4')]
 
         assert isinstance(locs, np.recarray)
         assert locs.dtype == LOCS_DTYPE
@@ -345,7 +342,7 @@ class ChannelControls(QWidget):
         self.Bshow_channel.stateChanged.connect(self.show_channel)
 
         self.Breset = QPushButton()
-        self.Breset.setText("Reset")
+        self.Breset.setText('Reset')
         self.Breset.clicked.connect(self.reset)
 
         self.Slider_colormap_range = RangeSlider(parent=parent)
@@ -377,7 +374,7 @@ class ChannelControls(QWidget):
         for i in range(len(items)):
             self.Colormap_selector.setItemIcon(i, icons[i])
         self.Colormap_selector.setCurrentText(items[channel_index])
-        self.Colormap_selector.currentIndexChanged.connect(self.adjust_color_map)
+        self.Colormap_selector.currentIndexChanged.connect(self.change_color_map)
 
         self.layout = QGridLayout()
         self.layout.addWidget(self.Label, 0, 0)
@@ -420,7 +417,7 @@ class ChannelControls(QWidget):
         self.Slider_opacity.setValue(100.0)
 
 
-    def adjust_color_map(self):
+    def change_color_map(self):
         # adjust colormap
 
         tmp_cmap_index = self.Colormap_selector.currentIndex()
@@ -487,6 +484,8 @@ class napari_storm(QWidget):
 
     def __init__(self, napari_viewer):
 
+        from .RangeSlider2 import RangeSlider2
+
         super().__init__()
 
         self.setAcceptDrops(True)
@@ -495,10 +494,10 @@ class napari_storm(QWidget):
         self.data_control_tab = QWidget()
         self.visual_control_tab = QWidget()
 
-        # self.setStyleSheet("background-color: #414851")
+        # self.setStyleSheet('background-color: #414851')
 
-        self.tabs.addTab(self.data_control_tab, "Data Controls")
-        self.tabs.addTab(self.visual_control_tab, "Visual Controls")
+        self.tabs.addTab(self.data_control_tab, 'Data Controls')
+        self.tabs.addTab(self.visual_control_tab, 'Visual Controls')
 
         gaussian_render_modes = ['Fixed-size gaussian',
                                  'Variable-size gaussian']
@@ -529,106 +528,100 @@ class napari_storm(QWidget):
         self.viewer = napari_viewer
         layout = QGridLayout()
 
-        # data_control_tab
-        self.Bopen = QPushButton()
-        self.Bopen.clicked.connect(lambda: open_STORM_data(self))
-        self.Bopen.setText("Import File Dialog")
-        layout.addWidget(self.Bopen, 0, 1, 1, 4)
+        # Set up the GUI
 
         self.Limport = QLabel()
-        self.Limport.setText("Import \nSTORM Data")
+        self.Limport.setText('Import \nSTORM Data')
         layout.addWidget(self.Limport, 0, 0)
 
-        self.Lnumberoflocs = TestListView(self, parent=self)
-        self.Lnumberoflocs.addItem(
-            "STATISTICS \nWaiting for Data... \nImport or drag file here"
-        )
-        self.Lnumberoflocs.itemDoubleClicked.connect(self.Lnumberoflocs.remove_dataset)
-        layout.addWidget(self.Lnumberoflocs, 1, 0, 1, 4)
+        self.Bopen = QPushButton()
+        self.Bopen.clicked.connect(self.open_localization_data)
+        self.Bopen.setText('Import File Dialog')
+        layout.addWidget(self.Bopen, 0, 1, 1, 4)
+
+        # self.Lnumberoflocs = TestListView(self, parent=self)
+        # self.Lnumberoflocs.addItem(
+        #     'STATISTICS \nWaiting for Data... \nImport or drag file here'
+        # )
+        # self.Lnumberoflocs.itemDoubleClicked.connect(self.Lnumberoflocs.remove_dataset)
+        # layout.addWidget(self.Lnumberoflocs, 1, 0, 1, 4)
 
         self.Lresetview = QLabel()
-        self.Lresetview.setText("Reset view:")
+        self.Lresetview.setText('Reset view:')
         layout.addWidget(self.Lresetview, 2, 0)
-        """
-        self.Baxis = QComboBox()
-        self.Baxis.addItems(["XY", "XZ", "YZ"])
-        self.Baxis.currentIndexChanged.connect(self.change_camera)
-        layout.addWidget(self.Baxis, 2, 1)"""
+
         self.Baxis_xy = QPushButton()
-        self.Baxis_xy.setText("XY")
-        self.Baxis_xy.clicked.connect(lambda: self.change_camera(type="XY"))
+        self.Baxis_xy.setText('XY')
+        self.Baxis_xy.clicked.connect(lambda: self.change_camera(type='XY'))
         layout.addWidget(self.Baxis_xy, 2, 1)
 
         self.Baxis_yz = QPushButton()
-        self.Baxis_yz.setText("YZ")
-        self.Baxis_yz.clicked.connect(lambda: self.change_camera(type="YZ"))
+        self.Baxis_yz.setText('YZ')
+        self.Baxis_yz.clicked.connect(lambda: self.change_camera(type='YZ'))
         layout.addWidget(self.Baxis_yz, 2, 2)
 
         self.Baxis_xz = QPushButton()
-        self.Baxis_xz.setText("XZ")
-        self.Baxis_xz.clicked.connect(lambda: self.change_camera(type="XZ"))
+        self.Baxis_xz.setText('XZ')
+        self.Baxis_xz.clicked.connect(lambda: self.change_camera(type='XZ'))
         layout.addWidget(self.Baxis_xz, 2, 3)
 
         self.Lrenderoptions = QLabel()
-        self.Lrenderoptions.setText("Rendering options:")
+        self.Lrenderoptions.setText('Rendering options:')
         layout.addWidget(self.Lrenderoptions, 3, 0)
 
         self.Brenderoptions = QComboBox()
-        self.Brenderoptions.addItems(["fixed gaussian", "variable gaussian"])
+        self.Brenderoptions.addItems(gaussian_render_modes)
         self.Brenderoptions.currentIndexChanged.connect(self.render_options_changed)
         layout.addWidget(self.Brenderoptions, 3, 1, 1, 3)
 
         self.Lsigma = QLabel()
-        self.Lsigma.setText("FWHM in XY [nm]:")
+        self.Lsigma.setText('FWHM in XY [nm]:')
         layout.addWidget(self.Lsigma, 4, 0)
 
         self.Lsigma2 = QLabel()
-        self.Lsigma2.setText("FWHM in Z [nm]:")
+        self.Lsigma2.setText('FWHM in Z [nm]:')
         layout.addWidget(self.Lsigma2, 5, 0)
 
-        self.Esigma = QLineEdit()
-        self.Esigma.setText("10")
-        self.Esigma.textChanged.connect(
+        self.Esigma_xy = QLineEdit()
+        self.Esigma_xy.setText('10')
+        self.Esigma_xy.textChanged.connect(
             lambda: self.start_typing_timer(self.typing_timer_sigma)
         )
-        layout.addWidget(self.Esigma, 4, 1, 1, 3)
+        layout.addWidget(self.Esigma_xy, 4, 1, 1, 3)
         self.typing_timer_sigma = QtCore.QTimer()
         self.typing_timer_sigma.setSingleShot(True)
         self.typing_timer_sigma.timeout.connect(lambda: update_layers(self))
 
-        self.Esigma2 = QLineEdit()
-        self.Esigma2.setText("10")
-        self.Esigma2.textChanged.connect(
+        self.Esigma_z = QLineEdit()
+        self.Esigma_z.setText('10')
+        self.Esigma_z.textChanged.connect(
             lambda: self.start_typing_timer(self.typing_timer_sigma)
         )
-        layout.addWidget(self.Esigma2, 5, 1, 1, 3)
+        layout.addWidget(self.Esigma_z, 5, 1, 1, 3)
 
         self.Lrangex = QLabel()
-        self.Lrangex.setText("X-range")
+        self.Lrangex.setText('X-range')
         layout.addWidget(self.Lrangex, 6, 0)
 
         self.Lrangey = QLabel()
-        self.Lrangey.setText("Y-range")
+        self.Lrangey.setText('Y-range')
         layout.addWidget(self.Lrangey, 7, 0)
 
         self.Lrangez = QLabel()
-        self.Lrangez.setText("Z-range")
+        self.Lrangez.setText('Z-range')
         layout.addWidget(self.Lrangez, 8, 0)
 
-        from .RangeSlider2 import RangeSlider2
-
-        self.Srender_rangex = RangeSlider2(parent=self, type="x")
-        # self.Srender_rangex.mouseReleaseEvent.connect()
+        self.Srender_rangex = RangeSlider2(parent=self, type='x')
         layout.addWidget(self.Srender_rangex, 6, 1, 1, 3)
 
-        self.Srender_rangey = RangeSlider2(parent=self, type="y")
+        self.Srender_rangey = RangeSlider2(parent=self, type='y')
         layout.addWidget(self.Srender_rangey, 7, 1, 1, 3)
 
-        self.Srender_rangez = RangeSlider2(parent=self, type="z")
+        self.Srender_rangez = RangeSlider2(parent=self, type='z')
         layout.addWidget(self.Srender_rangez, 8, 1, 1, 3)
 
         self.Lscalebar = QLabel()
-        self.Lscalebar.setText("Scalebar?")
+        self.Lscalebar.setText('Scalebar?')
         layout.addWidget(self.Lscalebar, 9, 0)
 
         self.Cscalebar = QCheckBox()
@@ -636,11 +629,11 @@ class napari_storm(QWidget):
         layout.addWidget(self.Cscalebar, 9, 1, 1, 3)
 
         self.Lscalebarsize = QLabel()
-        self.Lscalebarsize.setText("Size of Scalebar [nm]:")
+        self.Lscalebarsize.setText('Size of Scalebar [nm]:')
         layout.addWidget(self.Lscalebarsize, 10, 0)
 
         self.Esbsize = QLineEdit()
-        self.Esbsize.setText("500")
+        self.Esbsize.setText('500')
         self.Esbsize.textChanged.connect(
             lambda: self.start_typing_timer(self.typing_timer_sbscale)
         )
@@ -649,20 +642,19 @@ class napari_storm(QWidget):
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.scalebar)
 
-        self.Bspecial_colorcoding = QCheckBox()
-        self.Bspecial_colorcoding.setText("Activate Rainbow colorcoding in Z")
-        self.Bspecial_colorcoding.stateChanged.connect(self.colorcoding)
-        layout.addWidget(self.Bspecial_colorcoding, 13, 0, 1, 4)
+        self.Bz_color_coding = QCheckBox()
+        self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
+        self.Bz_color_coding.stateChanged.connect(self.colorcoding)
+        layout.addWidget(self.Bz_color_coding, 13, 0, 1, 4)
 
         self.Bmerge_with_additional_file = QPushButton()
-        self.Bmerge_with_additional_file.setText("Merge with additional file")
+        self.Bmerge_with_additional_file.setText('Merge with additional file')
         layout.addWidget(self.Bmerge_with_additional_file, 14, 0, 1, 2)
-        self.Bmerge_with_additional_file.clicked.connect(
-            lambda: open_STORM_data(self, merge=True)
-        )
+        self.Bmerge_with_additional_file.clicked.connect(self.open_localization_data(merge=True))
+
 
         self.Breset_render_range = QPushButton()
-        self.Breset_render_range.setText("Reset Render Range")
+        self.Breset_render_range.setText('Reset Render Range')
         self.Breset_render_range.clicked.connect(self.reset_render_range)
         layout.addWidget(self.Breset_render_range, 14, 2, 1, 2)
 
@@ -674,13 +666,117 @@ class napari_storm(QWidget):
         self.layout.addWidget(self.tabs)
         self.setLayout(self.layout)
 
-        self.custom_controlls = MouseControlls()
+        self.custom_controls = MouseControls()
         layout.setColumnStretch(0, 4)
         self.data_control_tab.setLayout(layout)
         self.visual_control_tab.setLayout(self.layout2)
         # self.right_click_pan()
         custom_keys_and_scalebar(self)
         self.hide_stuff()
+
+    def open_localization_data(self, file_path=None, merge=False):
+        """Determine which file type is being opened, and call the
+        corresponding importer function"""
+
+        self.update_widget_states()
+
+        from .importer import (
+            load_hdf5,
+            load_csv,
+            load_SMLM,
+            load_h5,
+            load_mfx_json,
+            load_mfx_npy,
+            start_testing,
+        )
+
+        if self.n_datasets != 0 and merge == False:
+            self.clear_datasets()
+
+        Tk().withdraw()
+
+        if not file_path:
+            file_path = fd.askopenfilename()
+
+        filetype = file_path.split('.')[-1]
+        filename = file_path.split('/')[-1]
+
+        if filetype == 'hdf5':
+            load_hdf5(self, file_path)
+        elif filetype == 'yaml':
+            file_path = file_path[: -(len(filetype))] + 'hdf5'
+            load_hdf5(self, file_path)
+        elif filetype == 'csv':
+            load_csv(self, file_path)
+        elif filetype == 'smlm':
+            load_SMLM(self, file_path)
+        elif filetype == 'h5':
+            load_h5(self, file_path)
+        elif filetype == 'json':
+            load_mfx_json(self, file_path)
+        elif filetype == 'npy':
+            load_mfx_npy(self, file_path)
+        elif filetype == 'test':
+            start_testing(self)
+        else:
+            raise TypeError('Unknown SMLM data file extension')
+
+    def load_h5(self, file_path):
+        """Loads localisations from .h5 files"""
+        filename = file_path.split('/')[-1]
+
+        with h5py.File(file_path, "r") as locs_file:
+            data = locs_file['molecule_set_data']['datatable'][...]
+            pixelsize = locs_file['molecule_set_data']['xy_pixel_size_um'][
+                            ...] * 1E3  # to µm to nm
+        try:
+            locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'],
+                                 data['Y_POS_PIXELS'], data['Z_POS_PIXELS'],
+                                 data['PHOTONS']), dtype=LOCS_DTYPE_3D)
+            zdim = True
+        except:
+            locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'],
+                                 data['Y_POS_PIXELS'],
+                                 data['PHOTONS']), dtype=LOCS_DTYPE_2D)
+            zdim = False
+        num_channel = max(data['CHANNEL']) + 1
+        offset = look_for_offset(locs, zdim)
+        for i in range(num_channel):
+            filename_pluschannel = check_namespace(self,
+                                                   filename + f" Channel {i + 1}")
+            locs_in_ch = locs[data['CHANNEL'] == i]
+            self.localization_datasets.append(
+                localization_data(locs=locs_in_ch, zdim_present=zdim,
+                                  parent=self, pixelsize_nm=pixelsize,
+                                  name=filename_pluschannel, offset=offset,
+                                  channel_index=len(
+                                      self.localization_datasets)))
+            create_new_layer(self=self, aas=0.1,
+                             layer_name=filename_pluschannel,
+                             idx=len(self.localization_datasets) - 1)
+
+    def clear_datasets(self):
+        """Erase the current dataset and reset the viewer"""
+
+        v = self.viewer
+
+        for i in range(self.n_datasets):
+            v.layers.remove(self.localization_datasets[i].name)
+
+        self.localization_datasets = []
+
+        # self.Lnumberoflocs.clear()
+
+        if not len(self.channel) == 0:  # Remove Channel of older files
+            for i in range(len(self.channel)):
+                self.channel[i].hide()
+            self.channel = []
+
+        self.Cscalebar.setCheckState(False)
+
+        self.reset_render_range(full_reset=True)
+
+        self.Bz_color_coding.setCheckState(False)
 
     def reset_render_range(self, full_reset=False):
         v = napari.current_viewer()
@@ -711,7 +807,7 @@ class napari_storm(QWidget):
             links = []
             u = event.mimeData().urls()
             file = u[0].toString()[8:]
-            open_STORM_data(self, file_path=file)
+            self.open_localization_data(file_path=file)
         else:
             event.ignore()
         #####
@@ -727,10 +823,10 @@ class napari_storm(QWidget):
         self.Brenderoptions.hide()
         self.Lrenderoptions.hide()
         self.Lsigma.hide()
-        self.Esigma.hide()
+        self.Esigma_xy.hide()
         self.Lsigma2.hide()
-        self.Esigma2.hide()
-        self.Bspecial_colorcoding.hide()
+        self.Esigma_z.hide()
+        self.Bz_color_coding.hide()
         self.Lscalebarsize.hide()
         self.Esbsize.hide()
         self.Bmerge_with_additional_file.hide()
@@ -742,7 +838,7 @@ class napari_storm(QWidget):
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
 
-    def show_stuff(self):
+    def update_widget_states(self):
         """Show the Controls usable atm"""
         self.Srender_rangex.show()
         self.Srender_rangey.show()
@@ -753,15 +849,15 @@ class napari_storm(QWidget):
         self.Brenderoptions.show()
         self.Lrenderoptions.show()
         self.Lsigma.show()
-        self.Esigma.show()
+        self.Esigma_xy.show()
         self.Lsigma2.show()
-        self.Esigma2.show()
+        self.Esigma_z.show()
         self.Lscalebar.show()
         self.Lscalebarsize.show()
         self.Esbsize.show()
         self.Bmerge_with_additional_file.show()
 
-    def add_channel(self, name="Channel"):
+    def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controlls"""
         self.channel.append(
             ChannelControls(parent=self, name=name, channel_index=len(self.channel))
@@ -770,37 +866,37 @@ class napari_storm(QWidget):
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
-        print(self.Bspecial_colorcoding.isChecked())
-        if self.Bspecial_colorcoding.isChecked():
+        print(self.Bz_color_coding.isChecked())
+        if self.Bz_color_coding.isChecked():
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.hide()
                 self.channel[i].Slider_opacity.show()
                 self.channel[i].Slider_colormap_range.hide()
-                self.channel[i].Label.setText("Contrast " + self.channel[i].name)
+                self.channel[i].Label.setText('Contrast ' + self.channel[i].name)
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()
                 self.channel[i].Slider_opacity.hide()
                 self.channel[i].Slider_colormap_range.show()
-                self.channel[i].Label.setText("Opacity " + self.channel[i].name)
-                self.channel[i].reset()
+                self.channel[i].Label.setText('Opacity ' + self.channel[i].name)
+                self.channel[i].clear_datasets()
         update_layers(self)
 
     def render_options_changed(self):
-        if self.Brenderoptions.currentText() == "variable gaussian":
-            self.Lsigma.setText("PSF FWHM in XY [nm]")
-            self.Lsigma2.setText("PSF FWHM in Z [nm]")
-            self.Esigma.setText("300")
-            self.Esigma2.setText("700")
-            self.Bspecial_colorcoding.hide()
-            self.Bspecial_colorcoding.setCheckState(False)
+        if self.Brenderoptions.currentText() == 'variable gaussian':
+            self.Lsigma.setText('PSF FWHM in XY [nm]')
+            self.Lsigma2.setText('PSF FWHM in Z [nm]')
+            self.Esigma_xy.setText('300')
+            self.Esigma_z.setText('700')
+            self.Bz_color_coding.hide()
+            self.Bz_color_coding.setCheckState(False)
 
         else:
-            self.Lsigma2.setText("FWHM in Z [nm]")
-            self.Lsigma.setText("FWHM in XY [nm]")
-            self.Esigma.setText("10")
-            self.Esigma2.setText("10")
-            self.Bspecial_colorcoding.show()
+            self.Lsigma2.setText('FWHM in Z [nm]')
+            self.Lsigma.setText('FWHM in XY [nm]')
+            self.Esigma_xy.setText('10')
+            self.Esigma_z.setText('10')
+            self.Bz_color_coding.show()
         update_layers(self)
 
     def scalebar(self):
@@ -885,18 +981,18 @@ class napari_storm(QWidget):
                 ]
                 vertices = np.reshape(np.asarray(verts), (8, 2))
             if self.scalebar_exists:
-                v.layers.remove("scalebar")
+                v.layers.remove('scalebar')
                 self.scalebar_layer = v.add_surface(
-                    (vertices, faces), name="scalebar", shading="none"
+                    (vertices, faces), name='scalebar', shading='none'
                 )
             else:
                 self.scalebar_layer = v.add_surface(
-                    (vertices, faces), name="scalebar", shading="none"
+                    (vertices, faces), name='scalebar', shading='none'
                 )
                 self.scalebar_exists = True
         else:
             if self.scalebar_exists:
-                v.layers.remove("scalebar")
+                v.layers.remove('scalebar')
                 self.scalebar_exists = False
 
     def threed(self):
@@ -911,10 +1007,10 @@ class napari_storm(QWidget):
             self.Baxis_xz.show()
             self.Baxis_yz.show()
             self.Lresetview.show()
-            self.Bspecial_colorcoding.show()
+            self.Bz_color_coding.show()
             v.dims.ndisplay = 3
         else:
-            self.Bspecial_colorcoding.show()
+            self.Bz_color_coding.show()
             self.Lrangez.hide()
             self.Srender_rangez.hide()
             v.dims.ndisplay = 2
@@ -922,12 +1018,12 @@ class napari_storm(QWidget):
     def start_typing_timer(self, timer):
         timer.start(500)
 
-    def change_camera(self, type="XY"):
+    def change_camera(self, type='XY'):
         v = napari.current_viewer()
         values = {}
-        if type == "XY":
+        if type == 'XY':
             v.camera.angles = (0, 0, 90)
-        elif type == "XZ":
+        elif type == 'XZ':
             v.camera.angles = (0, 0, 180)
         else:
             v.camera.angles = (-90, -90, -90)
@@ -942,22 +1038,14 @@ def napari_experimental_provide_dock_widget():
     return napari_storm
 
 
-import h5py
-import numpy as np
-import yaml as _yaml
-import os.path as _ospath
-from tkinter import filedialog as fd
-from tkinter import Tk
-import napari
-import matplotlib.pyplot as plt
-from .particles import Particles, BillboardsFilter
+
 
 
 ##### Highest Order Function
 def colormaps():
     """Creating the Custom Colormaps"""
     cmaps = []
-    names = ["red", "green", "blue"]
+    names = ['red', 'green', 'blue']
     for i in range(3):
         colors = np.zeros((2, 4))
         colors[-1][i] = 1
@@ -965,7 +1053,7 @@ def colormaps():
         cmaps.append(
             napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
         )
-    names = ["yellow", "cyan", "pink"]
+    names = ['yellow', 'cyan', 'pink']
     for i in range(3):
         colors = np.zeros((2, 4))
         colors[-1][i] = 1
@@ -974,7 +1062,7 @@ def colormaps():
         cmaps.append(
             napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
         )
-    names = ["orange", "mint", "purple"]
+    names = ['orange', 'mint', 'purple']
     for i in range(3):
         colors = np.zeros((2, 4))
         colors[-1][i] = 1
@@ -984,75 +1072,17 @@ def colormaps():
             napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
         )
     colors = np.ones((2, 4))
-    cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray"))
+    cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name='gray'))
     return cmaps
 
 
-def open_STORM_data(self, file_path=None, merge=False):
-    """Deciding which filetype and the calling the corresponding Importer"""
-    self.show_stuff()
-    from .importer import (
-        load_hdf5,
-        load_csv,
-        load_SMLM,
-        load_h5,
-        load_mfx_json,
-        load_mfx_npy,
-        start_testing,
-    )
-
-    v = napari.current_viewer()
-    if not self.localization_datasets:
-        self.Lnumberoflocs.clear()
-    elif merge == False:
-        reset(self)
-    Tk().withdraw()
-    if not file_path:
-        file_path = fd.askopenfilename()
-    filetype = file_path.split(".")[-1]
-    filename = file_path.split("/")[-1]
-    if filetype == "hdf5":
-        load_hdf5(self, file_path)
-    elif filetype == "yaml":
-        file_path = file_path[: -(len(filetype))] + "hdf5"
-        load_hdf5(self, file_path)
-    elif filetype == "csv":
-        load_csv(self, file_path)
-    elif filetype == "smlm":
-        load_SMLM(self, file_path)
-    elif filetype == "h5":
-        load_h5(self, file_path)
-    elif filetype == "json":
-        load_mfx_json(self, file_path)
-    elif filetype == "npy":
-        load_mfx_npy(self, file_path)
-    elif filetype == "test":
-        start_testing(self)
-    else:
-        self.hide_stuff()
-        raise TypeError("unknown File extension for STORM Data files...")
 
 
-def reset(self):
-    """Funktion which is called when a file has aready been opened and a new one ovverrides it"""
-    v = napari.current_viewer()
-    for i in range(len(self.localization_datasets)):
-        v.layers.remove(self.localization_datasets[i].name)
-    self.localization_datasets = []
-    self.Lnumberoflocs.clear()
-    if not len(self.channel) == 0:  # Remove Channel of older files
-        for i in range(len(self.channel)):
-            self.channel[i].hide()
-        self.channel = []
-    if self.Cscalebar.isChecked():  # Remove Scalebar
-        self.Cscalebar.setCheckState(False)
-        self.scalebar()
-    self.reset_render_range(full_reset=True)
-    if self.Bspecial_colorcoding.isChecked():  # Remove Colorcoding
-        self.Bspecial_colorcoding.setCheckState(False)
 
 
-def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
+
+
+def create_new_layer(self, aas=0, layer_name='SMLM Data', idx=-1):
     """Creating a Particle Layer"""
     if not self.localization_datasets[idx].zdim_present:  # Hide 3D Options if 2D Dataset
         self.Srender_rangez.hide()
@@ -1062,7 +1092,7 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
         self.Lresetview.hide()
-        self.Bspecial_colorcoding.hide()
+        self.Bz_color_coding.hide()
     else:
         self.Srender_rangez.show()
         self.Lrangez.show()
@@ -1071,14 +1101,14 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         self.Baxis_yz.show()
         self.Baxis_xz.show()
         self.Lresetview.show()
-        self.Bspecial_colorcoding.show()
+        self.Bz_color_coding.show()
     self.localization_datasets[idx].update_locs()
     coords = get_coords_from_locs(self, self.localization_datasets[idx].pixelsize_nm, idx)
     v = napari.current_viewer()  # Just to get the sigmas
-    """print(f"Create:\n #################\n"
-          f"size = {self.list_of_datasets[idx].size}\n values = {self.list_of_datasets[idx].values}\n "
-          f"sigmas {self.list_of_datasets[idx].sigma}\n Pixelsize {self.list_of_datasets[idx].pixelsize}"
-          f"\n coords ={coords}\n##############")"""
+    """print(f'Create:\n #################\n'
+          f'size = {self.list_of_datasets[idx].size}\n values = {self.list_of_datasets[idx].values}\n '
+          f'sigmas {self.list_of_datasets[idx].sigma}\n Pixelsize {self.list_of_datasets[idx].pixelsize}'
+          f'\n coords ={coords}\n##############')"""
     self.localization_datasets[idx].napari_layer_ref = Particles(
         coords,
         size=self.localization_datasets[idx].render_size,
@@ -1097,7 +1127,7 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
     else:
         v.dims.ndisplay = 2
     v.camera.perspective = 50
-    self.localization_datasets[idx].napari_layer_ref.shading = "gaussian"
+    self.localization_datasets[idx].napari_layer_ref.shading = 'gaussian'
     show_infos(self, layer_name, idx)
     self.localization_datasets[idx].camera_center = [
         v.camera.center,
@@ -1105,12 +1135,12 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         v.camera.angles,
     ]
     self.add_channel(name=layer_name)
-    self.channel[-1].adjust_color_map()
+    self.channel[-1].change_color_map()
     self.channel[-1].adjust_colormap_range()
-    # print(len(self.list_of_datasets[-1].index),"idx,locs",len(self.list_of_datasets[-1].locs.x))
+    # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
 
 
-def update_layers(self, aas=0, layer_name="SMLM Data"):
+def update_layers(self, aas=0, layer_name='SMLM Data'):
     """Updating a Particle Layer"""
     v = napari.current_viewer()
     self.localization_datasets[-1].camera = [v.camera.zoom, v.camera.center, v.camera.angles]
@@ -1118,10 +1148,10 @@ def update_layers(self, aas=0, layer_name="SMLM Data"):
         self.localization_datasets[i].update_locs()
         v.layers.remove(self.localization_datasets[i].name)
         coords = get_coords_from_locs(self, self.localization_datasets[i].pixelsize_nm, i)
-        """print(f"Update:\n #################\n"
-          f"size = {self.list_of_datasets[i].size}\n values = {self.list_of_datasets[i].values}\n "
-          f"sigmas ={self.list_of_datasets[i].sigma}\n Pixelsize ={self.list_of_datasets[i].pixelsize}"
-          f"\n coords ={coords}\n##############")"""
+        """print(f'Update:\n #################\n'
+          f'size = {self.list_of_datasets[i].size}\n values = {self.list_of_datasets[i].values}\n '
+          f'sigmas ={self.list_of_datasets[i].sigma}\n Pixelsize ={self.list_of_datasets[i].pixelsize}'
+          f'\n coords ={coords}\n##############')"""
         self.localization_datasets[i].napari_layer_ref = Particles(
             coords,
             size=self.localization_datasets[i].render_size,
@@ -1135,11 +1165,11 @@ def update_layers(self, aas=0, layer_name="SMLM Data"):
         self.localization_datasets[i].napari_layer_ref.add_to_viewer(v)
         self.channel[i].adjust_colormap_range()
         self.channel[i].adjust_z_color_encoding_opacity()
-        self.channel[i].adjust_color_map()
+        self.channel[i].change_color_map()
         # if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
         #                                                        np.max(self.list_of_datasets[i].values))
-        self.localization_datasets[i].napari_layer_ref.shading = "gaussian"
+        self.localization_datasets[i].napari_layer_ref.shading = 'gaussian'
     v.camera.angles = self.localization_datasets[-1].camera[2]
     v.camera.zoom = self.localization_datasets[-1].camera[0]
     v.camera.center = self.localization_datasets[-1].camera[1]
@@ -1169,8 +1199,8 @@ def update_layers2(self):
         vertices_old, faces_old, values_old = v.layers[
             self.localization_datasets[i].name
         ].data
-        print(f"before: {len(vertices_old),len(faces_old),len(values_old)}")
-        print(f"after: {len(vertices), len(faces), len(values)}")
+        print(f'before: {len(vertices_old),len(faces_old),len(values_old)}')
+        print(f'after: {len(vertices), len(faces), len(values)}')
         v.layers[self.localization_datasets[i].name].data = (vertices, faces, values)
 
 
@@ -1195,26 +1225,26 @@ def show_infos(self, filename, idx):
     """Print Infos about files in Log"""
     if self.localization_datasets[idx].zdim_present:
         self.Lnumberoflocs.addItem(
-            "Statistics\n"
-            + f"File: {filename}\n"
-            + f"Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n"
-            f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imagedepth: {np.round((max(self.localization_datasets[idx].locs_active.z) - min(self.localization_datasets[idx].locs_active.z)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: "
-            + f"{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:"
-            + f" {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n"
+            'Statistics\n'
+            + f'File: {filename}\n'
+            + f'Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n'
+            f'Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n'
+            + f'Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n'
+            + f'Imagedepth: {np.round((max(self.localization_datasets[idx].locs_active.z) - min(self.localization_datasets[idx].locs_active.z)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n'
+            + f'Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: '
+            + f'{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:'
+            + f' {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n'
         )
     else:
         self.Lnumberoflocs.addItem(
-            "Statistics\n"
-            + f"File: {filename}\n"
-            + f"Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n"
-            f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-            + f"Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: "
-            + f"{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:"
-            + f" {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n"
+            'Statistics\n'
+            + f'File: {filename}\n'
+            + f'Number of locs: {len(self.localization_datasets[idx].locs_active.x)}\n'
+            f'Imagewidth: {np.round((max(self.localization_datasets[idx].locs_active.x) - min(self.localization_datasets[idx].locs_active.x)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n'
+            + f'Imageheigth: {np.round((max(self.localization_datasets[idx].locs_active.y) - min(self.localization_datasets[idx].locs_active.y)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n'
+            + f'Intensity per localisation\nmean: {np.round(np.mean(self.localization_datasets[idx].locs_active.photons), 3)}\nmax: '
+            + f'{np.round(max(self.localization_datasets[idx].locs_active.photons), 3)}\nmin:'
+            + f' {np.round(min(self.localization_datasets[idx].locs_active.photons), 3)}\n'
         )
 
 
@@ -1247,9 +1277,9 @@ class TestListView(QListWidget):
             links = []
             u = event.mimeData().urls()
             file = u[0].toString()[8:]
-            open_STORM_data(self.parent, file_path=file)
+            parent.open_localization_data(file_path=file)
         else:
             event.ignore()
 
     def remove_dataset(self, item):
-        print("Dataset removal not implemented yet...", item)
+        print('Dataset removal not implemented yet...', item)

@@ -180,7 +180,7 @@ def custom_keys_and_scalebar(self):
 
         #placeholder=RightClickPaninng(parent=self,viewer=v)
 
-class MouseControlls(QWidget):  # Experimental Fly through mode
+class MouseControls(QWidget):  # Experimental Fly through mode
     def __init__(self):
         super().__init__()
         self.viewer = napari.current_viewer()
