@@ -1,3 +1,4 @@
+import numpy
 from PyQt5.QtGui import (
     QPaintEvent,
     QPainter,
@@ -143,7 +144,7 @@ class localization_data:
 
             tmp_values = np.ones((self.locs_active.size,))
 
-        else if (self.parent.render_gaussian_mode == 1) :
+        elif (self.parent.render_gaussian_mode == 1) :
             # Variable gaussian mode
 
             assert self.uncertainty_defined == True
@@ -247,7 +248,7 @@ class localization_data:
             tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
 
 
-        else if (self.parent.render_gaussian_mode == 1) :
+        elif (self.parent.render_gaussian_mode == 1) :
             # Variable gaussian mode
 
             if self.sigma_present:
@@ -283,53 +284,33 @@ class localization_data:
 
     def update_locs(self):
 
-        self.locs_active = self.locs_all
-        x0, x1 = self.parent.Srender_rangey.getRange()  # x and y are swapped in napari
-        y0, y1 = self.parent.Srender_rangex.getRange()
-        xscale = max(self.locs_active.x) - min(self.locs_active.x)
-        yscale = max(self.locs_active.y) - min(self.locs_active.y)
+        self.locs_active = self.locs_all.copy()
+        coords = self.get_coords()
 
-        x0 = x0 * xscale / 100
-        x1 = x1 * xscale / 100
-        y0 = y0 * yscale / 100
-        y1 = y1 * yscale / 100
-        filterer = np.ones(self.locs_active.x.shape)
-        if len(np.unique(self.locs_active.x)) > 2:
-            filterer[self.locs_active.x < x0] = np.nan
-            filterer[self.locs_active.x > x1] = np.nan
-        if len(np.unique(self.locs_active.y)) > 2:
-            filterer[self.locs_active.y < y0] = np.nan
-            filterer[self.locs_active.y > y1] = np.nan
-        # print(f"len filt {np.shape(filterer)} len idx {np.shape(self.index)} len locs x {np.shape(self.locs.x)}")
-        if self.zdim_present:
-            z0, z1 = self.parent.Srender_rangez.getRange()
-            zscale = max(self.locs_active.z) - min(self.locs_active.z)
-            z0 = z0 * zscale / 100
-            z1 = z1 * zscale / 100
-            if len(np.unique(self.locs_active.z)) > 2:
-                filterer[self.locs_active.z < z0] = np.nan
-                filterer[self.locs_active.z > z1] = np.nan
-            self.locs_active = np.rec.array(
-                (
-                    self.locs_active.frame[~np.isnan(filterer)],
-                    self.locs_active.x[~np.isnan(filterer)],
-                    self.locs_active.y[~np.isnan(filterer)],
-                    self.locs_active.z[~np.isnan(filterer)],
-                    self.locs_active.photons[~np.isnan(filterer)],
-                ),
-                dtype=LOCS_DTYPE_3D,
-            )
-        else:
-            self.locs_active = np.rec.array(
-                (
-                    self.locs_active.frame[~np.isnan(filterer)],
-                    self.locs_active.x[~np.isnan(filterer)],
-                    self.locs_active.y[~np.isnan(filterer)],
-                    self.locs_active.photons[~np.isnan(filterer)],
-                ),
-                dtype=LOCS_DTYPE_2D,
-            )
-        # print("Filtering done",f"len filt {np.shape(filterer)} len idx {np.shape(self.index)} len locs x {np.shape(self.locs.x)}")
+        render_xrange = self.parent.render_range_x_pixels
+        render_yrange = self.parent.render_range_y_pixels
+        render_zrange = self.parent.render_range_z_pixels
+
+        xmin = render_xrange[0]
+        xmax = render_xrange[1]
+        ymin = render_yrange[0]
+        ymax = render_yrange[1]
+        zmin = render_zrange[0]
+        zmax = render_zrange[1]
+
+        xcoords = coords.x_pos_pixels
+        ycoords = coords.y_pos_pixels
+        zcoords = coords.z_pos_pixels
+
+        filtered_locs = self.locs_active[np.where(xcoords >= xmin and
+                                                  xcoords <= xmax and
+                                                  ycoords >= ymin and
+                                                  ycoords <= ymax and
+                                                  zcoords >= zmin and
+                                                  zcoords <= zmax)]
+
+        self.locs_active = filtered_locs
+
         self.set_render_sigmas()
         self.set_render_values()
 
@@ -466,11 +447,17 @@ class napari_storm(QWidget):
 
         self.localization_datasets = []
         self.n_datasets = 0
+
         self.render_gaussian_mode = 0
-        self.render_fixed_gauss_sigma_xy_nm
-        self.render_fixed_gauss_sigma_z_nm
-        self.render_var_gauss_PSF_sigma_xy_nm
-        self.render_var_gauss_PSF_sigma_z_nm
+        self.render_fixed_gauss_sigma_xy_nm = 0.0
+        self.render_fixed_gauss_sigma_z_nm = 0.0
+        self.render_var_gauss_PSF_sigma_xy_nm = 0.0
+        self.render_var_gauss_PSF_sigma_z_nm = 0.0
+
+        self.render_range_x_pixels = np.zeros(2)
+        self.render_range_y_pixels = np.zeros(2)
+        self.render_range_z_pixels = np.zeros(2)
+
         self.pixelsize = []
         self.layer = []
         self.layer_names = []
