@@ -87,7 +87,7 @@ class RangeSlider2(QDoubleRangeSlider):
         coords,faces=self.get_coords_faces(slider_type=slider)
         #print(coords)
         v.layers['render-range'].data=(coords,faces)
-        v.layers['render-range'].opacity=.25
+        v.layers['render-range'].opacity_slider_setting=.25
         self.range.coords=coords
 
     def remove_visual_feedback(self):

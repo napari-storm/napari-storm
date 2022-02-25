@@ -244,9 +244,7 @@ class localization_data:
             tmp_sigma_xy = sigma_xy_pixels * np.ones_like(self.locs_active.x_pos_pixels)
             tmp_sigma_z = sigma_z_pixels * np.ones_like(self.locs_active.x_pos_pixels)
 
-            tmp_render_sigma = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
-            tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
-
+            tmp_render_sigma_pixels = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
 
         elif (self.parent.render_gaussian_mode == 1) :
             # Variable gaussian mode
@@ -258,8 +256,7 @@ class localization_data:
                 sigma_y_pixels = self.locs_active.sigma_y_pixels
                 sigma_z_pixels = self.locs_active.sigma_z_pixels
 
-                tmp_render_sigma = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
-                tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
+                tmp_render_sigma_pixels = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
 
             else :
                 # Calculate sigma values based on photon counts
@@ -273,13 +270,15 @@ class localization_data:
                 sigma_xy_pixels = psf_sigma_xy_pixels / sqrt(self.locs_active.photons)
                 sigma_z_pixels = psf_sigma_z_pixels / sqrt(self.locs_active.photons)
 
-                tmp_render_sigma = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
-                tmp_render_sigma = tmp_render_sigma / np.max(tmp_render_sigma)
+                tmp_render_sigma_pixels = np.swapaxes([sigma_z_pixels, sigma_xy_pixels, sigma_xy_pixels], 0, 1)
+
+
+        tmp_render_sigma_norm = tmp_render_sigma_pixels / np.max(tmp_render_sigma_pixels)
 
         # Store sigma values and set render size
 
-        self.render_sigma = tmp_render_sigma
-        self.render_size = 5 * np.max(self.render_sigma)
+        self.render_sigma = tmp_render_sigma_norm
+        self.render_size = 5 * np.max(tmp_render_sigma_pixels)
 
 
     def update_locs(self):
@@ -325,34 +324,42 @@ class ChannelControls(QWidget):
         name,
         channel_index,
     ):
+        from .RangeSlider import RangeSlider
 
         super().__init__()
         self.parent = parent
         self.name = name
         self.channel_index = channel_index
-        self.Label = QLabel()
-        self.Label.setText("Contrast " + name)
 
-        self.Bhide_channel = QCheckBox()
-        self.Bhide_channel.setChecked(True)
-        self.Bhide_channel.stateChanged.connect(self.hide_channel)
+        self.show_channel_state = True
+        self.colormap_range_low = 0.0
+        self.colormap_range_high = 0.0
+        self.opacity_slider_setting = 0.0
+        self.colormap_index = 0
+
+        self.Label = QLabel()
+        self.Label.setText(name)
+
+        self.Bshow_channel = QCheckBox()
+        self.Bshow_channel.setChecked(self.show_channel_state)
+        self.Bshow_channel.stateChanged.connect(self.show_channel)
 
         self.Breset = QPushButton()
         self.Breset.setText("Reset")
-        self.Breset.clicked.connect(self.reset_contrast_opacity)
+        self.Breset.clicked.connect(self.reset)
 
-        from .RangeSlider import RangeSlider
+        self.Slider_colormap_range = RangeSlider(parent=parent)
+        self.Slider_colormap_range.setRange(0.0, 100.0)
+        self.Slider_colormap_range.setValue((10.0, 90.0))
+        self.Slider_colormap_range.valueChanged.connect(self.adjust_colormap_range)
 
-        self.Slider = RangeSlider(parent=parent)  # Contrast
-        self.Slider.valueChanged.connect(self.adjust_contrast)
+        self.Slider_opacity = QSlider(Qt.Horizontal)
+        self.Slider_opacity.setRange(0.0, 100.0)
+        self.Slider_opacity.setValue(100.0)
+        self.Slider_opacity.hide()
+        self.Slider_opacity.valueChanged.connect(self.adjust_z_color_encoding_opacity)
 
-        self.Slider2 = QSlider(Qt.Horizontal)
-        self.Slider2.setRange(0, 100)
-        self.Slider2.setValue(100)
-        self.Slider2.hide()
-        self.Slider2.valueChanged.connect(self.adjust_opacity)
-
-        self.Colormap = QComboBox()
+        self.Colormap_selector = QComboBox()
         items = []
         icons = []
         for cmap in self.parent.colormaps:
@@ -366,71 +373,112 @@ class ChannelControls(QWidget):
             )
             pixmap.fill(color)
             icons.append(QIcon(pixmap))
-        self.Colormap.addItems(items)
+        self.Colormap_selector.addItems(items)
         for i in range(len(items)):
-            self.Colormap.setItemIcon(i, icons[i])
-        self.Colormap.setCurrentText(items[channel_index])
-        self.Colormap.currentIndexChanged.connect(self.adjust_cmap)
+            self.Colormap_selector.setItemIcon(i, icons[i])
+        self.Colormap_selector.setCurrentText(items[channel_index])
+        self.Colormap_selector.currentIndexChanged.connect(self.adjust_color_map)
 
         self.layout = QGridLayout()
         self.layout.addWidget(self.Label, 0, 0)
         self.layout.addWidget(self.Breset, 0, 1)
-        self.layout.addWidget(self.Bhide_channel, 0, 2)
-        self.layout.addWidget(self.Colormap, 1, 0, 1, 3)
-        self.layout.addWidget(self.Slider, 2, 0, 1, 3)
-        self.layout.addWidget(self.Slider2, 3, 0, 1, 3)
+        self.layout.addWidget(self.Bshow_channel, 0, 2)
+        self.layout.addWidget(self.Colormap_selector, 1, 0, 1, 3)
+        self.layout.addWidget(self.Slider_colormap_range, 2, 0, 1, 3)
+        self.layout.addWidget(self.Slider_opacity, 3, 0, 1, 3)
         self.layout.setColumnStretch(0, 3)
         self.setLayout(self.layout)
 
-    def reset_contrast_opacity(self):
-        self.Slider.setValue((10, 90))
-        self.Slider2.setValue(100)
+    def adjust_colormap_range(self):
 
-    def adjust_opacity(self):
-        """...adjust opacity limits, only in colording mode"""
-        self.parent.list_of_datasets[self.channel_index].napari_layer_ref.opacity = (
-            self.Slider2.value() / 100
-        )
+        tmp_range = self.Slider_colormap_range.getRange()
 
-    def adjust_contrast(self):
-        """...adjust contrast limits"""
-        self.parent.list_of_datasets[
-            self.channel_index
-        ].napari_layer_ref.contrast_limits = self.Slider.getRange()
+        self.colormap_range_low = tmp_range[0]
+        self.colormap_range_high = tmp_range[1]
 
-    def adjust_cmap(self):
-        """...adjust colormap"""
-        if self.parent.Bspecial_colorcoding.isChecked():
-            if self.parent.Brenderoptions.currentText() == "fixed gaussian":
-                self.parent.list_of_datasets[self.channel_index].napari_layer_ref.render_colormap = "hsv"
-            else:
-                self.parent.list_of_datasets[
-                    self.channel_index
-                ].napari_layer_ref.render_colormap = self.parent.colormaps[-1]
+        tmp_dset_obj = self.parent.list_of_datasets[self.channel_index]
+        tmp_layer = dset_obj.napari_layer_ref
+
+        tmp_layer.contrast_limits = tmp_range
+
+
+    def adjust_z_color_encoding_opacity(self):
+
+        tmp_opacity = self.Slider_opacity.value()
+
+        self.opacity_slider_setting = tmp_opacity
+
+        tmp_dset_obj = self.parent.list_of_datasets[self.channel_index]
+        tmp_layer = dset_obj.napari_layer_ref
+
+        tmp_layer.opacity = tmp_opacity / 100.0
+
+
+    def reset(self):
+
+        self.Slider_colormap_range.setValue((10.0, 90.0))
+        self.Slider_opacity.setValue(100.0)
+
+
+    def adjust_color_map(self):
+        # adjust colormap
+
+        tmp_cmap_index = self.Colormap_selector.currentIndex()
+        self.colormap_index = tmp_cmap_index
+
+        tmp_dset_obj = self.parent.list_of_datasets[self.channel_index]
+        tmp_layer = dset_obj.napari_layer_ref
+
+        if self.parent.z_color_encoding_mode == True :
+
+            assert self.parent.render_gaussian_mode == 0
+            tmp_layer.render_colormap = 'hsv'
+
         else:
-            self.parent.list_of_datasets[
-                self.channel_index
-            ].napari_layer_ref.render_colormap = self.parent.colormaps[self.Colormap.currentIndex()]
 
-    def hide_channel(self):
-        if not self.Bhide_channel.isChecked():
-            # self.parent.auto_contrast()
-            self.parent.list_of_datasets[self.channel_index].napari_layer_ref.opacity = 0
-            self.Slider2.setValue(0)
-            self.Slider.hide()
-            self.Slider2.hide()
-            self.Colormap.hide()
+            tmp.layer.render_colormap =  self.parent.colormaps[tmp_cmap_index]
+
+
+    def show_channel(self):
+
+        tmp_dset_obj = self.parent.list_of_datasets[self.channel_index]
+        tmp_layer = dset_obj.napari_layer_ref
+
+        if self.show_channel_state == True :
+            # Hide the channel
+
+            self.show_channel_state = False
+            self.Bshow_channel.setChecked(False)
+
+            tmp_layer.opacity = 0.0
+
+            self.Slider_colormap_range.hide()
+            self.Colormap_selector.hide()
+            self.Slider_opacity.hide()
+
         else:
-            # self.parent.list_of_datasets[self.idx].layer.opacity = 1
-            # self.parent.list_of_datasets[self.idx].layer.contrast_limits = (0, 1)
-            self.Slider2.setValue(100)
-            if self.parent.Bspecial_colorcoding.isChecked():
-                self.Slider2.show()
+            # Show the channel
+
+            self.show_channel_state = True
+            self.Bshow_channel.setChecked(True)
+
+            if self.parent.z_color_encoding_mode == True:
+
+                self.Slider_opacity.setValue(self.opacity_slider_setting)
+
+                self.Slider_colormap_range.hide()
+                self.Colormap_selector.hide()
+
+                self.Slider_opacity.show()
+
             else:
-                self.Slider.show()
-                self.Colormap.show()
-        # update_layers(self=self.parent)
-        # self.Slider.setValue((10,90))
+
+                tmp_layer.opacity = 1.0
+
+                self.Slider_colormap_range.show()
+                self.Colormap_selector.show()
+                self.Slider_opacity.hide()
+
 
 
 class napari_storm(QWidget):
@@ -446,16 +494,20 @@ class napari_storm(QWidget):
         self.tabs = QTabWidget()
         self.data_control_tab = QWidget()
         self.visual_control_tab = QWidget()
+
         # self.setStyleSheet("background-color: #414851")
+
         self.tabs.addTab(self.data_control_tab, "Data Controls")
         self.tabs.addTab(self.visual_control_tab, "Visual Controls")
 
-        gaussian_render_modes = ['Fixed-size gaussian', 'Variable-size gaussian']
+        gaussian_render_modes = ['Fixed-size gaussian',
+                                 'Variable-size gaussian']
 
         self.localization_datasets = []
         self.n_datasets = 0
 
         self.render_gaussian_mode = 0
+        self.z_color_encoding_mode = False
         self.render_fixed_gauss_sigma_xy_nm = 0.0
         self.render_fixed_gauss_sigma_z_nm = 0.0
         self.render_var_gauss_PSF_sigma_xy_nm = 0.0
@@ -476,7 +528,8 @@ class napari_storm(QWidget):
 
         self.viewer = napari_viewer
         layout = QGridLayout()
-        ######################### data_control_tab
+
+        # data_control_tab
         self.Bopen = QPushButton()
         self.Bopen.clicked.connect(lambda: open_STORM_data(self))
         self.Bopen.setText("Import File Dialog")
@@ -720,17 +773,17 @@ class napari_storm(QWidget):
         print(self.Bspecial_colorcoding.isChecked())
         if self.Bspecial_colorcoding.isChecked():
             for i in range(len(self.channel)):
-                self.channel[i].Colormap.hide()
-                self.channel[i].Slider2.show()
-                self.channel[i].Slider.hide()
+                self.channel[i].Colormap_selector.hide()
+                self.channel[i].Slider_opacity.show()
+                self.channel[i].Slider_colormap_range.hide()
                 self.channel[i].Label.setText("Contrast " + self.channel[i].name)
         else:
             for i in range(len(self.channel)):
-                self.channel[i].Colormap.show()
-                self.channel[i].Slider2.hide()
-                self.channel[i].Slider.show()
+                self.channel[i].Colormap_selector.show()
+                self.channel[i].Slider_opacity.hide()
+                self.channel[i].Slider_colormap_range.show()
                 self.channel[i].Label.setText("Opacity " + self.channel[i].name)
-                self.channel[i].reset_contrast_opacity()
+                self.channel[i].reset()
         update_layers(self)
 
     def render_options_changed(self):
@@ -1052,8 +1105,8 @@ def create_new_layer(self, aas=0, layer_name="SMLM Data", idx=-1):
         v.camera.angles,
     ]
     self.add_channel(name=layer_name)
-    self.channel[-1].adjust_cmap()
-    self.channel[-1].adjust_contrast()
+    self.channel[-1].adjust_color_map()
+    self.channel[-1].adjust_colormap_range()
     # print(len(self.list_of_datasets[-1].index),"idx,locs",len(self.list_of_datasets[-1].locs.x))
 
 
@@ -1077,12 +1130,12 @@ def update_layers(self, aas=0, layer_name="SMLM Data"):
             sigmas=self.localization_datasets[i].render_sigma,
             filter=None,
             name=self.localization_datasets[i].name,
-            opacity=self.channel[i].Slider2.value(),
+            opacity=self.channel[i].Slider_opacity.value(),
         )
         self.localization_datasets[i].napari_layer_ref.add_to_viewer(v)
-        self.channel[i].adjust_contrast()
-        self.channel[i].adjust_opacity()
-        self.channel[i].adjust_cmap()
+        self.channel[i].adjust_colormap_range()
+        self.channel[i].adjust_z_color_encoding_opacity()
+        self.channel[i].adjust_color_map()
         # if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
         #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
         #                                                        np.max(self.list_of_datasets[i].values))
