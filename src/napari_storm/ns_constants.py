@@ -6,3 +6,7 @@ LOCS_DTYPE = [('frame_number', 'i4'),
               ('sigma_y_pixels', 'f4'),
               ('sigma_z_pixels', 'f4'),
               ('photon_count', 'f4')]
+
+MINFLUX_Z_CORRECTION_FACTOR=0.8
+
+list_of_recognized_file_formats=["h5","hdf5","yaml","csv","smlm","npy","json","test"]
