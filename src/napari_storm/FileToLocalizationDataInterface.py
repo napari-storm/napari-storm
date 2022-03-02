@@ -124,7 +124,7 @@ class FileToLocalizationDataInterface:
         filename = file_path.split("/")[-1]
         locs, info = self.load_locs(file_path)
         try:
-            pixelsize = locs.pixelsize
+            pixelsize = locs.pixelsize_nm
         except:
             pixelsize = int(easygui.enterbox("Pixelsize?"))
         self.pixelsize = pixelsize

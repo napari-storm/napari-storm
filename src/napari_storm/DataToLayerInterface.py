@@ -111,7 +111,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         v = napari.current_viewer()
         for i in range(len(self.list_of_datasets)):
             self.list_of_datasets[i].update_locs()
-            coords = self.get_coords_from_locs(self.list_of_datasets[i].pixelsize, i)
+            coords = self.get_coords_from_locs(self.list_of_datasets[i].pixelsize_nm, i)
             values = self.list_of_datasets[i].values
             size = self.list_of_datasets[i].size
 

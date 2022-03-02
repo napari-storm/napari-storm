@@ -57,7 +57,7 @@ class napari_storm(QWidget):
         self.render_range_y_percent = np.arange(2) * 100
         self.render_range_z_percent = np.arange(2) * 100
 
-        self.pixelsize = []
+        self.pixelsize_nm = []
         self.layer = []
         self.layer_names = []
         self.scalebar_layer = []
