@@ -299,67 +299,6 @@ class Panning_create_anker(QWidget):
     def remove_anker(self):
         self.viewer.layers.remove("anker")
 
-<<<<<<< HEAD
-        """@v.mouse_press_callbacks.append
-        def on_click(layer,event):
-            print(event)
-            print(v.camera.center)
-            yield
-            print("release")"""
-
-        #placeholder=RightClickPaninng(parent=self,viewer=v)
-        placeholder2=Panning_create_anker(parent=self,viewer=v)
-
-class Panning_create_anker(QWidget):
-    def __init__(self,parent,viewer):
-        super().__init__()
-        self.viewer = viewer
-        self.mouse_down = False
-        self.mode = None
-        self.active = False
-        self.parent=parent
-
-        self.viewer.window.qt_viewer.on_mouse_press = self.our_mouse_press
-        self.viewer.window.qt_viewer.on_mouse_move = self.our_mouse_move
-        self.viewer.window.qt_viewer.on_mouse_release = self.our_mouse_release
-
-    def our_mouse_press(self,event=None):
-        if event.button == Qt.MouseButton.LeftButton and 'SHIFT' in event.modifiers:
-            self.create_anker()
-
-    def our_mouse_move(self,event=None):
-        if event.button == Qt.MouseButton.LeftButton and 'anker' in self.viewer.layers:
-            self.move_anker()
-
-    def our_mouse_release(self,event=None):
-        if event.button == Qt.MouseButton.LeftButton and 'anker' in self.viewer.layers:
-            self.remove_anker()
-
-    def create_anker(self):
-        center = self.viewer.camera.center
-        h=100
-        coords=[]
-        for i in [-h/2,h/2]:
-            for j in [-h/2,h/2]:
-                for k in [-h/2,h/2]:
-                    coords.append([i,j,k])
-        self.anker_coords=np.asarray(coords)
-        #self.anker_coords=np.asarray([[h,0,0],[0,h,h],[0,h,-h],[0,-h,h],[0,-h,-h],[-h,0,0]])
-        #self.anker_faces=np.asarray([[1,2,3],[1,4,5],[1,3,4],[1,5,2],[2,3,6],[4,5,6],[3,4,6],[5,2,6]])-1
-        self.anker_faces=np.asarray([[0,1,2],[1,2,3],[0,1,4],[1,4,5],[0,2,4],[2,4,6],[1,3,5],[3,5,7],[2,3,6],
-                                     [3,6,7],[4,5,6],[5,6,7]])
-        verts=np.reshape(self.anker_coords+center,(8,3))
-        self.anker = self.viewer.add_surface((verts, self.anker_faces), name='anker', shading='smooth',blending='opaque')
-
-    def move_anker(self):
-        center = self.viewer.camera.center
-        self.viewer.layers['anker'].data=(np.reshape(self.anker_coords+center,(8,3)),self.anker_faces,np.ones(8))
-
-    def remove_anker(self):
-        self.viewer.layers.remove('anker')
-
-=======
->>>>>>> mark_reformat
 
 class MouseControlls(QWidget):  # Experimental Fly through mode
     def __init__(self):
