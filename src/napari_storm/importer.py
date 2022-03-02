@@ -2,12 +2,8 @@ import h5py
 import numpy as np
 import yaml as _yaml
 import os.path as _ospath
-from tkinter import filedialog as fd
-from tkinter import Tk
-import napari
-import matplotlib.pyplot as plt
 import easygui
-from ._dock_widget import dataset,create_new_layer
+from ._dock_widget import localization_data, create_new_layer
 
 
 def load_info(path):
@@ -42,10 +38,10 @@ def load_hdf5(self, file_path):
     filename = file_path.split('/')[-1]
     locs, info = load_locs(file_path)
     try:
-        pixelsize = locs.pixelsize
+        pixelsize = locs.pixelsize_nm
     except:
         pixelsize = int(easygui.enterbox("Pixelsize?"))
-    self.pixelsize = pixelsize
+    self.pixelsize_nm = pixelsize
     try:
         locs.z
         zdim = True
@@ -53,34 +49,11 @@ def load_hdf5(self, file_path):
         zdim=False
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, parent=self, zdim=zdim, pixelsize=pixelsize, name=filename,offset=offset))
-    create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
+    self.localization_datasets.append(localization_data(locs=locs, parent=self, zdim_present=zdim, pixelsize_nm=pixelsize, name=filename, offset=offset))
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 
-def load_h5(self, file_path):
-    """Loads localisations from .h5 files"""
-    filename = file_path.split('/')[-1]
-    LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
-    LOCS_DTYPE_3D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("z", "f4"), ("photons", "f4")]
-    with h5py.File(file_path, "r") as locs_file:
-        data = locs_file['molecule_set_data']['datatable'][...]
-        pixelsize = locs_file['molecule_set_data']['xy_pixel_size_um'][...] * 1E3  # to µm to nm
-    try:
-        locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'], data['Y_POS_PIXELS'], data['Z_POS_PIXELS'],
-                             data['PHOTONS']), dtype=LOCS_DTYPE_3D)
-        zdim = True
-    except:
-        locs = np.rec.array((data['FRAME_NUMBER'], data['X_POS_PIXELS'], data['Y_POS_PIXELS'],
-                             data['PHOTONS']), dtype=LOCS_DTYPE_2D)
-        zdim = False
-    num_channel = max(data['CHANNEL']) + 1
-    offset = look_for_offset(locs, zdim)
-    for i in range(num_channel):
-        filename_pluschannel = check_namespace(self,filename+f" Channel {i+1}")
-        locs_in_ch=locs[data['CHANNEL']==i]
-        self.list_of_datasets.append(dataset(locs=locs_in_ch, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                             name=filename_pluschannel,offset=offset,index=len(self.list_of_datasets)))
-        create_new_layer(self=self, aas=0.1,  layer_name=filename_pluschannel, idx=len(self.list_of_datasets)-1)
+
 
 def load_mfx_json(self,file_path):
     """Loads MFX Data from json files -> Really needs improvement in performance"""
@@ -122,9 +95,9 @@ def load_mfx_json(self,file_path):
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
 
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                         index=len(self.list_of_datasets), name=filename,offset=offset))
-    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
+    self.localization_datasets.append(localization_data(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
+                                                        channel_index=len(self.localization_datasets), name=filename, offset=offset))
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 
 
@@ -169,9 +142,9 @@ def load_mfx_npy(self,file_path):
             dtype=LOCS_DTYPE_2D, )
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize,
-                                         index=len(self.list_of_datasets), name=filename,offset=offset))
-    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
+    self.localization_datasets.append(localization_data(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize,
+                                                        channel_index=len(self.localization_datasets), name=filename, offset=offset))
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 
 def load_csv(self, file_path):
@@ -203,9 +176,9 @@ def load_csv(self, file_path):
         zdim = False
     offset = look_for_offset(locs, zdim)
     filename = check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize
-                                         ,index=len(self.list_of_datasets), name=filename,offset=offset))
-    create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
+    self.localization_datasets.append(localization_data(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize
+                                                        , channel_index=len(self.localization_datasets), name=filename, offset=offset))
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 
 ## load_SMLM adapted from Marting Weigerts readSmlmFile
@@ -327,9 +300,9 @@ def load_SMLM(self, file_path):
         zdim = False
     offset=look_for_offset(locs,zdim)
     filename=check_namespace(self,filename)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename
-                                         ,index=len(self.list_of_datasets),offset=offset))
-    create_new_layer(self=self, aas=0.1,  layer_name=filename, idx=len(self.list_of_datasets)-1)
+    self.localization_datasets.append(localization_data(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize, name=filename
+                                                        , channel_index=len(self.localization_datasets), offset=offset))
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 ##### Lowest Order functions
 def start_testing(self):
@@ -343,10 +316,10 @@ def start_testing(self):
     pixelsize=100
     filename=check_namespace(self,'a.tester')
     offset=look_for_offset(locs=locs,zdim=zdim)
-    self.list_of_datasets.append(dataset(locs=locs, zdim=zdim, parent=self, pixelsize=pixelsize, name=filename,
-                                         offset=offset,index=len(self.list_of_datasets)))
+    self.localization_datasets.append(localization_data(locs=locs, zdim_present=zdim, parent=self, pixelsize_nm=pixelsize, name=filename,
+                                                        offset=offset, channel_index=len(self.localization_datasets)))
     #print(self.list_of_datasets[-1].name,len(self.list_of_datasets),self.list_of_datasets[0].locs.x)
-    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.list_of_datasets)-1)
+    create_new_layer(self=self, aas=0.1, layer_name=filename, idx=len(self.localization_datasets) - 1)
 
 def look_for_offset(locs,zdim):
     if zdim: # remove negative values without having an offset between channels
@@ -363,7 +336,7 @@ def look_for_offset(locs,zdim):
     return offset
 
 def check_namespace(self,name,idx=1):
-    for i in range(len(self.list_of_datasets)):
-        if self.list_of_datasets[i].name == name:
+    for i in range(len(self.localization_datasets)):
+        if self.localization_datasets[i].name == name:
             return check_namespace(self,name+"_"+str(idx+1),idx+1)
     return name

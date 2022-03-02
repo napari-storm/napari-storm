@@ -1,25 +1,29 @@
 """
 """
 
-import numpy as np 
 from abc import ABC
+
+import numpy as np
+from vispy.gloo import Texture2D, VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
-from vispy.gloo import Texture2D, VertexBuffer
 
-# TODO: Add mipmapping 
+
+# TODO: Add mipmapping
 class TextureFilter(Filter):
     def __init__(self, texture, **kwargs):
-        kwargs.setdefault('fhook', 'post')
+        kwargs.setdefault("fhook", "post")
 
-        self._fcode = Function("""
+        self._fcode = Function(
+            """
         void apply() {
             gl_FragColor *= texture2D($u_texture, v_texcoord);
         }
-        """)
+        """
+        )
         texture = np.asarray(texture).astype(np.float32)
-        if not texture.ndim==3:
-            raise ValueError('texure needs to be array of size (M,N,1)')
+        if not texture.ndim == 3:
+            raise ValueError("texure needs to be array of size (M,N,1)")
         self.texture = texture
         super().__init__(fcode=self._fcode, **kwargs)
 
@@ -31,13 +35,13 @@ class TextureFilter(Filter):
     @texture.setter
     def texture(self, texture):
         self._texture = texture
-        self._fcode['u_texture'] = Texture2D(texture)
+        self._fcode["u_texture"] = Texture2D(texture)
 
 
 # ShaderFilters
 
 _shader_functions = {
-    'gaussian': """
+    "gaussian": """
             varying mat2 covariance_inv;
 
             vec4 func(vec2 x){
@@ -46,8 +50,7 @@ _shader_functions = {
                 return val*vec4(1,1,1,1);
             }
             """,
-
-    'gaussian2': """
+    "gaussian2": """
             varying mat2 covariance_inv;
             vec4 func(vec2 x){
                 float u = dot(x,covariance_inv*x);
@@ -58,26 +61,23 @@ _shader_functions = {
                 return val*vec4(1,1,1,1);
             }
             """,
-
-    'particle': """
+    "particle": """
             vec4 func(vec2 x){
                 float r = length(x);
                 float val = .05/((max(r,.01)-0.01)+0.05);
-                
-                
+
+
                 return val*vec4(1,1,1,1);
             }
             """,
-
-    'airy': """
+    "airy": """
             vec4 func(vec2 x){
                 float r = 8*length(x);
                 float val = abs(sin(r)/(1e-8+r));
                 return val*vec4(1,1,1,1);
             }
             """,
-
-    'fresnel': """
+    "fresnel": """
             vec4 func(vec2 x){
                 float r = length(x);
                 float d = .7;
@@ -90,8 +90,7 @@ _shader_functions = {
                 return val*vec4(1,1,1,1);
             }
             """,
-    
-    'sphere': """        
+    "sphere": """
             vec4 func(vec2 x){
 
                 float r = length(x);
@@ -104,13 +103,12 @@ _shader_functions = {
                 return vec4(val,val,val,1);
             }
             """,
-    'none': """
+    "none": """
             vec4 func(vec2 x){
                 return vec4(1,1,1,1);
             }
             """,
-
-    'bubble': """
+    "bubble": """
             vec4 func(vec2 x){
                 float r = length(x);
                 float r1 = .8;
@@ -125,7 +123,7 @@ _shader_functions = {
                 return val*vec4(1,1,1,1);
             }
             """,
-    'bubble2': """
+    "bubble2": """
             vec4 func(vec2 x){
                 float r = length(x);
                 float r0 = .9;
@@ -139,7 +137,7 @@ _shader_functions = {
                 return val*vec4(1,1,1,1);
             }
             """,
-    'fractal': """
+    "fractal": """
             vec4 func(vec2 x){
                 vec2 c = vec2(-.4,.6);
                 const float r = 2;
@@ -153,16 +151,17 @@ _shader_functions = {
                 float val= float(res)/n;
                 return val*vec4(1,1,1,1);
             }
-            """
-
+            """,
 }
 
-class ShaderFilter(Filter):
-    def __init__(self, mode='gaussian', distance_intensity_increase=1, **kwargs):        
-        kwargs.setdefault('fhook', 'post')
 
-        fcode = Function("""
-        
+class ShaderFilter(Filter):
+    def __init__(self, mode="gaussian", distance_intensity_increase=1, **kwargs):
+        kwargs.setdefault("fhook", "post")
+
+        fcode = Function(
+            """
+
 
         void apply() {
             // normalize texcoords to (-1,1)
@@ -170,24 +169,25 @@ class ShaderFilter(Filter):
 
             // if particle is far away, ramp up intensity
             float infinity_raise = $distance_intensity_increase*length(fwidth(v_texcoord));
-            
+
             //gl_FragColor *= val*(1+infinity_raise);
-                        
+
             //val.w *= (exp(-.5*max(v_scale_intensity-1,0))+.05)/1.05;
-            
+
             //gl_FragColor *= val/sqrt(max(1, v_scale_intensity));
 
             gl_FragColor *= val;
 
 
 
-            
-        }""")
 
-        if mode in _shader_functions: 
-            fcode['func']=Function(_shader_functions[mode])
-            fcode['distance_intensity_increase'] = 10*distance_intensity_increase
+        }"""
+        )
+
+        if mode in _shader_functions:
+            fcode["func"] = Function(_shader_functions[mode])
+            fcode["distance_intensity_increase"] = 10 * distance_intensity_increase
         else:
-            fcode=mode
+            fcode = mode
 
         super().__init__(fcode=fcode, **kwargs)
