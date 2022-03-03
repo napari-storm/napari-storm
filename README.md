@@ -20,32 +20,20 @@ I would recommend instaling this into a virtual enviorment, e.g. using conda pro
     
     activate napari-storm
 
-You can install `napari-storm` via [pip]:
+You can install `napari-storm` if you just clone this repository again using, e.g. the conda prompt with:
 
-    pip install napari-strom
+    git clone https://github.com/napari-storm/napari-storm
     
+the step into it and install the python package using 
 
-    
-## Getting Startet
+    cd napari-storm
 
-Best functionality is provided when you start it from python (e.g. type python.exe into conda prompt) and copy the following:
+    pip install -e .
     
-    import napari
-    from napari_storm import *
-    v = napari.Viewer()
-    widget=napari-storm(v)
-    print(widget)
-    v.window.qt_viewer.dockLayerControls.setVisible(False)
-    v.window.add_dock_widget(widget,area='left',name='napari-storm')
-    napari.run()
-    
-    
-but in principle the widget should be available whenever you start napari in the enviorment you installed this in, e.g. using 
-    
-    napari
-    
-in you conda command prompt. For furhter information stick to https://github.com/napari/napari
+To start it you simply have to start the napari version that you just installed into your enviorment, e.g. again using the anaconda prompt and just typing 
 
+    napari 
+    
 
 
 ## Issues
