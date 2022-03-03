@@ -48,10 +48,13 @@ class napari_storm(QWidget):
                                       'Variable-size gaussian']
 
         self._z_color_encoding_mode = False
-        self.render_fixed_gauss_sigma_xy_nm = 20
-        self.render_fixed_gauss_sigma_z_nm = 20
-        self.render_var_gauss_PSF_sigma_xy_nm = 300
-        self.render_var_gauss_PSF_sigma_z_nm = 700
+        self.render_fixed_gauss_sigma_xy_nm = 20 / 2.354
+        self.render_fixed_gauss_sigma_z_nm = 20 / 2.354
+        self.render_var_gauss_PSF_sigma_xy_nm = 300 / 2.354
+        self.render_var_gauss_PSF_sigma_z_nm = 700 / 2.354
+
+        self.render_var_gauss_sigma_min_xy_nm = 10 / 2.354
+        self.render_var_gauss_sigma_min_z_nm = 10 / 2.354
 
         self.render_range_x_percent = np.arange(2) * 100
         self.render_range_y_percent = np.arange(2) * 100
@@ -115,16 +118,24 @@ class napari_storm(QWidget):
         self.Brenderoptions.currentIndexChanged.connect(self._render_options_changed)
         self.data_controlls_tab_layout.addWidget(self.Brenderoptions, 3, 1, 1, 3)
 
-        self.Lsigma = QLabel()
-        self.Lsigma.setText('FWHM in XY [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma, 4, 0)
+        self.Lsigma_xy = QLabel()
+        self.Lsigma_xy.setText('FWHM in XY [nm]:')
+        self.data_controlls_tab_layout.addWidget(self.Lsigma_xy, 4, 0)
 
-        self.Lsigma2 = QLabel()
-        self.Lsigma2.setText('FWHM in Z [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma2, 5, 0)
+        self.Lsigma_z = QLabel()
+        self.Lsigma_z.setText('FWHM in Z [nm]:')
+        self.data_controlls_tab_layout.addWidget(self.Lsigma_z, 5, 0)
+
+        self.Lsigma_xy_min = QLabel()
+        self.Lsigma_xy_min.setText('Min. FWHM in XY [nm]:')
+        self.data_controlls_tab_layout.addWidget(self.Lsigma_xy_min, 6, 0)
+
+        self.Lsigma_z_min = QLabel()
+        self.Lsigma_z_min.setText('Min. FWHM in Z [nm]:')
+        self.data_controlls_tab_layout.addWidget(self.Lsigma_z_min, 7, 0)
 
         self.Esigma_xy = QLineEdit()
-        self.Esigma_xy.setText(str(self.render_fixed_gauss_sigma_xy_nm))
+        self.Esigma_xy.setText(str(self.render_fixed_gauss_sigma_xy_nm * 2.354))
         self.Esigma_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
@@ -134,53 +145,67 @@ class napari_storm(QWidget):
         self.typing_timer_sigma.timeout.connect(self.update_sigma)
 
         self.Esigma_z = QLineEdit()
-        self.Esigma_z.setText(str(self.render_fixed_gauss_sigma_xy_nm))
+        self.Esigma_z.setText(str(self.render_fixed_gauss_sigma_xy_nm * 2.354))
         self.Esigma_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
         self.data_controlls_tab_layout.addWidget(self.Esigma_z, 5, 1, 1, 3)
 
+        self.Esigma_min_xy = QLineEdit()
+        self.Esigma_min_xy.setText(str(self.render_var_gauss_sigma_min_xy_nm * 2.354))
+        self.Esigma_min_xy.textChanged.connect(
+            lambda: self._start_typing_timer(self.typing_timer_sigma)
+        )
+        self.data_controlls_tab_layout.addWidget(self.Esigma_min_xy, 6, 1, 1, 3)
+
+        self.Esigma_min_z = QLineEdit()
+        self.Esigma_min_z.setText(str(self.render_var_gauss_sigma_min_z_nm * 2.354))
+        self.Esigma_min_z.textChanged.connect(
+            lambda: self._start_typing_timer(self.typing_timer_sigma)
+        )
+        self.data_controlls_tab_layout.addWidget(self.Esigma_min_z, 7, 1, 1, 3)
+
         self.Lrangex = QLabel()
         self.Lrangex.setText('X-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangex, 6, 0)
+        self.data_controlls_tab_layout.addWidget(self.Lrangex, 8, 0)
 
         self.Lrangey = QLabel()
         self.Lrangey.setText('Y-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangey, 7, 0)
+        self.data_controlls_tab_layout.addWidget(self.Lrangey, 9, 0)
 
         self.Lrangez = QLabel()
         self.Lrangez.setText('Z-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangez, 8, 0)
+        self.data_controlls_tab_layout.addWidget(self.Lrangez, 10, 0)
 
         self.Srender_rangex = RangeSlider2(parent=self, type='x')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangex, 6, 1, 1, 3)
+        self.data_controlls_tab_layout.addWidget(self.Srender_rangex, 8, 1, 1, 3)
 
         self.Srender_rangey = RangeSlider2(parent=self, type='y')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangey, 7, 1, 1, 3)
+        self.data_controlls_tab_layout.addWidget(self.Srender_rangey, 9, 1, 1, 3)
 
         self.Srender_rangez = RangeSlider2(parent=self, type='z')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangez, 8, 1, 1, 3)
+        self.data_controlls_tab_layout.addWidget(self.Srender_rangez, 10, 1, 1, 3)
 
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText('Reset Render Range')
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.data_controlls_tab_layout.addWidget(self.Breset_render_range, 9, 0, 1, 4)
+        self.data_controlls_tab_layout.addWidget(self.Breset_render_range, 11, 0, 1, 4)
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar_state_changed)
         self.Cscalebar.setText("Scalebar")
-        self.data_controlls_tab_layout.addWidget(self.Cscalebar, 10, 0, 1, 1)
+        self.data_controlls_tab_layout.addWidget(self.Cscalebar, 12, 0, 1, 1)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText('Size of Scalebar [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lscalebarsize, 11, 0)
+        self.data_controlls_tab_layout.addWidget(self.Lscalebarsize, 13, 0)
 
         self.Esbsize = QLineEdit()
         self.Esbsize.setText('500')
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esbsize, 11, 1, 1, 3)
+        self.data_controlls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 3)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
@@ -188,12 +213,12 @@ class napari_storm(QWidget):
         self.Bz_color_coding = QCheckBox()
         self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
         self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controlls_tab_layout.addWidget(self.Bz_color_coding, 13, 0, 1, 4)
+        self.data_controlls_tab_layout.addWidget(self.Bz_color_coding, 15, 0, 1, 4)
 
         # visual_control_tab
         self.channel_controlls_widget_layout = QFormLayout()
         self.channel_controlls_placeholder = QWidget()
-        self.data_controlls_tab_layout.addWidget(self.channel_controlls_placeholder, 15, 0, 1, 4)
+        self.data_controlls_tab_layout.addWidget(self.channel_controlls_placeholder, 17, 0, 1, 4)
         self.channel_controlls_placeholder.setLayout(self.channel_controlls_widget_layout)
 
         self.infos_tab_layout = QGridLayout()
@@ -372,10 +397,14 @@ class napari_storm(QWidget):
         self.Cscalebar.hide()
         self.Brenderoptions.hide()
         self.Lrenderoptions.hide()
-        self.Lsigma.hide()
+        self.Lsigma_xy.hide()
         self.Esigma_xy.hide()
-        self.Lsigma2.hide()
+        self.Lsigma_z.hide()
         self.Esigma_z.hide()
+        self.Lsigma_xy_min.hide()
+        self.Lsigma_z_min.hide()
+        self.Esigma_min_xy.hide()
+        self.Esigma_min_z.hide()
         self.Bz_color_coding.hide()
         self.Lscalebarsize.hide()
         self.Esbsize.hide()
@@ -397,9 +426,9 @@ class napari_storm(QWidget):
         self.Cscalebar.show()
         self.Brenderoptions.show()
         self.Lrenderoptions.show()
-        self.Lsigma.show()
+        self.Lsigma_xy.show()
         self.Esigma_xy.show()
-        self.Lsigma2.show()
+        self.Lsigma_z.show()
         self.Esigma_z.show()
         self.Bmerge_with_additional_file.show()
         self.Breset_render_range.show()
@@ -416,7 +445,7 @@ class napari_storm(QWidget):
             self.Brenderoptions.show()
             self.Lrenderoptions.show()
             self.Esigma_z.show()
-            self.Lsigma2.show()
+            self.Lsigma_z.show()
             self.viewer.dims.ndisplay = 3
         else:
             self.Lrenderoptions.hide()
@@ -425,7 +454,7 @@ class napari_storm(QWidget):
             self.Lrangez.hide()
             self.Srender_rangez.hide()
             self.Esigma_z.hide()
-            self.Lsigma2.hide()
+            self.Lsigma_z.hide()
             self.viewer.dims.ndisplay = 2
 
     def add_channel(self, name='Channel'):
@@ -458,20 +487,28 @@ class napari_storm(QWidget):
     def _render_options_changed(self):
         if self.Brenderoptions.currentText() == self.gaussian_render_modes[1]:
             self.render_gaussian_mode = 1
-            self.Lsigma.setText('PSF FWHM in XY [nm]')
-            self.Lsigma2.setText('PSF FWHM in Z [nm]')
+            self.Lsigma_xy.setText('PSF FWHM in XY [nm]')
+            self.Lsigma_z.setText('PSF FWHM in Z [nm]')
             self.Esigma_xy.setText('300')
             self.Esigma_z.setText('700')
             self.Bz_color_coding.hide()
             self.Bz_color_coding.setCheckState(False)
+            self.Esigma_min_xy.show()
+            self.Esigma_min_z.show()
+            self.Lsigma_xy_min.show()
+            self.Lsigma_z_min.show()
 
         else:
             self.render_gaussian_mode = 0
-            self.Lsigma2.setText('FWHM in Z [nm]')
-            self.Lsigma.setText('FWHM in XY [nm]')
-            self.Esigma_xy.setText('10')
-            self.Esigma_z.setText('10')
+            self.Lsigma_z.setText('FWHM in Z [nm]')
+            self.Lsigma_xy.setText('FWHM in XY [nm]')
+            self.Esigma_xy.setText('20')
+            self.Esigma_z.setText('20')
             self.Bz_color_coding.show()
+            self.Esigma_min_xy.hide()
+            self.Esigma_min_z.hide()
+            self.Lsigma_xy_min.hide()
+            self.Lsigma_z_min.hide()
         self.data_to_layer_itf.update_layers(self)
 
     def _start_typing_timer(self, timer):
@@ -498,6 +535,8 @@ class napari_storm(QWidget):
         else:
             self.render_var_gauss_PSF_sigma_xy_nm = float(self.Esigma_xy.text())/2.354
             self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text())/2.354
+            self.render_var_gauss_sigma_min_xy_nm = float(self.Esigma_min_xy.text()) / 2.354
+            self.render_var_gauss_sigma_min_z_nm = float(self.Esigma_min_z.text()) / 2.354
         self.data_to_layer_itf.update_layers()
 
     def open_localization_data(self, merge=False, file_path=None):

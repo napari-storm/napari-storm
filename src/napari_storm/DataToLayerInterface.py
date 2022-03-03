@@ -298,6 +298,13 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 sigma_y_nm = dataset.locs_active.sigma_y_pixels * dataset.pixelsize_nm
                 sigma_z_nm = dataset.locs_active.sigma_z_pixels * dataset.pixelsize_nm
 
+                sigma_x_nm[sigma_x_nm < self.parent.render_var_gauss_sigma_min_xy_nm] =\
+                    self.parent.render_var_gauss_sigma_min_xy_nm
+                sigma_y_nm[sigma_y_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
+                    self.parent.render_var_gauss_sigma_min_xy_nm
+                sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
+                    self.parent.render_var_gauss_sigma_min_z_nm
+
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_y_nm, sigma_x_nm], 0, 1)
 
             else:
@@ -306,14 +313,15 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
                 psf_sigma_z_nm = self.parent.render_var_gauss_PSF_sigma_z_nm
 
-                # psf_sigma_xy_pixels = psf_sigma_xy_nm / dataset.pixelsize_nm
-                # psf_sigma_z_pixels = psf_sigma_z_nm / dataset.pixelsize_nm
-
                 sigma_xy_nm = psf_sigma_xy_nm / np.sqrt(dataset.locs_active.photon_count)
                 sigma_z_nm = psf_sigma_z_nm / np.sqrt(dataset.locs_active.photon_count)
 
-                tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
+                sigma_xy_nm[sigma_xy_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
+                    self.parent.render_var_gauss_sigma_min_xy_nm
+                sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
+                    self.parent.render_var_gauss_sigma_min_z_nm
 
+                tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
         tmp_render_sigma_norm = tmp_render_sigma_nm / np.max(tmp_render_sigma_nm)
 
         # Store sigma values and set render size
