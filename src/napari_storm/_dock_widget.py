@@ -493,11 +493,11 @@ class napari_storm(QWidget):
     def update_sigma(self):
         if self.render_gaussian_mode == 0:
             # fixed gaussian
-            self.render_fixed_gauss_sigma_xy_nm = float(self.Esigma_xy.text())
-            self.render_fixed_gauss_sigma_z_nm = float(self.Esigma_z.text())
+            self.render_fixed_gauss_sigma_xy_nm = float(self.Esigma_xy.text())/2.354
+            self.render_fixed_gauss_sigma_z_nm = float(self.Esigma_z.text())/2.354
         else:
-            self.render_var_gauss_PSF_sigma_xy_nm = float(self.Esigma_xy.text())
-            self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text())
+            self.render_var_gauss_PSF_sigma_xy_nm = float(self.Esigma_xy.text())/2.354
+            self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text())/2.354
         self.data_to_layer_itf.update_layers()
 
     def open_localization_data(self, merge=False, file_path=None):

@@ -319,10 +319,10 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         # Store sigma values and set render size
         if create:
             self.render_sigma.append(tmp_render_sigma_norm)
-            self.render_size.append(2.5 * np.max(tmp_render_sigma_nm))
+            self.render_size.append(5 * np.max(tmp_render_sigma_nm))
         else:
             self.render_sigma[channel_index] = tmp_render_sigma_norm
-            self.render_size[channel_index] = 2.5 * np.max(tmp_render_sigma_nm)
+            self.render_size[channel_index] = 5 * np.max(tmp_render_sigma_nm)
 
 
     def get_coords_from_locs(self, dataset):
