@@ -21,7 +21,7 @@ from PyQt5.QtCore import Qt
 from .Exp_Controlls import *
 from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
-from .ChannelControlls import ChannelControls
+from .ChannelControls import ChannelControls
 from .CustomErrors import *
 
 
