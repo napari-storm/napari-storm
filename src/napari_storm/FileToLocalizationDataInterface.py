@@ -80,12 +80,12 @@ class FileToLocalizationDataInterface:
     def look_for_offset(self, locs, zdim):
         if zdim:  # remove negative values without having an offset between channels
             if np.min(locs.z_pos_pixels) <= 0 or np.min(locs.y_pos_pixels) <= 0 or np.min(locs.z_pos_pixels) <= 0:
-                offset = [np.min(locs.x_pos_pixels), np.min(locs.y_pos_pixels), np.min(locs.z_pos_pixels)]
+                offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels), -np.min(locs.z_pos_pixels)]
             else:
                 offset = [0, 0, 0]
         else:
             if np.min(locs.y_pos_pixels) <= 0 or np.min(locs.x_pos_pixels) <= 0:
-                offset = [np.min(locs.x_pos_pixels), np.min(locs.y_pos_pixels)]
+                offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels)]
             else:
                 offset = [0, 0, 0]
         # print(f"offset = {offset}")

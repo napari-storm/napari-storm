@@ -90,9 +90,9 @@ class LocalizationData:
                         ('y_pos_pixels', 'f4'),
                         ('z_pos_pixels', 'f4')]
 
-        tmp_x = self.locs_all.x_pos_pixels - self.offset_pixels[0]
-        tmp_y = self.locs_all.y_pos_pixels - self.offset_pixels[1]
-        tmp_z = self.locs_all.z_pos_pixels - self.offset_pixels[2]
+        tmp_x = self.locs_all.x_pos_pixels + self.offset_pixels[0]
+        tmp_y = self.locs_all.y_pos_pixels + self.offset_pixels[1]
+        tmp_z = self.locs_all.z_pos_pixels + self.offset_pixels[2]
 
         tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
         tmp_records.x_pos_pixels = tmp_y
@@ -109,9 +109,9 @@ class LocalizationData:
                         ('y_pos_pixels', 'f4'),
                         ('z_pos_pixels', 'f4')]
 
-        tmp_x = self.locs_active.x_pos_pixels - self.offset_pixels[0]
-        tmp_y = self.locs_active.y_pos_pixels - self.offset_pixels[1]
-        tmp_z = self.locs_active.z_pos_pixels - self.offset_pixels[2]
+        tmp_x = self.locs_active.x_pos_pixels + self.offset_pixels[0]
+        tmp_y = self.locs_active.y_pos_pixels + self.offset_pixels[1]
+        tmp_z = self.locs_active.z_pos_pixels + self.offset_pixels[2]
 
         tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
         tmp_records.x_pos_pixels = tmp_y
