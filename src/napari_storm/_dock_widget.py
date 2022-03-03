@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 from PyQt5 import QtCore
 
 from PyQt5.QtCore import Qt
-from .Exp_Controlls import *
+from .Exp_Controls import *
 from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .ChannelControls import ChannelControls
@@ -77,69 +77,69 @@ class napari_storm(QWidget):
         self.tabs.addTab(self.data_control_tab, 'Data Controls')
         self.tabs.addTab(self.infos_tab, 'File Infos')
 
-        self.data_controlls_tab_layout = QGridLayout()
+        self.data_controls_tab_layout = QGridLayout()
 
         # Set up the GUI
         self.Bopen = QPushButton()
         self.Bopen.clicked.connect(self.open_localization_data)
         self.Bopen.setText('Import File Dialog')
-        self.data_controlls_tab_layout.addWidget(self.Bopen, 0, 0, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bopen, 0, 0, 1, 2)
 
         self.Bmerge_with_additional_file = QPushButton()
         self.Bmerge_with_additional_file.setText('Merge with additional file')
-        self.data_controlls_tab_layout.addWidget(self.Bmerge_with_additional_file, 0, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bmerge_with_additional_file, 0, 2, 1, 2)
         self.Bmerge_with_additional_file.clicked.connect(lambda: self.open_localization_data(merge=True))
 
         self.Lresetview = QLabel()
         self.Lresetview.setText('Reset view:')
-        self.data_controlls_tab_layout.addWidget(self.Lresetview, 2, 0)
+        self.data_controls_tab_layout.addWidget(self.Lresetview, 2, 0)
 
         self.Baxis_xy = QPushButton()
         self.Baxis_xy.setText('XY')
         self.Baxis_xy.clicked.connect(lambda: self.change_camera(type='XY'))
-        self.data_controlls_tab_layout.addWidget(self.Baxis_xy, 2, 1)
+        self.data_controls_tab_layout.addWidget(self.Baxis_xy, 2, 1)
 
         self.Baxis_yz = QPushButton()
         self.Baxis_yz.setText('YZ')
         self.Baxis_yz.clicked.connect(lambda: self.change_camera(type='YZ'))
-        self.data_controlls_tab_layout.addWidget(self.Baxis_yz, 2, 2)
+        self.data_controls_tab_layout.addWidget(self.Baxis_yz, 2, 2)
 
         self.Baxis_xz = QPushButton()
         self.Baxis_xz.setText('XZ')
         self.Baxis_xz.clicked.connect(lambda: self.change_camera(type='XZ'))
-        self.data_controlls_tab_layout.addWidget(self.Baxis_xz, 2, 3)
+        self.data_controls_tab_layout.addWidget(self.Baxis_xz, 2, 3)
 
         self.Lrenderoptions = QLabel()
         self.Lrenderoptions.setText('Rendering options:')
-        self.data_controlls_tab_layout.addWidget(self.Lrenderoptions, 3, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrenderoptions, 3, 0)
 
         self.Brenderoptions = QComboBox()
         self.Brenderoptions.addItems(self.gaussian_render_modes)
         self.Brenderoptions.currentIndexChanged.connect(self._render_options_changed)
-        self.data_controlls_tab_layout.addWidget(self.Brenderoptions, 3, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Brenderoptions, 3, 1, 1, 3)
 
         self.Lsigma_xy = QLabel()
         self.Lsigma_xy.setText('FWHM in XY [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma_xy, 4, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy, 4, 0)
 
         self.Lsigma_z = QLabel()
         self.Lsigma_z.setText('FWHM in Z [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma_z, 5, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z, 5, 0)
 
         self.Lsigma_xy_min = QLabel()
         self.Lsigma_xy_min.setText('Min. FWHM in XY [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma_xy_min, 6, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy_min, 6, 0)
 
         self.Lsigma_z_min = QLabel()
         self.Lsigma_z_min.setText('Min. FWHM in Z [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lsigma_z_min, 7, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z_min, 7, 0)
 
         self.Esigma_xy = QLineEdit()
         self.Esigma_xy.setText(str(self.render_fixed_gauss_sigma_xy_nm * 2.354))
         self.Esigma_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esigma_xy, 4, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_xy, 4, 1, 1, 3)
         self.typing_timer_sigma = QtCore.QTimer()
         self.typing_timer_sigma.setSingleShot(True)
         self.typing_timer_sigma.timeout.connect(self.update_sigma)
@@ -149,63 +149,63 @@ class napari_storm(QWidget):
         self.Esigma_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esigma_z, 5, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_z, 5, 1, 1, 3)
 
         self.Esigma_min_xy = QLineEdit()
         self.Esigma_min_xy.setText(str(self.render_var_gauss_sigma_min_xy_nm * 2.354))
         self.Esigma_min_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esigma_min_xy, 6, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_xy, 6, 1, 1, 3)
 
         self.Esigma_min_z = QLineEdit()
         self.Esigma_min_z.setText(str(self.render_var_gauss_sigma_min_z_nm * 2.354))
         self.Esigma_min_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esigma_min_z, 7, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 7, 1, 1, 3)
 
         self.Lrangex = QLabel()
         self.Lrangex.setText('X-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangex, 8, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangex, 8, 0)
 
         self.Lrangey = QLabel()
         self.Lrangey.setText('Y-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangey, 9, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangey, 9, 0)
 
         self.Lrangez = QLabel()
         self.Lrangez.setText('Z-range')
-        self.data_controlls_tab_layout.addWidget(self.Lrangez, 10, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangez, 10, 0)
 
         self.Srender_rangex = RangeSlider2(parent=self, type='x')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangex, 8, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 8, 1, 1, 3)
 
         self.Srender_rangey = RangeSlider2(parent=self, type='y')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangey, 9, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 9, 1, 1, 3)
 
         self.Srender_rangez = RangeSlider2(parent=self, type='z')
-        self.data_controlls_tab_layout.addWidget(self.Srender_rangez, 10, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 10, 1, 1, 3)
 
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText('Reset Render Range')
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.data_controlls_tab_layout.addWidget(self.Breset_render_range, 11, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 11, 0, 1, 4)
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar_state_changed)
         self.Cscalebar.setText("Scalebar")
-        self.data_controlls_tab_layout.addWidget(self.Cscalebar, 12, 0, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Cscalebar, 12, 0, 1, 1)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText('Size of Scalebar [nm]:')
-        self.data_controlls_tab_layout.addWidget(self.Lscalebarsize, 13, 0)
+        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 13, 0)
 
         self.Esbsize = QLineEdit()
         self.Esbsize.setText('500')
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controlls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 3)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
@@ -213,13 +213,13 @@ class napari_storm(QWidget):
         self.Bz_color_coding = QCheckBox()
         self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
         self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controlls_tab_layout.addWidget(self.Bz_color_coding, 15, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 15, 0, 1, 4)
 
         # visual_control_tab
-        self.channel_controlls_widget_layout = QFormLayout()
-        self.channel_controlls_placeholder = QWidget()
-        self.data_controlls_tab_layout.addWidget(self.channel_controlls_placeholder, 17, 0, 1, 4)
-        self.channel_controlls_placeholder.setLayout(self.channel_controlls_widget_layout)
+        self.channel_controls_widget_layout = QFormLayout()
+        self.channel_controls_placeholder = QWidget()
+        self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 17, 0, 1, 4)
+        self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
         self.infos_tab_layout = QGridLayout()
         self.Lnumberoflocs = TestListView(self, parent=self)
@@ -233,8 +233,8 @@ class napari_storm(QWidget):
         self.layout = QGridLayout()
         self.layout.addWidget(self.tabs)
         self.setLayout(self.layout)
-        self.data_controlls_tab_layout.setColumnStretch(0, 4)
-        self.data_control_tab.setLayout(self.data_controlls_tab_layout)
+        self.data_controls_tab_layout.setColumnStretch(0, 4)
+        self.data_control_tab.setLayout(self.data_controls_tab_layout)
         self.infos_tab.setLayout(self.infos_tab_layout)
 
         # Init Function Calls
@@ -458,11 +458,11 @@ class napari_storm(QWidget):
             self.viewer.dims.ndisplay = 2
 
     def add_channel(self, name='Channel'):
-        """Adds a Channel in the visual controlls"""
+        """Adds a Channel in the visual controls"""
         self.channel.append(
             ChannelControls(parent=self, name=name, channel_index=len(self.channel))
         )
-        self.channel_controlls_widget_layout.addRow(self.channel[-1])
+        self.channel_controls_widget_layout.addRow(self.channel[-1])
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
