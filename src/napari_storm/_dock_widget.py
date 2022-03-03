@@ -48,8 +48,8 @@ class napari_storm(QWidget):
                                       'Variable-size gaussian']
 
         self._z_color_encoding_mode = False
-        self.render_fixed_gauss_sigma_xy_nm = 10
-        self.render_fixed_gauss_sigma_z_nm = 10
+        self.render_fixed_gauss_sigma_xy_nm = 20
+        self.render_fixed_gauss_sigma_z_nm = 20
         self.render_var_gauss_PSF_sigma_xy_nm = 300
         self.render_var_gauss_PSF_sigma_z_nm = 700
 
