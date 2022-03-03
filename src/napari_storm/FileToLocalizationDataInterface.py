@@ -496,7 +496,7 @@ class FileToLocalizationDataInterface:
             ),
             dtype=LOCS_DTYPE,
         )
-        locs.z[0] = 2
+        locs.z_pos_pixels[0] = 2
         pixelsize = 100
         filename = self.check_namespace("a.tester")
         self.dataset_names.append(filename)
