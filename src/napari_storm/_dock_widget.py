@@ -81,14 +81,15 @@ class napari_storm(QWidget):
 
         # Set up the GUI
         self.Bopen = QPushButton()
-        self.Bopen.clicked.connect(self.open_localization_data)
+        self.Bopen.clicked.connect(self.open_localization_data_file_and_get_dataset)
         self.Bopen.setText('Import File Dialog')
         self.data_controls_tab_layout.addWidget(self.Bopen, 0, 0, 1, 2)
 
         self.Bmerge_with_additional_file = QPushButton()
         self.Bmerge_with_additional_file.setText('Merge with additional file')
         self.data_controls_tab_layout.addWidget(self.Bmerge_with_additional_file, 0, 2, 1, 2)
-        self.Bmerge_with_additional_file.clicked.connect(lambda: self.open_localization_data(merge=True))
+        self.Bmerge_with_additional_file.clicked.connect(lambda:
+                                                         self.open_localization_data_file_and_get_dataset(merge=True))
 
         self.Lresetview = QLabel()
         self.Lresetview.setText('Reset view:')
@@ -383,7 +384,7 @@ class napari_storm(QWidget):
             links = []
             u = event.mimeData().urls()
             file = u[0].toString()[8:]
-            self.open_localization_data(file_path=file)
+            self.open_localization_data_file_and_get_dataset(file_path=file)
         else:
             event.ignore()
         #####
@@ -539,14 +540,14 @@ class napari_storm(QWidget):
             self.render_var_gauss_sigma_min_z_nm = float(self.Esigma_min_z.text()) / 2.354
         self.data_to_layer_itf.update_layers()
 
-    def open_localization_data(self, merge=False, file_path=None):
+    def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None):
         self.show_avaiable_widgets()
         if merge == False:
             self.clear_datasets()
 
         if self.n_datasets != 0 and not merge:
             self.clear_dataset()
-        datasets = self._file_to_data_itf.open_localization_data(file_path=file_path)
+        datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
         if datasets[-1].zdim_present:
             self.zdim = True
         else:
@@ -601,7 +602,7 @@ class TestListView(QListWidget):
             links = []
             u = event.mimeData().urls()
             file = u[0].toString()[8:]
-            self.parent.file_to_data_itf.open_localization_data(file_path=file)
+            self.parent.file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file)
         else:
             event.ignore()
 

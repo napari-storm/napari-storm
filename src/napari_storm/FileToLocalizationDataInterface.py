@@ -39,15 +39,15 @@ class FileToLocalizationDataInterface:
         # Check what kind of filetype and compare with defined featrues of a list of recognized filetypes
         pass
 
-    def open_localization_data(self, file_path=None):
+    def open_localization_data_file_and_get_dataset(self, file_path=None):
         """Determine which file type is being opened, and call the
         corresponding importer function"""
         Tk().withdraw()
         if not file_path:
             file_path = fd.askopenfilename()
-        return self.recognize_storm_data(file_path)
+        return self.recognize_storm_data_and_return_dataset(file_path)
 
-    def recognize_storm_data(self,file_path):
+    def recognize_storm_data_and_return_dataset(self, file_path):
         filetype = file_path.split('.')[-1]
         self.n_datasets += 1
         # Picasso hdf5 -> always needs a yaml present
