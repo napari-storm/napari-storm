@@ -219,7 +219,7 @@ class napari_storm(QWidget):
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
         self.infos_tab_layout = QGridLayout()
-        self.Lnumberoflocs = TestListView(self, parent=self)
+        self.Lnumberoflocs = TestListView(parent=self)
         self.Lnumberoflocs.addItem(
             'STATISTICS \nWaiting for Data... \nImport or drag file here'
         )
@@ -299,32 +299,6 @@ class napari_storm(QWidget):
             self.Lscalebarsize.hide()
             self.Esbsize.hide()
         self.data_to_layer_itf.scalebar()
-
-    def show_infos(self, filename, idx):
-        """Print Infos about files in Log"""
-        if self.localization_datasets[idx].zdim_present:
-            self.Lnumberoflocs.addItem(
-                "Statistics\n"
-                + f"File: {filename}\n"
-                + f"Number of locs: {len(self.localization_datasets[idx].locs.x_pos_pixels)}\n"
-                  f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs.x_pos_pixels) - min(self.localization_datasets[idx].locs.x_pos_pixels)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-                + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs.y_pos_pixels) - min(self.localization_datasets[idx].locs.y_pos_pixels)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-                + f"Imagedepth: {np.round((max(self.localization_datasets[idx].locs.z_pos_pixels) - min(self.localization_datasets[idx].locs.z_pos_pixels)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-                + f"Intensity per localization\nmean: {np.round(np.mean(self.localization_datasets[idx].locs.photon_count), 3)}\nmax: "
-                + f"{np.round(max(self.localization_datasets[idx].locs.photon_count), 3)}\nmin:"
-                + f" {np.round(min(self.localization_datasets[idx].locs.photon_count), 3)}\n"
-            )
-        else:
-            self.Lnumberoflocs.addItem(
-                "Statistics\n"
-                + f"File: {filename}\n"
-                + f"Number of locs: {len(self.localization_datasets[idx].locs.x_pos_pixels)}\n"
-                  f"Imagewidth: {np.round((max(self.localization_datasets[idx].locs.x_pos_pixels) - min(self.localization_datasets[idx].locs.x_pos_pixels)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-                + f"Imageheigth: {np.round((max(self.localization_datasets[idx].locs.y_pos_pixels) - min(self.localization_datasets[idx].locs.y_pos_pixels)) * self.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
-                + f"Intensity per localization\nmean: {np.round(np.mean(self.localization_datasets[idx].locs.photon_count), 3)}\nmax: "
-                + f"{np.round(max(self.localization_datasets[idx].locs.photon_count), 3)}\nmin:"
-                + f" {np.round(min(self.localization_datasets[idx].locs.photon_count), 3)}\n"
-            )
 
     def clear_datasets(self):
         """Erase the current dataset and reset the viewer"""
@@ -555,7 +529,7 @@ class napari_storm(QWidget):
 
     def create_layer(self, dataset, idx=-1):
         self.adjust_available_options_to_data_dimension()
-        self.show_infos(filename=dataset.name, idx=idx)
+        self.Lnumberoflocs.show_infos(filename=dataset.name, idx=idx)
         self.localization_datasets[idx].update_locs()
         self.data_to_layer_itf.create_new_layer(dataset, layer_name=dataset.name, idx=idx)
         self.add_channel(name=dataset.name)
@@ -572,11 +546,45 @@ def napari_experimental_provide_dock_widget():
 class TestListView(QListWidget):
     """Custom ListView Widget -> The Log, allows, d&d and displays infos on the files"""
 
-    def __init__(self, type, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.parent = parent
+        self._parent = parent
         self.setAcceptDrops(True)
         self.setIconSize(QtCore.QSize(72, 72))
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @parent.setter
+    def parent(self, value):
+        raise ParentError('Cannot change parent of existing Widget')
+
+    def show_infos(self, filename, idx):
+        """Print Infos about files in Log"""
+        if self.parent.localization_datasets[idx].zdim_present:
+            self.addItem(
+                "Statistics\n"
+                + f"File: {filename}\n"
+                + f"Number of locs: {len(self.parent.localization_datasets[idx].locs.x_pos_pixels)}\n"
+                  f"Imagewidth: {np.round((max(self.parent.localization_datasets[idx].locs.x_pos_pixels) - min(self.parent.localization_datasets[idx].locs.x_pos_pixels)) * self.parent.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+                + f"Imageheigth: {np.round((max(self.parent.localization_datasets[idx].locs.y_pos_pixels) - min(self.parent.localization_datasets[idx].locs.y_pos_pixels)) * self.parent.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+                + f"Imagedepth: {np.round((max(self.parent.localization_datasets[idx].locs.z_pos_pixels) - min(self.parent.localization_datasets[idx].locs.z_pos_pixels)) * self.parent.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+                + f"Intensity per localization\nmean: {np.round(np.mean(self.parent.localization_datasets[idx].locs.photon_count), 3)}\nmax: "
+                + f"{np.round(max(self.parent.localization_datasets[idx].locs.photon_count), 3)}\nmin:"
+                + f" {np.round(min(self.parent.localization_datasets[idx].locs.photon_count), 3)}\n"
+            )
+        else:
+            self.addItem(
+                "Statistics\n"
+                + f"File: {filename}\n"
+                + f"Number of locs: {len(self.parent.localization_datasets[idx].locs.x_pos_pixels)}\n"
+                  f"Imagewidth: {np.round((max(self.parent.localization_datasets[idx].locs.x_pos_pixels) - min(self.parent.localization_datasets[idx].locs.x_pos_pixels)) * self.parent.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+                + f"Imageheigth: {np.round((max(self.parent.localization_datasets[idx].locs.y_pos_pixels) - min(self.parent.localization_datasets[idx].locs.y_pos_pixels)) * self.parent.localization_datasets[idx].pixelsize_nm / 1000, 3)} µm\n"
+                + f"Intensity per localization\nmean: {np.round(np.mean(self.parent.localization_datasets[idx].locs.photon_count), 3)}\nmax: "
+                + f"{np.round(max(self.parent.localization_datasets[idx].locs.photon_count), 3)}\nmin:"
+                + f" {np.round(min(self.parent.localization_datasets[idx].locs.photon_count), 3)}\n"
+            )
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls:
