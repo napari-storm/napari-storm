@@ -38,7 +38,7 @@ def napari_get_reader(path):
         # so we are only going to look at the first file.
         path = path[0]
 
-    path=path.replace('\\','/')
+
     if path.split('.')[-1] in list_of_recognized_file_formats:
         return reader_function
     else:
@@ -46,6 +46,7 @@ def napari_get_reader(path):
 
 
 def reader_function(path):
+    path = path.replace('\\', '/')
     import gc
     instance_counter = 0
     for obj in gc.get_objects():
