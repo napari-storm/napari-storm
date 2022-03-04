@@ -60,6 +60,9 @@ def reader_function(path):
         our_dock_widget = napari_storm(napari_viewer=v)
         v.window.qt_viewer.dockLayerControls.setVisible(False)
         v.window.add_dock_widget(our_dock_widget, area="right", name="napari-STORM")
+    else:
+        v = napari.current_viewer()
+        v.window.qt_viewer.dockLayerControls.setVisible(False)
     napari_storm.open_localization_data_file_and_get_dataset(our_dock_widget, file_path=path)
     return [(None,)]
 
