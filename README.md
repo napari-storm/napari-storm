@@ -1,10 +1,10 @@
 # napari-storm
 
 [![License](https://img.shields.io/pypi/l/napari-storm.svg?color=green)](https://github.com/napari-storm/napari-storm/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/napari-STORM.svg?color=green)](https://pypi.org/project/napari-storm)
-[![Python Version](https://img.shields.io/pypi/pyversions/napari-STORM.svg?color=green)](https://python.org)
-[![tests](https://github.com/LREIN663/napari-STORM/workflows/tests/badge.svg)](https://github.com/napari-storm/napari-storm/actions)
-[![codecov](https://codecov.io/gh/LREIN663/napari-STORM/branch/main/graph/badge.svg)](https://codecov.io/gh/napari-storm/napari-STORM)
+[![PyPI](https://img.shields.io/pypi/v/napari-storm.svg?color=green)](https://pypi.org/project/napari-storm)
+[![Python Version](https://img.shields.io/pypi/pyversions/napari-storm.svg?color=green)](https://python.org)
+[![tests](https://github.com/napari-storm/napari-storm/workflows/tests/badge.svg)](https://github.com/napari-storm/napari-storm/actions)
+[![codecov](https://codecov.io/gh/napari-storm/napari-storm/branch/main/graph/badge.svg)](https://codecov.io/gh/napari-storm/napari-storm)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-storm)](https://napari-hub.org/plugins/napari-storm)
 
 A plugin for interactive visualization of Single Molecule Localization Microscopy (SMLM) datasets with Napari.
