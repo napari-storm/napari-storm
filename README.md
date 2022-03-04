@@ -7,7 +7,7 @@
 [![codecov](https://codecov.io/gh/napari-storm/napari-storm/branch/main/graph/badge.svg)](https://codecov.io/gh/napari-storm/napari-storm)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-storm)](https://napari-hub.org/plugins/napari-storm)
 
-A plugin for interactive visualization of Single Molecule Localization Microscopy (SMLM) datasets with Napari.  This package uses the (currently experimental) Particles layer developed by Martin Weigert (https://github.com/maweigert).
+A plugin for interactive visualization of Single Molecule Localization Microscopy (SMLM) datasets with Napari.  This package uses the (currently experimental) Napari Particles layer developed by Martin Weigert (https://github.com/maweigert).
 
 ----------------------------------
 
