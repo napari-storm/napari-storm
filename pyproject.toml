@@ -3,5 +3,5 @@ requires = ["setuptools", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 
-[tool.setuptools_scm]
-write_to = "src/napari_storm/_version.py"
+#[tool.setuptools_scm]
+#write_to = "src/napari_storm/_version.py"
