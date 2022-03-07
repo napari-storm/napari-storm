@@ -4,7 +4,7 @@ import os.path as _ospath
 from tkinter import Tk
 from tkinter import filedialog as fd
 
-import easygui
+
 import h5py
 import yaml as _yaml
 import io
@@ -14,6 +14,8 @@ import struct
 
 # load_SMLM adapted from Marting Weigerts readSmlmFile
 import zipfile
+
+from PyQt5.QtWidgets import QInputDialog
 
 from .ns_constants import *
 from .LocalizationData import LocalizationData
@@ -125,32 +127,56 @@ class FileToLocalizationDataInterface:
         locs, info = self.load_locs(file_path)
         try:
             pixelsize = locs.pixelsize_nm
-        except:
-            pixelsize = int(easygui.enterbox("Pixelsize?"))
-        self.pixelsize = pixelsize
+        except AttributeError:
+            pixelsize,ok = QInputDialog.getText(self.parent,'Pixelsize',f"Pixelsize of {filename}")
+            if not ok:
+                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+        pixelsize = int(pixelsize)
         try:
-            locs.z
+            locs.z=locs.z/pixelsize
             zdim = True
-        except:
+        except AttributeError:
             locs.z=np.ones(len(locs.x))
             zdim = False
+
+        sigma_present = False
+        photon_count_present = False
+
+        try:
+            uncertainty_x_nm = locs.lpx
+            uncertainty_y_nm = locs.lpy
+            sigma_present = True
+        except AttributeError:
+            uncertainty_x_nm = np.ones(len(locs.x))
+            uncertainty_y_nm = np.ones(len(locs.x))
+        try:
+            uncertainty_z_nm = locs.lpx
+        except AttributeError:
+            uncertainty_z_nm = np.ones(len(locs.x))
+
+        try:
+            intensity_photons = locs.photons
+            photon_count_present = True
+        except AttributeError:
+            intensity_photons = np.ones(len(locs.x))
 
         locs = np.rec.array(
         (   locs.frame,
             locs.x,
             locs.y,
             locs.z,
-            np.ones(len(locs.x)),
-            np.ones(len(locs.x)),
-            np.ones(len(locs.x)),
-            locs.photons,)
+            uncertainty_x_nm,
+            uncertainty_y_nm,
+            uncertainty_z_nm,
+            intensity_photons,)
             , dtype=LOCS_DTYPE)
         offset = self.look_for_offset(locs, zdim)
         filename = self.check_namespace( filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
                                  offset_pixels=offset, zdim_present=zdim,
-                                 sigma_present=False, photon_count_present=True, parent=self.parent)]
+                                 sigma_present=sigma_present, photon_count_present=photon_count_present,
+                                 parent=self.parent)]
 
     def load_h5(self, file_path):
         """Loads localizations from .h5 files"""
@@ -289,6 +315,9 @@ class FileToLocalizationDataInterface:
         """Loads Thunderstorm .csv files"""
         filename = file_path.split("/")[-1]
         data = {}
+        photon_count_present = False
+        sigma_present = False
+
         with open(file_path) as infile:
             header = infile.readline()
             header = header.replace("\n", "")
@@ -296,27 +325,87 @@ class FileToLocalizationDataInterface:
             data_list = np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
         for i in range(len(header)):
             data[header[i]] = data_list[:, i]
-        try:
+        if 'pixelsize' in header:
             pixelsize = data['"pixelsize"']
-        except:
-            pixelsize = int(easygui.enterbox("Pixelsize?"))
-        try:
-            data['"z [nm]"']
+        else:
+            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
+            if not ok:
+                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+        pixelsize = int(pixelsize)
+
+        if '"x [nm]"' in header:
+            locs_pos_x_nm = data['"x [nm]"']
+            locs_pos_y_nm = data['"y [nm]"']
+        elif 'x [nm]' in header:
+            locs_pos_x_nm = data['x [nm]']
+            locs_pos_y_nm = data['y [nm]']
+        else:
+            raise ImportError('Localisation Position in X or Y not found in header')
+
+        if '"z [nm]"' in header:
+            locs_pos_z_nm = data['"z [nm]"']
             zdim = True
-        except:
-            data['"z [nm]"']=np.ones(len(data['"x [nm]"']))
-            zdim = False
+        elif 'z [nm]' in header:
+            locs_pos_z_nm = data['z [nm]']
+            zdim = True
+        else:
+            locs_pos_z_nm=np.ones(len(locs_pos_x_nm))
+            zdim=False
+
+        # Check if frame number info is present in file
+        if '"frame"' in header:
+            frame_numbers=data['"frame"']
+        elif 'frame' in header:
+            frame_numbers = data['frame']
+        else:
+            frame_numbers=np.ones(len(locs_pos_x_nm))
+
+        # Check if uncertainty info is present in file
+        if 'uncertainty_xy [nm]' in header:
+            uncertainty_x_nm= data['uncertainty_xy [nm]']
+            uncertainty_y_nm = data['uncertainty_xy [nm]']
+            intensity_photons = np.ones(len(locs_pos_x_nm))
+            sigma_present=True
+            if zdim:
+                uncertainty_z_nm=data['uncertainty_z [nm]']
+            else:
+                uncertainty_z_nm=np.ones(len(locs_pos_x_nm))
+        elif 'uncertainty_x [nm]' in header:
+            uncertainty_x_nm = data['uncertainty_x [nm]']
+            uncertainty_y_nm = data['uncertainty_y [nm]']
+            intensity_photons = np.ones(len(locs_pos_x_nm))
+            if zdim:
+                uncertainty_z_nm=data['uncertainty_z [nm]']
+            else:
+                uncertainty_z_nm=np.ones(len(locs_pos_x_nm))
+        elif '"intensity [photon]"' in header:
+            photon_count_present=True
+            intensity_photons=data['"intensity [photon]"']
+            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
+        elif 'intensity [photon]' in header:
+            photon_count_present = True
+            intensity_photons=data['intensity [photon]']
+            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
+        else:
+            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
+            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
+            intensity_photons = np.ones(len(locs_pos_x_nm))
 
         locs = np.rec.array(
             (
-                data['"frame"'],
-                data['"x [nm]"'] / pixelsize,
-                data['"y [nm]"'] / pixelsize,
-                data['"z [nm]"'] / pixelsize,
-                np.ones(len(data['"x [nm]"'])),
-                np.ones(len(data['"x [nm]"'])),
-                np.ones(len(data['"x [nm]"'])),
-                data['"intensity [photon]"'],
+                frame_numbers,
+                locs_pos_x_nm / pixelsize,
+                locs_pos_y_nm / pixelsize,
+                locs_pos_z_nm / pixelsize,
+                uncertainty_x_nm / pixelsize,
+                uncertainty_y_nm / pixelsize,
+                uncertainty_z_nm / pixelsize,
+                intensity_photons,
             ),
             dtype=LOCS_DTYPE,
         )
@@ -325,7 +414,8 @@ class FileToLocalizationDataInterface:
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
                                  offset_pixels=offset, zdim_present=zdim,
-                                 sigma_present=False, photon_count_present=True, parent=self.parent)]
+                                 sigma_present=sigma_present, photon_count_present=photon_count_present,
+                                 parent=self.parent)]
 
     def load_SMLM(self, file_path):
         logging.basicConfig(level=logging.INFO)
@@ -435,18 +525,13 @@ class FileToLocalizationDataInterface:
         else:
             raise Exception("invalid file: no manifest.json found in the smlm file")
         prop = manifest["files"][-1]["data"]["tableDict"]
-        LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
-        LOCS_DTYPE_3D = [
-            ("frame", "f4"),
-            ("x", "f4"),
-            ("y", "f4"),
-            ("z", "f4"),
-            ("photons", "f4"),
-        ]
         try:
             pixelsize = prop["pixelsize"]
         except:
-            pixelsize = int(easygui.enterbox("Pixelsize?"))
+            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
+            if not ok:
+                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+        pixelsize = int(pixelsize)
         if (
                 not "intensity_photon_" in prop.keys()
         ):  # If the photons are not given, set them to 1k
