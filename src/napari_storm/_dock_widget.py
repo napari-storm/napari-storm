@@ -415,7 +415,8 @@ class napari_storm(QWidget):
             self.Baxis_xz.show()
             self.Baxis_yz.show()
             self.Lresetview.show()
-            self.Bz_color_coding.show()
+            if self.z_color_encoding_mode ==0:
+                self.Bz_color_coding.show()
             self.Brenderoptions.show()
             self.Lrenderoptions.show()
             self.Esigma_z.show()
@@ -538,6 +539,8 @@ class napari_storm(QWidget):
         self.add_channel(name=dataset.name)
         self.channel[-1].change_color_map()
         self.channel[-1].adjust_colormap_range()
+        if dataset.sigma_present:
+            self.Brenderoptions.setCurrentIndex(1)
 
 
 @napari_hook_implementation
