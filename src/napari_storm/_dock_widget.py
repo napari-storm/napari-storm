@@ -94,16 +94,19 @@ class napari_storm(QWidget):
         self.Baxis_xy = QPushButton()
         self.Baxis_xy.setText('XY')
         self.Baxis_xy.clicked.connect(lambda: self.change_camera(type='XY'))
+        self.Baxis_xy.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_xy, 2, 1)
 
         self.Baxis_yz = QPushButton()
         self.Baxis_yz.setText('YZ')
         self.Baxis_yz.clicked.connect(lambda: self.change_camera(type='YZ'))
+        self.Baxis_yz.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_yz, 2, 2)
 
         self.Baxis_xz = QPushButton()
         self.Baxis_xz.setText('XZ')
         self.Baxis_xz.clicked.connect(lambda: self.change_camera(type='XZ'))
+        self.Baxis_xz.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_xz, 2, 3)
 
         self.Lrenderoptions = QLabel()
@@ -210,7 +213,7 @@ class napari_storm(QWidget):
         self.Bz_color_coding = QCheckBox()
         self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
         self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 15, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 12, 2, 1, 2)
 
         # visual_control_tab
         self.channel_controls_widget_layout = QFormLayout()
