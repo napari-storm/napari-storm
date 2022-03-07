@@ -374,6 +374,7 @@ class FileToLocalizationDataInterface:
             uncertainty_x_nm = data['uncertainty_x [nm]']
             uncertainty_y_nm = data['uncertainty_y [nm]']
             intensity_photons = np.ones(len(locs_pos_x_nm))
+            sigma_present = True
             if zdim:
                 uncertainty_z_nm=data['uncertainty_z [nm]']
             else:
@@ -395,7 +396,7 @@ class FileToLocalizationDataInterface:
             uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
             intensity_photons = np.ones(len(locs_pos_x_nm))
-
+        print(uncertainty_x_nm,uncertainty_y_nm,uncertainty_z_nm,sigma_present)
         locs = np.rec.array(
             (
                 frame_numbers,
