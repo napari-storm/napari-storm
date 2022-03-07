@@ -76,8 +76,63 @@ class FileToLocalizationDataInterface:
             return self.load_mfx_npy(file_path)
         elif filetype == 'test':
             return self.start_testing()
+        elif filetype == 'your_custom_ending':
+            return self.your_custom_import_function(file_path)
         self.n_datasets -= 1
         raise TypeError('Unknown SMLM data file extension')
+
+    def your_custom_import_function(self, file_path):
+        """Use this Function as a template to import the data you want
+            Start with importing your data however you like
+            After you imported your data you need to create a numpy rec array like this:
+
+            locs_rec_array = np.rec.array(
+                                (   Framenumbers,
+                                    array_of_x_pos_in_pixelunits,
+                                    array_of_y_pos_in_pixelunits,
+                                    array_of_z_pos_in_pixelunits,
+                                    array_of_uncertainties_in_x_in_pixelunits,
+                                    array_of_uncertainties_in_y_in_pixelunits,
+                                    array_of_uncertainties_in_z_in_pixelunits,
+                                    array_of_intensity_values_for_each_loc,)
+                                    , dtype=LOCS_DTYPE)
+
+            The Z positions, Framenumbers, uncertainties and intensity values are optional,
+            just set them to np.ones(len(array_of_x_pos_in_pixelunits)) if you want to skip them.
+
+            Next you want to check if there is already a file present with the same name, for that
+            just call the check_namespace function:
+
+            filename=self.check_namespace(self,filename), where
+
+            filename is typically file_path.split('/')[-1] (= Filepath without the path)
+
+            Next you want to check if you have a (negative) offset in your data using the provided
+            look_for_offset function:
+
+            offset =  self.look_for_offset(locs_rec_array,zdim_present)
+
+            , where zdim_present should be set to True when you provided Z-postions, otherwise False
+
+            Next you need to return the gathered infos, while also providing information on pixelsize,
+            if z positions are present (zdim_present = True/False),
+            if uncertainty values are present (sigma_present = True/False)
+            if intensity values are present (photon_count_present = True/False):
+
+             return [LocalizationData(locs=locs_rec_array, name=filename, pixelsize_nm=pixelsize,
+                                 offset_pixels=offset, zdim_present=zdim,
+                                 sigma_present=sigma_present, photon_count_present=photon_count_present,
+                                 parent=self.parent)]
+
+            If you are sure your function is working, as a last step go into the
+            recognize-storm_data_and_return_dataset function, replace 'your_custom_ending' with the ending
+            or if there is already a function for the filetype, just replace the existing function with yours,
+            e.g. you want to import .csv, go to
+
+             elif filetype == 'csv':
+                return self.load_csv(file_path)
+             and replace self.load_csv with self.your_custom_import_function
+        """
 
     def look_for_offset(self, locs, zdim):
         if zdim:  # remove negative values without having an offset between channels
