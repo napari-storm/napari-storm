@@ -13,3 +13,6 @@ class StaticAttributeError(ValueError):
 class MoreThanOneInstanceError(ImportError):
     """When importing a file, there should be only one instance of the napari dock widget"""
 
+class PixelSizeIsNeccessaryError(ValueError):
+    """Raise this error when the pixelsize for a dataset is not provided"""
+
