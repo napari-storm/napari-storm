@@ -41,8 +41,8 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         self.set_render_sigmas(dataset=dataset, create=True)
         self.set_render_values(dataset=dataset, create=True)
         """print(f'Create:\n #################\n'
-              f'size = {dataset.render_size}\n values = {dataset.render_values}\n '
-              f'sigmas {dataset.render_sigma}\n Pixelsize {dataset.pixelsize_nm}'
+              f'size = {self.render_size[-1]}\n values = {self.render_values[-1]}\n '
+              f'sigmas {self.render_sigma[-1]}'
               f'\n coords ={coords}\n##############')"""
 
         dataset.napari_layer_ref = Particles(
@@ -73,7 +73,10 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         v = self.viewer
         self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
         i = 0
-        # print(self.parent.localization_datasets)
+        """print(f'Create:\n #################\n'
+              f'size = {self.render_size[-1]}\n values = {self.render_values[-1]}\n '
+              f'sigmas {self.render_sigma[-1]}'
+              )"""
         for dataset in self.parent.localization_datasets:
             #print(i,self.colormap[i])
             dataset.update_locs()
