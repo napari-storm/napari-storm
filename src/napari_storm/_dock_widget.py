@@ -196,6 +196,11 @@ class napari_storm(QWidget):
         self.Cscalebar.setText("Scalebar")
         self.data_controls_tab_layout.addWidget(self.Cscalebar, 12, 0, 1, 1)
 
+        self.Bz_color_coding = QCheckBox()
+        self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
+        self.Bz_color_coding.stateChanged.connect(self.colorcoding)
+        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 12, 2, 1, 2)
+
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText('Size of Scalebar [nm]:')
         self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 13, 0)
@@ -209,11 +214,6 @@ class napari_storm(QWidget):
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
-
-        self.Bz_color_coding = QCheckBox()
-        self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
-        self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 12, 2, 1, 2)
 
         # visual_control_tab
         self.channel_controls_widget_layout = QFormLayout()
@@ -493,11 +493,11 @@ class napari_storm(QWidget):
         v = napari.current_viewer()
         values = {}
         if type == 'XY':
-            v.camera.angles = (0, 0, 90)
+            v.camera.angles = (90, 0, 90)
         elif type == 'XZ':
-            v.camera.angles = (0, 0, 180)
-        else:
             v.camera.angles = (-90, -90, -90)
+        else:
+            v.camera.angles = (-180, 0, 0)
         v.camera.center = self.localization_datasets[-1].camera_center[0]
         v.camera.zoom = self.localization_datasets[-1].camera_center[1]
         v.camera.update(values)
