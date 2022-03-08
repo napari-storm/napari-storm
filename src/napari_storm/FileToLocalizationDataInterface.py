@@ -186,7 +186,7 @@ class FileToLocalizationDataInterface:
             pixelsize,ok = QInputDialog.getText(self.parent,'Pixelsize',f"Pixelsize of {filename}")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
-        pixelsize = int(pixelsize)
+        pixelsize = float(pixelsize)
         try:
             locs.z=locs.z/pixelsize
             zdim = True
@@ -386,7 +386,7 @@ class FileToLocalizationDataInterface:
             pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
-        pixelsize = int(pixelsize)
+        pixelsize = float(pixelsize)
 
         if '"x [nm]"' in header:
             locs_pos_x_nm = data['"x [nm]"']
@@ -587,7 +587,7 @@ class FileToLocalizationDataInterface:
             pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
-        pixelsize = int(pixelsize)
+        pixelsize = float(pixelsize)
         if (
                 not "intensity_photon_" in prop.keys()
         ):  # If the photons are not given, set them to 1k
