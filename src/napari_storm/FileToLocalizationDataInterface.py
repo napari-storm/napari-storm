@@ -183,7 +183,7 @@ class FileToLocalizationDataInterface:
         try:
             pixelsize = locs.pixelsize_nm
         except AttributeError:
-            pixelsize,ok = QInputDialog.getText(self.parent,'Pixelsize',f"Pixelsize of {filename}")
+            pixelsize,ok = QInputDialog.getText(self.parent,'Pixelsize',f"Pixelsize of {filename} in nm")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
@@ -383,7 +383,7 @@ class FileToLocalizationDataInterface:
         if 'pixelsize' in header:
             pixelsize = data['"pixelsize"']
         else:
-            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
+            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename} in nm")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
@@ -584,7 +584,7 @@ class FileToLocalizationDataInterface:
         try:
             pixelsize = prop["pixelsize"]
         except:
-            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename}")
+            pixelsize, ok = QInputDialog.getText(self.parent, 'Pixelsize', f"Pixelsize of {filename} in nm")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
