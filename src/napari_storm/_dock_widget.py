@@ -39,9 +39,9 @@ class napari_storm(QWidget):
         self._data_to_layer_itf = DataToLayerInterface(parent=self, viewer=napari_viewer)
         self._file_to_data_itf = FileToLocalizationDataInterface(parent=self)
 
+        # Attributes
         self.testing_mode_enabled = False
 
-        # Attributes
         self.localization_datasets = []
         self.n_datasets = 0
         self.viewer = napari_viewer
