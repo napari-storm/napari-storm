@@ -5,6 +5,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QComboBox,
     QListWidget,
+    QApplication
 )
 
 from PyQt5.QtWidgets import (
@@ -210,10 +211,15 @@ class napari_storm(QWidget):
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 1)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
+
+        self.Bstarttestmode = QPushButton()
+        self.Bstarttestmode.setText("Start Test Mode")
+        self.Bstarttestmode.clicked.connect(self.start_test_mode)
+        self.data_controls_tab_layout.addWidget(self.Bstarttestmode, 0, 2, 1, 1)
 
         # visual_control_tab
         self.channel_controls_widget_layout = QFormLayout()
@@ -293,6 +299,14 @@ class napari_storm(QWidget):
         else:
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
+
+    def start_test_mode(self):
+        self.Bstarttestmode.hide()
+        from .Test_Mode import TestModeWindow
+        window = TestModeWindow(parent=self)
+        print(window)
+        window.show()
+        window.exec_()
 
     def scalebar_state_changed(self):
         if self.Cscalebar.isChecked():
@@ -493,11 +507,11 @@ class napari_storm(QWidget):
         v = napari.current_viewer()
         values = {}
         if type == 'XY':
-            v.camera.angles = (90, 0, 90)
+            v.camera.angles = (0, 0, 90)
         elif type == 'XZ':
-            v.camera.angles = (-90, -90, -90)
+            v.camera.angles = (0, 0, 180)
         else:
-            v.camera.angles = (-180, 0, 0)
+            v.camera.angles = (-90, -90, -90)
         v.camera.center = self.localization_datasets[-1].camera_center[0]
         v.camera.zoom = self.localization_datasets[-1].camera_center[1]
         v.camera.update(values)
@@ -522,6 +536,18 @@ class napari_storm(QWidget):
         if self.n_datasets != 0 and not merge:
             self.clear_dataset()
         datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
+        if datasets[-1].zdim_present:
+            self.zdim = True
+        else:
+            self.zdim = False
+        for i in range(len(datasets)):
+            self.localization_datasets.append(datasets[i])
+            self.n_datasets += 1
+            self.create_layer(self.localization_datasets[-1], idx=i)
+
+    def get_dataset_from_test_mode(self,datasets):
+        self.show_avaiable_widgets()
+        self.clear_datasets()
         if datasets[-1].zdim_present:
             self.zdim = True
         else:
