@@ -39,6 +39,8 @@ class napari_storm(QWidget):
         self._data_to_layer_itf = DataToLayerInterface(parent=self, viewer=napari_viewer)
         self._file_to_data_itf = FileToLocalizationDataInterface(parent=self)
 
+        self.testing_mode_enabled = False
+
         # Attributes
         self.localization_datasets = []
         self.n_datasets = 0
@@ -246,6 +248,7 @@ class napari_storm(QWidget):
         # Init Function Calls
         custom_keys_and_scalebar(self)
         self.hide_non_available_widgets()
+        self.hide_testing_mode()
 
     @property
     def data_to_layer_itf(self):
@@ -300,11 +303,14 @@ class napari_storm(QWidget):
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
 
+    def hide_testing_mode(self):
+        if not self.testing_mode_enabled:
+            self.Bstarttestmode.hide()
+
     def start_test_mode(self):
         self.Bstarttestmode.hide()
         from .Test_Mode import TestModeWindow
         window = TestModeWindow(parent=self)
-        print(window)
         window.show()
         window.exec_()
 
