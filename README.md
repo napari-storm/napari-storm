@@ -19,6 +19,8 @@ We recommend instaling Napari into a Conda virtual enviorment, e.g. using the co
     conda create --name napari-storm
     
     activate napari-storm
+    
+    conda install pip
 
 You can install `napari-storm` by cloning the repository, using, e.g. the conda prompt with:
 
