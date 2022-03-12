@@ -40,7 +40,7 @@ class napari_storm(QWidget):
         self._file_to_data_itf = FileToLocalizationDataInterface(parent=self)
 
         # Attributes
-        self.testing_mode_enabled = True
+        self.testing_mode_enabled = False
 
         self.localization_datasets = []
         self.n_datasets = 0
