@@ -31,6 +31,8 @@ class LocalizationData:
 
         if offset_pixels is None:
             offset_pixels = np.zeros(3)
+        if len(offset_pixels) == 2:
+            offset_pixels = [offset_pixels[0], offset_pixels[1], 0]
 
         self._parent = parent
         self.napari_layer_ref = None
@@ -119,3 +121,5 @@ class LocalizationData:
         tmp_records.z_pos_pixels = tmp_z
 
         return tmp_records
+
+

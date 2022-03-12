@@ -40,7 +40,7 @@ class napari_storm(QWidget):
         self._file_to_data_itf = FileToLocalizationDataInterface(parent=self)
 
         # Attributes
-        self.testing_mode_enabled = False
+        self.testing_mode_enabled = True
 
         self.localization_datasets = []
         self.n_datasets = 0
@@ -443,14 +443,12 @@ class napari_storm(QWidget):
             self.Lsigma_z.show()
             self.viewer.dims.ndisplay = 3
         else:
-            self.Lrenderoptions.hide()
-            self.Brenderoptions.hide()
-            self.Bz_color_coding.show()
             self.Lrangez.hide()
             self.Srender_rangez.hide()
             self.Esigma_z.hide()
             self.Lsigma_z.hide()
-            self.viewer.dims.ndisplay = 2
+            self.viewer.dims.ndisplay = 3
+
 
     def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controls"""
@@ -489,9 +487,10 @@ class napari_storm(QWidget):
             self.Bz_color_coding.hide()
             self.Bz_color_coding.setCheckState(False)
             self.Esigma_min_xy.show()
-            self.Esigma_min_z.show()
+            if self.zdim:
+                self.Esigma_min_z.show()
+                self.Lsigma_z_min.show()
             self.Lsigma_xy_min.show()
-            self.Lsigma_z_min.show()
 
         else:
             self.render_gaussian_mode = 0
@@ -536,11 +535,10 @@ class napari_storm(QWidget):
 
     def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None):
         self.show_avaiable_widgets()
-        if merge == False:
+        if not merge:
             self.clear_datasets()
+            self.data_to_layer_itf.reset_render_range_and_offset()
 
-        if self.n_datasets != 0 and not merge:
-            self.clear_dataset()
         datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
         if datasets[-1].zdim_present:
             self.zdim = True

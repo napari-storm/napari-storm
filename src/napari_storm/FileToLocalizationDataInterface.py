@@ -136,15 +136,10 @@ class FileToLocalizationDataInterface:
 
     def look_for_offset(self, locs, zdim):
         if zdim:  # remove negative values without having an offset between channels
-            if np.min(locs.z_pos_pixels) <= 0 or np.min(locs.y_pos_pixels) <= 0 or np.min(locs.z_pos_pixels) <= 0:
-                offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels), -np.min(locs.z_pos_pixels)]
-            else:
-                offset = [0, 0, 0]
+            offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels), -np.min(locs.z_pos_pixels)]
         else:
-            if np.min(locs.y_pos_pixels) <= 0 or np.min(locs.x_pos_pixels) <= 0:
-                offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels)]
-            else:
-                offset = [0, 0, 0]
+            offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels)]
+
         # print(f"offset = {offset}")
         return offset
 
@@ -207,7 +202,7 @@ class FileToLocalizationDataInterface:
         try:
             uncertainty_z_nm = locs.lpx
         except AttributeError:
-            uncertainty_z_nm = np.ones(len(locs.x))
+            uncertainty_z_nm = 2*np.sqrt(locs.lpx**2+locs.lpy**2)
 
         try:
             intensity_photons = locs.photons
@@ -417,10 +412,10 @@ class FileToLocalizationDataInterface:
 
         # Check if uncertainty info is present in file
         if 'uncertainty_xy [nm]' in header:
-            uncertainty_x_nm= data['uncertainty_xy [nm]']
+            uncertainty_x_nm = data['uncertainty_xy [nm]']
             uncertainty_y_nm = data['uncertainty_xy [nm]']
             intensity_photons = np.ones(len(locs_pos_x_nm))
-            sigma_present=True
+            sigma_present = True
             if zdim:
                 uncertainty_z_nm=data['uncertainty_z [nm]']
             else:
@@ -430,10 +425,10 @@ class FileToLocalizationDataInterface:
             uncertainty_y_nm = data['uncertainty_y [nm]']
             intensity_photons = np.ones(len(locs_pos_x_nm))
             sigma_present = True
-            if zdim:
+            if zdim and "uncertainty_z [nm]" in header:
                 uncertainty_z_nm=data['uncertainty_z [nm]']
             else:
-                uncertainty_z_nm=np.ones(len(locs_pos_x_nm))
+                uncertainty_z_nm=2*np.sqrt(uncertainty_x_nm**2+uncertainty_y_nm**2)
         elif '"intensity [photon]"' in header:
             photon_count_present=True
             intensity_photons=data['"intensity [photon]"']
@@ -451,7 +446,6 @@ class FileToLocalizationDataInterface:
             uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
             intensity_photons = np.ones(len(locs_pos_x_nm))
-        print(uncertainty_x_nm,uncertainty_y_nm,uncertainty_z_nm,sigma_present)
         locs = np.rec.array(
             (
                 frame_numbers,
