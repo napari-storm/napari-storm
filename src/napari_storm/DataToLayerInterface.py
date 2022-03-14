@@ -25,6 +25,14 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         #self.render_colormap = []
         self.render_anti_alias = 0
 
+        self.render_range_x = [0, -np.inf]
+        self.render_range_y = [0, -np.inf]
+        self.render_range_z = [0, -np.inf]
+        self.offset_nm_3d = [0, 0, 0]
+        self.offset_nm_2d = [0, 0]
+
+        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
+
     @property
     def parent(self):
         return self._parent
@@ -33,18 +41,57 @@ class DataToLayerInterface: #localization always with z # switch info with chann
     def parent(self, value):
         raise ParentError('Cannot change parent of existing Widget')
 
+    def reset_render_range_and_offset(self):
+        self.render_range_x = [0, -np.inf]
+        self.render_range_y = [0, -np.inf]
+        self.render_range_z = [0, -np.inf]
+        self.offset_nm_3d = [0, 0, 0]
+        self.offset_nm_2d = [0, 0]
+
+    def set_render_range(self, zdim, coords):
+        if zdim:
+            self.render_range_x[1] = max(np.max(coords[:, 1]), self.render_range_x[1])
+            self.render_range_y[1] = max(np.max(coords[:, 2]), self.render_range_y[1])
+            self.render_range_z[1] = max(np.max(coords[:, 0]), self.render_range_z[1])
+        else:
+            self.render_range_x[1] = max(np.max(coords[:, 0]), self.render_range_x[1])
+            self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
+
+    def set_offset(self, dataset):
+        if dataset.zdim_present:
+            if self.offset_nm_3d == [0, 0, 0]:
+                self.offset_nm_3d = [-np.min(dataset.locs.z_pos_pixels) * dataset.pixelsize_nm,
+                                     -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm,
+                                     -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm]
+            else:
+                self.offset_nm_3d[2] = np.max([self.offset_nm_3d[2],
+                                               -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm])
+                self.offset_nm_3d[1] = np.max([self.offset_nm_3d[1],
+                                               -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm])
+                self.offset_nm_3d[0] = np.max([self.offset_nm_3d[0],
+                                               -np.min(dataset.locs.z_pos_pixels) * dataset.pixelsize_nm])
+
+        else:
+            if self.offset_nm_2d == [0, 0]:
+                self.offset_nm_3d = [-np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm,
+                                     -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm]
+            else:
+                self.offset_nm_2d[0] = np.max([self.offset_nm_2d[0],
+                                               -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm])
+                self.offset_nm_2d[1] = np.max([self.offset_nm_2d[1],
+                                               -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm])
+
+
+
 
     def create_new_layer(self, dataset, aas=0, layer_name='SMLM Data', idx=-1):
         """Creating a Particle Layer"""
         self.n_layers += 1
+        self.set_offset(dataset)
         coords = self.get_coords_from_locs(dataset=dataset)
+        self.set_render_range(coords=coords, zdim=dataset.zdim_present)
         self.set_render_sigmas(dataset=dataset, create=True)
         self.set_render_values(dataset=dataset, create=True)
-        """print(f'Create:\n #################\n'
-              f'size = {self.render_size[-1]}\n values = {self.render_values[-1]}\n '
-              f'sigmas {self.render_sigma[-1]}'
-              f'\n coords ={coords}\n##############')"""
-
         dataset.napari_layer_ref = Particles(
             coords,
             size=self.render_size[-1],
@@ -59,12 +106,9 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         dataset.napari_layer_ref.add_to_viewer(self.viewer)
         self.viewer.camera.perspective = 50
         dataset.napari_layer_ref.shading = 'gaussian'
+        self.viewer.camera.angles=(0, 0, -90)
+        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
 
-        dataset.camera_center = [
-            self.viewer.camera.center,
-            self.viewer.camera.zoom,
-            self.viewer.camera.angles,
-        ]
 
         # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
 
@@ -73,18 +117,12 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         v = self.viewer
         self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
         i = 0
-        """print(f'Create:\n #################\n'
-              f'size = {self.render_size[-1]}\n values = {self.render_values[-1]}\n '
-              f'sigmas {self.render_sigma[-1]}'
-              )"""
         for dataset in self.parent.localization_datasets:
-            #print(i,self.colormap[i])
             dataset.update_locs()
             v.layers.remove(dataset.name)
             coords = self.get_coords_from_locs(dataset)
             self.set_render_sigmas(dataset=dataset, channel_index=i)
             self.set_render_values(dataset=dataset, channel_index=i)
-
             dataset.napari_layer_ref = Particles(
                 coords,
                 size=self.render_size[i],
@@ -99,11 +137,9 @@ class DataToLayerInterface: #localization always with z # switch info with chann
             self.parent.channel[i].adjust_colormap_range()
             self.parent.channel[i].adjust_z_color_encoding_opacity()
             self.parent.channel[i].change_color_map()
-            # if np.min(self.list_of_datasets[i].values) != np.max(self.list_of_datasets[i].values):
-            #    self.list_of_datasets[i].layer.contrast_limits = (np.min(self.list_of_datasets[i].values),
-            #                                                        np.max(self.list_of_datasets[i].values))
             dataset.napari_layer_ref.shading = "gaussian"
             i+=1
+        #v.dims.ndisplay=3
         v.camera.angles = self.camera[2]
         v.camera.zoom = self.camera[0]
         v.camera.center = self.camera[1]
@@ -172,13 +208,12 @@ class DataToLayerInterface: #localization always with z # switch info with chann
     def set_render_values(self, dataset, channel_index=-1, create=False):
         """Update values, which are used to determine the rendered
         color and intensity of each localization"""
-
-        if (self.parent.render_gaussian_mode == 0):
+        if self.parent.render_gaussian_mode == 0:
             # Fixed gaussian mode
 
             tmp_values = np.ones(dataset.locs_active.size)
 
-        elif (self.parent.render_gaussian_mode == 1):
+        elif self.parent.render_gaussian_mode == 1:
             # Variable gaussian mode
 
             assert dataset.uncertainty_defined == True
@@ -279,7 +314,6 @@ class DataToLayerInterface: #localization always with z # switch info with chann
 
     def set_render_sigmas(self, dataset, channel_index=-1, create=False):
         """Update rendered sigma values"""
-        # print(f"Render sigmas gmode={self.parent.render_gaussian_mode}")
         if self.parent.render_gaussian_mode == 0:
             # Fixed gaussian mode
 
@@ -291,7 +325,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
 
             tmp_render_sigma_nm = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
 
-        elif (self.parent.render_gaussian_mode == 1):
+        elif self.parent.render_gaussian_mode == 1:
             # Variable gaussian mode
 
             if dataset.sigma_present:
@@ -307,6 +341,11 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     self.parent.render_var_gauss_sigma_min_xy_nm
                 sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
                     self.parent.render_var_gauss_sigma_min_z_nm
+
+                # leave out biggest 1 percent
+                sigma_x_nm[sigma_x_nm > np.percentile(sigma_x_nm, 99)] = np.percentile(sigma_x_nm,99)
+                sigma_y_nm[sigma_y_nm > np.percentile(sigma_y_nm, 99)] = np.percentile(sigma_y_nm, 99)
+                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
 
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_y_nm, sigma_x_nm], 0, 1)
 
@@ -324,6 +363,10 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
                     self.parent.render_var_gauss_sigma_min_z_nm
 
+                # leave out biggest 1 percent
+                sigma_xy_nm[sigma_xy_nm > np.percentile(sigma_xy_nm, 99)] = np.percentile(sigma_xy_nm, 99)
+                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
+
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
         tmp_render_sigma_norm = tmp_render_sigma_nm / np.max(tmp_render_sigma_nm)
 
@@ -335,21 +378,21 @@ class DataToLayerInterface: #localization always with z # switch info with chann
             self.render_sigma[channel_index] = tmp_render_sigma_norm
             self.render_size[channel_index] = 5 * np.max(tmp_render_sigma_nm)
 
-
     def get_coords_from_locs(self, dataset):
         """Calculating Particle Coordinates from Locs"""
         if dataset.zdim_present:
             num_of_locs = len(dataset.locs.x_pos_pixels)
             coords = np.zeros([num_of_locs, 3])
-            coords[:, 0] = dataset.locs.z_pos_pixels * dataset.pixelsize_nm
-            coords[:, 1] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm
-            coords[:, 2] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm
+            coords[:, 0] = dataset.locs.z_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[0]
+            coords[:, 1] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[1]
+            coords[:, 2] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[2]
 
         else:
             num_of_locs = len(dataset.locs.x_pos_pixels)
-            coords = np.zeros([num_of_locs, 2])
-            coords[:, 0] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm
-            coords[:, 1] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm
+            coords = np.zeros([num_of_locs, 3])
+            coords[:, 1] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm + self.offset_nm_2d[0]
+            coords[:, 2] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm + self.offset_nm_2d[1]
+            coords[:, 0] = np.ones(num_of_locs)
         return coords
 
     def scalebar(self):

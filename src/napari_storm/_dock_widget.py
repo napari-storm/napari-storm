@@ -347,6 +347,7 @@ class napari_storm(QWidget):
         self.Srender_rangez.reset()
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
+            self.move_camera_center_to_render_range_center()
 
     def update_render_range(self, slider_type, values):
         if slider_type == 'x':
@@ -355,6 +356,20 @@ class napari_storm(QWidget):
             self.render_range_y_percent = values
         else:
             self.render_range_z_percent = values
+        self.move_camera_center_to_render_range_center()
+
+    def move_camera_center_to_render_range_center(self):
+        tmp_x_center_nm = self.data_to_layer_itf.render_range_x[1] * (
+                    self.render_range_x_percent[0] / 100 + 0.5 * self.render_range_x_percent[1] / 100
+                    - 0.5 * self.render_range_x_percent[0] / 100)
+        tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
+                    self.render_range_y_percent[0] / 100 + 0.5 * self.render_range_y_percent[1] / 100
+                    - 0.5 * self.render_range_y_percent[0] / 100)
+        tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
+                    self.render_range_z_percent[0] / 100 + 0.5 * self.render_range_z_percent[1] / 100
+                    - 0.5 * self.render_range_z_percent[0] / 100)
+        self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+        self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
 
     #### D and D
     def dragEnterEvent(self, event):
@@ -435,7 +450,7 @@ class napari_storm(QWidget):
             self.Baxis_xz.show()
             self.Baxis_yz.show()
             self.Lresetview.show()
-            if self.z_color_encoding_mode ==0:
+            if self.z_color_encoding_mode == 0:
                 self.Bz_color_coding.show()
             self.Brenderoptions.show()
             self.Lrenderoptions.show()
@@ -443,14 +458,12 @@ class napari_storm(QWidget):
             self.Lsigma_z.show()
             self.viewer.dims.ndisplay = 3
         else:
-            self.Lrenderoptions.hide()
-            self.Brenderoptions.hide()
-            self.Bz_color_coding.show()
             self.Lrangez.hide()
             self.Srender_rangez.hide()
             self.Esigma_z.hide()
             self.Lsigma_z.hide()
-            self.viewer.dims.ndisplay = 2
+            self.viewer.dims.ndisplay = 3
+
 
     def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controls"""
@@ -489,9 +502,10 @@ class napari_storm(QWidget):
             self.Bz_color_coding.hide()
             self.Bz_color_coding.setCheckState(False)
             self.Esigma_min_xy.show()
-            self.Esigma_min_z.show()
+            if self.zdim:
+                self.Esigma_min_z.show()
+                self.Lsigma_z_min.show()
             self.Lsigma_xy_min.show()
-            self.Lsigma_z_min.show()
 
         else:
             self.render_gaussian_mode = 0
@@ -513,13 +527,12 @@ class napari_storm(QWidget):
         v = napari.current_viewer()
         values = {}
         if type == 'XY':
-            v.camera.angles = (0, 0, 90)
+            v.camera.angles = (0, 0, -90)
         elif type == 'XZ':
             v.camera.angles = (0, 0, 180)
         else:
             v.camera.angles = (-90, -90, -90)
-        v.camera.center = self.localization_datasets[-1].camera_center[0]
-        v.camera.zoom = self.localization_datasets[-1].camera_center[1]
+        v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.update(values)
 
     def update_sigma(self):
@@ -536,11 +549,10 @@ class napari_storm(QWidget):
 
     def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None):
         self.show_avaiable_widgets()
-        if merge == False:
+        if not merge:
             self.clear_datasets()
+            self.data_to_layer_itf.reset_render_range_and_offset()
 
-        if self.n_datasets != 0 and not merge:
-            self.clear_dataset()
         datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
         if datasets[-1].zdim_present:
             self.zdim = True

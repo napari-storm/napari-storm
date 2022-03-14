@@ -34,23 +34,6 @@ class RangeSlider2(QDoubleRangeSlider):
     def parent(self):
         return self._parent
 
-    """
-        def mousePressEvent(self, event):
-        if self.value()[0] != self.backup[0]:
-            self.create_visual_feedback(0)
-        else:
-            self.create_visual_feedback(1)
-
-    def mouseMoveEvent(self, event):
-        if self.value()[0] != self.backup[0]:
-            self.update_visual_feedback(0)
-        else:
-            self.update_visual_feedback(1)
-        self.backup=self.value()
-
-    def mouseReleaseEvent(self, event):
-        self.remove_visual_feedback()
-    """
     def mouseReleaseEvent(self, event):
         self.backup = self.value()
         self.parent().update_render_range(self.type, self.getRange())
@@ -93,65 +76,28 @@ class RangeSlider2(QDoubleRangeSlider):
         self.created_feedback_layer = False
         DataToLayerInterface.update_layers(self.parent().data_to_layer_itf)
 
-    def calc_backup(self):
-        if self.parent().localization_datasets[-1].zdim_present:
-            x_backup = []
-            y_backup = []
-            z_backup = []
-            for data in self.parent().localization_datasets:
-                x_backup.append(np.max(data.locs_all.x_pos_pixels)-data.offset_pixels[0])
-                y_backup.append(np.max(data.locs_all.y_pos_pixels)-data.offset_pixels[1])
-                z_backup.append(np.max(data.locs_all.z_pos_pixels)-data.offset_pixels[2])
-            self.x_backup = np.max(x_backup)
-            self.y_backup = np.max(y_backup)
-            self.z_backup = np.max(z_backup)
-        else:
-            x_backup = []
-            y_backup = []
-            for data in self.parent().localization_datasets:
-                x_backup.append(np.max(data.locs_all.x_pos_pixels)-data.offset_pixels[0])
-                y_backup.append(np.max(data.locs_all.y_pos_pixels)-data.offset_pixels[1])
-            self.x_backup = np.max(x_backup)
-            self.y_backup = np.max(y_backup)
-
     def get_coords_faces(self, slider_type, create=False):
-        if self.parent().localization_datasets[-1].zdim_present:
-            # print("in",self.type)
-            x = []
-            y = []
-            z = []
-            if create:
-                self.calc_backup()
-            for data in self.parent().localization_datasets:
-                x.append(np.max(data.locs.x_pos_pixels))
-                y.append(np.max(data.locs.y_pos_pixels))
-                z.append(np.max(data.locs.z_pos_pixels))
-                x.append(np.min(data.locs.x_pos_pixels))
-                y.append(np.min(data.locs.y_pos_pixels))
-                z.append(np.min(data.locs.z_pos_pixels))
-            tmp = x
-            x = y
-            y = tmp
+        if self.parent().zdim:
+            rrx = self.parent().data_to_layer_itf.render_range_y
+            rry = self.parent().data_to_layer_itf.render_range_x
+            rrz = self.parent().data_to_layer_itf.render_range_z
             coords = []
             slider_1 = self.value()[0] / self.Range
             slider_2 = self.value()[1] / self.Range
             if self.type == "x":
-                x.append(self.x_backup)
-                for i in [np.max(z), np.min(z)]:
-                    for j in [np.max(y), np.min(y)]:
-                        for k in [slider_1 * np.max(x), slider_2 * np.max(x)]:
+                for i in [rrz[1], rrz[0]]:
+                    for j in [rry[1], rry[0]]:
+                        for k in [slider_1 * rrx[1], slider_2 * rrx[1]]:
                             coords.append([i, j, k])
             elif self.type == "y":
-                y.append(self.y_backup)
-                for i in [np.max(z), np.min(z)]:
-                    for j in [slider_1 * np.max(y), slider_2 * np.max(y)]:
-                        for k in [np.max(x), np.min(x)]:
+                for i in [rrz[1], rrz[0]]:
+                    for j in [slider_1 * rry[1], slider_2 * rry[1]]:
+                        for k in [rrx[1], rrx[0]]:
                             coords.append([i, j, k])
             else:
-                z.append(self.z_backup)
-                for i in [slider_1 * np.max(z), slider_2 * np.max(z)]:
-                    for j in [np.max(y), np.min(y)]:
-                        for k in [np.max(x), np.min(x)]:
+                for i in [slider_1 * rrz[1], slider_2 * rrz[1]]:
+                    for j in [rry[1], rry[0]]:
+                        for k in [rrx[1], rrx[0]]:
                             coords.append([i, j, k])
             faces = [
                 [1, 2, 5],
@@ -168,39 +114,25 @@ class RangeSlider2(QDoubleRangeSlider):
                 [1, 3, 4],
             ]
             return (
-                np.reshape(np.asarray(coords)+self.parent().localization_datasets[-1].offset_pixels[::-1], (8, 3))
-                * self.parent().localization_datasets[-1].pixelsize_nm,
+                np.reshape(np.asarray(coords), (8, 3)),
                 np.asarray(faces) - 1,
             )
         else:
-            x = []
-            y = []
-            if create:
-                self.calc_backup()
-            for data in self.parent().localization_datasets:
-                x.append(np.max(data.locs.x_pos_pixels))
-                y.append(np.max(data.locs.y_pos_pixels))
-                x.append(np.min(data.locs.x_pos_pixels))
-                y.append(np.min(data.locs.y_pos_pixels))
-            tmp = x
-            x = y
-            y = tmp
+            rrx = self.parent().data_to_layer_itf.render_range_y
+            rry = self.parent().data_to_layer_itf.render_range_x
             coords = []
             slider_1 = self.value()[0] / self.Range
             slider_2 = self.value()[1] / self.Range
             if self.type == "x":
-                x.append(self.x_backup)
-                for j in [np.max(y), np.min(y)]:
-                    for k in [slider_1 * np.max(x), slider_2 * np.max(x)]:
+                for j in [rry[1], rry[0]]:
+                    for k in [slider_1 * rrx[1], slider_2 * rrx[1]]:
                         coords.append([j, k])
             elif self.type == "y":
-                y.append(self.y_backup)
-                for j in [slider_1 * np.max(y), slider_2 * np.max(y)]:
-                    for k in [np.max(x), np.min(x)]:
+                for j in [slider_1 * rry[1], slider_2 * rry[1]]:
+                    for k in [rrx[1], rrx[0]]:
                         coords.append([j, k])
             faces = [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]
             return (
-                np.reshape(np.asarray(coords)+self.parent().localization_datasets[-1].offset_pixels[::-1], (4, 2))
-                * self.parent().localization_datasets[-1].pixelsize_nm,
+                np.reshape(np.asarray(coords), (4, 2)),
                 np.asarray(faces) - 1,
             )
