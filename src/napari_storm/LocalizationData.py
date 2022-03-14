@@ -14,7 +14,6 @@ class LocalizationData:
             locs,
             name=None,
             pixelsize_nm=None,
-            offset_pixels=None,
             zdim_present=False,
             sigma_present=False,
             photon_count_present=False,
@@ -29,11 +28,6 @@ class LocalizationData:
         if pixelsize_nm is None:
             pixelsize_nm = 100.0
 
-        if offset_pixels is None:
-            offset_pixels = np.zeros(3)
-        if len(offset_pixels) == 2:
-            offset_pixels = [offset_pixels[0], offset_pixels[1], 0]
-
         self._parent = parent
         self.napari_layer_ref = None
 
@@ -41,7 +35,6 @@ class LocalizationData:
         self.locs_active = locs
         self.locs_all = locs.copy()
         self.pixelsize_nm = pixelsize_nm
-        self.offset_pixels = offset_pixels
         self.zdim_present = zdim_present
         self.sigma_present = sigma_present
         self.photon_count_present = photon_count_present
@@ -91,9 +84,9 @@ class LocalizationData:
                         ('y_pos_pixels', 'f4'),
                         ('z_pos_pixels', 'f4')]
 
-        tmp_x = self.locs_all.x_pos_pixels + self.offset_pixels[0]
-        tmp_y = self.locs_all.y_pos_pixels + self.offset_pixels[1]
-        tmp_z = self.locs_all.z_pos_pixels + self.offset_pixels[2]
+        tmp_x = self.locs_all.x_pos_pixels
+        tmp_y = self.locs_all.y_pos_pixels
+        tmp_z = self.locs_all.z_pos_pixels
 
         tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
         tmp_records.x_pos_pixels = tmp_y
@@ -110,9 +103,9 @@ class LocalizationData:
                         ('y_pos_pixels', 'f4'),
                         ('z_pos_pixels', 'f4')]
 
-        tmp_x = self.locs_active.x_pos_pixels + self.offset_pixels[0]
-        tmp_y = self.locs_active.y_pos_pixels + self.offset_pixels[1]
-        tmp_z = self.locs_active.z_pos_pixels + self.offset_pixels[2]
+        tmp_x = self.locs_active.x_pos_pixels
+        tmp_y = self.locs_active.y_pos_pixels
+        tmp_z = self.locs_active.z_pos_pixels
 
         tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
         tmp_records.x_pos_pixels = tmp_y

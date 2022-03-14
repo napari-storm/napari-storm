@@ -107,21 +107,14 @@ class FileToLocalizationDataInterface:
 
             filename is typically file_path.split('/')[-1] (= Filepath without the path)
 
-            Next you want to check if you have a (negative) offset in your data using the provided
-            look_for_offset function:
-
-            offset =  self.look_for_offset(locs_rec_array,zdim_present)
-
-            , where zdim_present should be set to True when you provided Z-postions, otherwise False
-
             Next you need to return the gathered infos, while also providing information on pixelsize,
             if z positions are present (zdim_present = True/False),
             if uncertainty values are present (sigma_present = True/False)
             if intensity values are present (photon_count_present = True/False):
 
              return [LocalizationData(locs=locs_rec_array, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
-                                 sigma_present=sigma_present, photon_count_present=photon_count_present,
+                                 zdim_present=zdim, sigma_present=sigma_present,
+                                 photon_count_present=photon_count_present,
                                  parent=self.parent)]
 
             If you are sure your function is working, as a last step go into the
@@ -134,14 +127,6 @@ class FileToLocalizationDataInterface:
              and replace self.load_csv with self.your_custom_import_function
         """
 
-    def look_for_offset(self, locs, zdim):
-        if zdim:  # remove negative values without having an offset between channels
-            offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels), -np.min(locs.z_pos_pixels)]
-        else:
-            offset = [-np.min(locs.x_pos_pixels), -np.min(locs.y_pos_pixels)]
-
-        # print(f"offset = {offset}")
-        return offset
 
     def check_namespace(self, name, idx=1):
         # print("checking the namespace:",name)
@@ -219,11 +204,10 @@ class FileToLocalizationDataInterface:
             uncertainty_z_pixels,
             intensity_photons,)
             , dtype=LOCS_DTYPE)
-        offset = self.look_for_offset(locs, zdim)
         filename = self.check_namespace( filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
+                                 zdim_present=zdim,
                                  sigma_present=sigma_present, photon_count_present=photon_count_present,
                                  parent=self.parent)]
 
@@ -252,66 +236,19 @@ class FileToLocalizationDataInterface:
             data["PHOTONS"],)
             , dtype=LOCS_DTYPE)
         num_channel = max(data["CHANNEL"]) + 1
-        offset = self.look_for_offset(locs, zdim)
         list_of_datasets=[]
         for i in range(num_channel):
             filename_pluschannel = self.check_namespace( filename + f" Channel {i + 1}")
             self.dataset_names.append(filename_pluschannel)
             locs_in_ch = locs[data["CHANNEL"] == i]
             list_of_datasets.append(LocalizationData(locs=locs_in_ch, name=filename_pluschannel, pixelsize_nm=pixelsize,
-                                                     offset_pixels=offset, zdim_present=zdim,
+                                                     zdim_present=zdim,
                                                      sigma_present=False, photon_count_present=True, parent=self.parent))
         return list_of_datasets
 
     def load_mfx_json(self, file_path):
         """Loads MFX Data from json files -> Needs to be redone when a working example file is present """
-        LOCS_DTYPE_2D = [("frame", "f4"), ("x", "f4"), ("y", "f4"), ("photons", "f4")]
-        LOCS_DTYPE_3D = [
-            ("frame", "f4"),
-            ("x", "f4"),
-            ("y", "f4"),
-            ("z", "f4"),
-            ("photons", "f4"),
-        ]
-        filename = file_path.split("/")[-1]
-        with open(file_path) as f:
-            raw_data = json.load(f)
-        f.close()
-        locsx = []
-        locsy = []
-        try:
-            raw_data[0]["itr"][-1]["loc"][2]
-            zdim = True
-            locsz = []
-            for i in range(len(raw_data)):
-                if raw_data["vld"][i]:
-                    locsz.append((raw_data[i]["itr"][-1]["loc"][2]) * 1e9)
-                    locsx.append((raw_data[i]["itr"][-1]["loc"][0]) * 1e9)
-                    locsy.append((raw_data[i]["itr"][-1]["loc"][1]) * 1e9)
-                    frames = np.ones(len(locsx))
-                    photons = 1000 * np.ones(len(locsx))
-                    pixelsize = 1
-                    locs = np.rec.array(
-                        (frames, locsx, locsy, locsz, photons),
-                        dtype=LOCS_DTYPE_3D,
-                    )
-        except:
-            zdim = False
-            for i in range(len(raw_data)):
-                if raw_data["vld"][i]:
-                    locsx.append((raw_data[i]["itr"][-1]["loc"][0]) * 1e9)
-                    locsy.append((raw_data[i]["itr"][-1]["loc"][1]) * 1e9)
-            frames = np.ones(len(locsx))
-            photons = 1000 * np.ones(len(locsx))
-            pixelsize = 1
-            locs = np.rec.array(
-                (frames, locsx, locsy, photons),
-                dtype=LOCS_DTYPE_2D,
-            )
-        offset = self.look_for_offset(locs, zdim)
-        filename = self.check_namespace( filename)
-
-        return locs,zdim,pixelsize,filename,offset
+        pass
 
     def load_mfx_npy(self, file_path):
         """Loads MFX Data from numpy (.npy) files"""
@@ -353,11 +290,10 @@ class FileToLocalizationDataInterface:
                 (frames, locsx, locsy, locsz,np.ones(len(locsx)),np.ones(len(locsx)),np.ones(len(locsx)), photons),
                 dtype=LOCS_DTYPE,
             )
-        offset = self.look_for_offset(locs, zdim)
         filename = self.check_namespace( filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
+                                 zdim_present=zdim,
                                  sigma_present=False, photon_count_present=True, parent=self.parent)]
 
     def load_csv(self, file_path):
@@ -458,11 +394,10 @@ class FileToLocalizationDataInterface:
             ),
             dtype=LOCS_DTYPE,
         )
-        offset = self.look_for_offset(locs, zdim)
         filename = self.check_namespace( filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
+                                 zdim_present=zdim,
                                  sigma_present=sigma_present, photon_count_present=photon_count_present,
                                  parent=self.parent)]
 
@@ -605,11 +540,10 @@ class FileToLocalizationDataInterface:
             ),
             dtype=LOCS_DTYPE,
         )
-        offset = self.look_for_offset(locs, zdim)
         filename = self.check_namespace( filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
+                                 zdim_present=zdim,
                                  sigma_present=False, photon_count_present=True, parent=self.parent)]
 
     ##### Lowest Order functions
@@ -634,9 +568,8 @@ class FileToLocalizationDataInterface:
         pixelsize = 100
         filename = self.check_namespace("a.tester")
         self.dataset_names.append(filename)
-        offset = self.look_for_offset(locs=locs, zdim=zdim)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
-                                 offset_pixels=offset, zdim_present=zdim,
+                                 zdim_present=zdim,
                                  sigma_present=False, photon_count_present=True, parent=self.parent)]
 
 
