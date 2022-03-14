@@ -347,6 +347,7 @@ class napari_storm(QWidget):
         self.Srender_rangez.reset()
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
+            self.move_camera_center_to_render_range_center()
 
     def update_render_range(self, slider_type, values):
         if slider_type == 'x':
@@ -355,6 +356,20 @@ class napari_storm(QWidget):
             self.render_range_y_percent = values
         else:
             self.render_range_z_percent = values
+        self.move_camera_center_to_render_range_center()
+
+    def move_camera_center_to_render_range_center(self):
+        tmp_x_center_nm = self.data_to_layer_itf.render_range_x[1] * (
+                    self.render_range_x_percent[0] / 100 + 0.5 * self.render_range_x_percent[1] / 100
+                    - 0.5 * self.render_range_x_percent[0] / 100)
+        tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
+                    self.render_range_y_percent[0] / 100 + 0.5 * self.render_range_y_percent[1] / 100
+                    - 0.5 * self.render_range_y_percent[0] / 100)
+        tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
+                    self.render_range_z_percent[0] / 100 + 0.5 * self.render_range_z_percent[1] / 100
+                    - 0.5 * self.render_range_z_percent[0] / 100)
+        self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+        self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
 
     #### D and D
     def dragEnterEvent(self, event):
@@ -512,13 +527,12 @@ class napari_storm(QWidget):
         v = napari.current_viewer()
         values = {}
         if type == 'XY':
-            v.camera.angles = (0, 0, 90)
+            v.camera.angles = (0, 0, -90)
         elif type == 'XZ':
             v.camera.angles = (0, 0, 180)
         else:
             v.camera.angles = (-90, -90, -90)
-        v.camera.center = self.localization_datasets[-1].camera_center[0]
-        v.camera.zoom = self.localization_datasets[-1].camera_center[1]
+        v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.update(values)
 
     def update_sigma(self):

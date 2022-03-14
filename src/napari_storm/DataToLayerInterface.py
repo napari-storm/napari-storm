@@ -31,6 +31,8 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         self.offset_nm_3d = [0, 0, 0]
         self.offset_nm_2d = [0, 0]
 
+        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
+
     @property
     def parent(self):
         return self._parent
@@ -54,7 +56,6 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         else:
             self.render_range_x[1] = max(np.max(coords[:, 0]), self.render_range_x[1])
             self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
-
 
     def set_offset(self, dataset):
         if dataset.zdim_present:
@@ -105,12 +106,9 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         dataset.napari_layer_ref.add_to_viewer(self.viewer)
         self.viewer.camera.perspective = 50
         dataset.napari_layer_ref.shading = 'gaussian'
+        self.viewer.camera.angles=(0, 0, -90)
+        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
 
-        dataset.camera_center = [
-            self.viewer.camera.center,
-            self.viewer.camera.zoom,
-            self.viewer.camera.angles,
-        ]
 
         # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
 
