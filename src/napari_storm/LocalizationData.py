@@ -38,7 +38,6 @@ class LocalizationData:
         self.napari_layer_ref = None
 
         self.name = name
-
         self.locs_active = locs
         self.locs_all = locs.copy()
         self.pixelsize_nm = pixelsize_nm

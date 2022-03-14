@@ -193,31 +193,30 @@ class FileToLocalizationDataInterface:
         photon_count_present = False
 
         try:
-            uncertainty_x_nm = locs.lpx
-            uncertainty_y_nm = locs.lpy
+            uncertainty_x_pixels = locs.lpx
+            uncertainty_y_pixels = locs.lpy
             sigma_present = True
         except AttributeError:
-            uncertainty_x_nm = np.ones(len(locs.x))
-            uncertainty_y_nm = np.ones(len(locs.x))
+            uncertainty_x_pixels = np.ones(len(locs.x))
+            uncertainty_y_pixels = np.ones(len(locs.x))
         try:
-            uncertainty_z_nm = locs.lpx
+            uncertainty_z_pixels = locs.lpz
         except AttributeError:
-            uncertainty_z_nm = 2*np.sqrt(locs.lpx**2+locs.lpy**2)
+            uncertainty_z_pixels = 2*np.sqrt(locs.lpx**2+locs.lpy**2)
 
         try:
             intensity_photons = locs.photons
             photon_count_present = True
         except AttributeError:
             intensity_photons = np.ones(len(locs.x))
-
         locs = np.rec.array(
         (   locs.frame,
             locs.x,
             locs.y,
             locs.z,
-            uncertainty_x_nm,
-            uncertainty_y_nm,
-            uncertainty_z_nm,
+            uncertainty_x_pixels,
+            uncertainty_y_pixels,
+            uncertainty_z_pixels,
             intensity_photons,)
             , dtype=LOCS_DTYPE)
         offset = self.look_for_offset(locs, zdim)

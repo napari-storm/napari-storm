@@ -344,6 +344,11 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
                     self.parent.render_var_gauss_sigma_min_z_nm
 
+                # leave out biggest 1 percent
+                sigma_x_nm[sigma_x_nm > np.percentile(sigma_x_nm, 99)] = np.percentile(sigma_x_nm,99)
+                sigma_y_nm[sigma_y_nm > np.percentile(sigma_y_nm, 99)] = np.percentile(sigma_y_nm, 99)
+                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
+
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_y_nm, sigma_x_nm], 0, 1)
 
             else:
@@ -359,6 +364,10 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     self.parent.render_var_gauss_sigma_min_xy_nm
                 sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
                     self.parent.render_var_gauss_sigma_min_z_nm
+
+                # leave out biggest 1 percent
+                sigma_xy_nm[sigma_xy_nm > np.percentile(sigma_xy_nm, 99)] = np.percentile(sigma_xy_nm, 99)
+                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
 
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
         tmp_render_sigma_norm = tmp_render_sigma_nm / np.max(tmp_render_sigma_nm)

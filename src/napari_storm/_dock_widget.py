@@ -435,7 +435,7 @@ class napari_storm(QWidget):
             self.Baxis_xz.show()
             self.Baxis_yz.show()
             self.Lresetview.show()
-            if self.z_color_encoding_mode ==0:
+            if self.z_color_encoding_mode == 0:
                 self.Bz_color_coding.show()
             self.Brenderoptions.show()
             self.Lrenderoptions.show()
