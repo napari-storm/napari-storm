@@ -255,7 +255,7 @@ class napari_storm(QWidget):
         return self._data_to_layer_itf
 
     @data_to_layer_itf.setter
-    def data_to_layer_itf(self,value):
+    def data_to_layer_itf(self, value):
         raise StaticAttributeError('the dataset to layer interface should never be changed')
 
     @property
@@ -263,7 +263,7 @@ class napari_storm(QWidget):
         return self._file_to_itf
 
     @file_to_data_itf.setter
-    def file_to_data_itf(self,value):
+    def file_to_data_itf(self, value):
         raise StaticAttributeError('the file to dataset interface should never be changed')
 
     @property
@@ -338,7 +338,7 @@ class napari_storm(QWidget):
         self.reset_render_range(full_reset=True)
         self.Lnumberoflocs.clear()
         self.Bz_color_coding.setCheckState(False)
-        self._zdim=None
+        self._zdim = None
 
     def reset_render_range(self, full_reset=False):
         v = napari.current_viewer()
@@ -359,17 +359,20 @@ class napari_storm(QWidget):
         self.move_camera_center_to_render_range_center()
 
     def move_camera_center_to_render_range_center(self):
-        tmp_x_center_nm = self.data_to_layer_itf.render_range_x[1] * (
+        if not (self.data_to_layer_itf.render_range_x[1] == -np.inf
+                or self.data_to_layer_itf.render_range_y[1] == -np.inf
+                or self.data_to_layer_itf.render_range_z[1] == -np.inf):
+            tmp_x_center_nm = self.data_to_layer_itf.render_range_x[1] * (
                     self.render_range_x_percent[0] / 100 + 0.5 * self.render_range_x_percent[1] / 100
                     - 0.5 * self.render_range_x_percent[0] / 100)
-        tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
+            tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
                     self.render_range_y_percent[0] / 100 + 0.5 * self.render_range_y_percent[1] / 100
                     - 0.5 * self.render_range_y_percent[0] / 100)
-        tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
+            tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
                     self.render_range_z_percent[0] / 100 + 0.5 * self.render_range_z_percent[1] / 100
                     - 0.5 * self.render_range_z_percent[0] / 100)
-        self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
-        self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+            self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+            self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
 
     #### D and D
     def dragEnterEvent(self, event):
@@ -464,7 +467,6 @@ class napari_storm(QWidget):
             self.Lsigma_z.hide()
             self.viewer.dims.ndisplay = 3
 
-
     def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controls"""
         self.channel.append(
@@ -538,11 +540,11 @@ class napari_storm(QWidget):
     def update_sigma(self):
         if self.render_gaussian_mode == 0:
             # fixed gaussian
-            self.render_fixed_gauss_sigma_xy_nm = float(self.Esigma_xy.text())/2.354
-            self.render_fixed_gauss_sigma_z_nm = float(self.Esigma_z.text())/2.354
+            self.render_fixed_gauss_sigma_xy_nm = float(self.Esigma_xy.text()) / 2.354
+            self.render_fixed_gauss_sigma_z_nm = float(self.Esigma_z.text()) / 2.354
         else:
-            self.render_var_gauss_PSF_sigma_xy_nm = float(self.Esigma_xy.text())/2.354
-            self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text())/2.354
+            self.render_var_gauss_PSF_sigma_xy_nm = float(self.Esigma_xy.text()) / 2.354
+            self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text()) / 2.354
             self.render_var_gauss_sigma_min_xy_nm = float(self.Esigma_min_xy.text()) / 2.354
             self.render_var_gauss_sigma_min_z_nm = float(self.Esigma_min_z.text()) / 2.354
         self.data_to_layer_itf.update_layers()
@@ -563,7 +565,7 @@ class napari_storm(QWidget):
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
 
-    def get_dataset_from_test_mode(self,datasets):
+    def get_dataset_from_test_mode(self, datasets):
         self.show_avaiable_widgets()
         self.clear_datasets()
         if datasets[-1].zdim_present:

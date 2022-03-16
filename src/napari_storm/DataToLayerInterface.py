@@ -6,7 +6,7 @@ from .CustomErrors import *
 
 
 class DataToLayerInterface: #localization always with z # switch info with channel controlls #
-    def __init__(self, parent, viewer,surface_layer=None):
+    def __init__(self, parent, viewer, surface_layer=None):
 
         # assert isinstance(parent, napari_storm) == True
         self._parent = parent
@@ -25,7 +25,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         #self.render_colormap = []
         self.render_anti_alias = 0
 
-        self.render_range_x = [0, -np.inf]
+        self.render_range_x = [0, -np.inf]  # the -np.inf causes the runtime warning, why ?
         self.render_range_y = [0, -np.inf]
         self.render_range_z = [0, -np.inf]
         self.offset_nm_3d = [0, 0, 0]
