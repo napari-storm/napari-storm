@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QTabWidget,
     QFormLayout,
+    QSlider
 )
 
 from PyQt5 import QtCore
@@ -24,6 +25,7 @@ from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .ChannelControls import ChannelControls
 from .CustomErrors import *
+from .GridPlaneSlider import *
 
 
 class napari_storm(QWidget):
@@ -51,6 +53,8 @@ class napari_storm(QWidget):
                                       'Variable-size gaussian']
 
         self._z_color_encoding_mode = False
+        self._grid_plane_enabled = False
+
         self.render_fixed_gauss_sigma_xy_nm = 20 / 2.354
         self.render_fixed_gauss_sigma_z_nm = 20 / 2.354
         self.render_var_gauss_PSF_sigma_xy_nm = 300 / 2.354
@@ -72,9 +76,11 @@ class napari_storm(QWidget):
         self.tabs = QTabWidget()
         self.data_control_tab = QWidget()
         self.infos_tab = QWidget()
+        self.decorator_tab = QWidget()
 
         self.tabs.addTab(self.data_control_tab, 'Data Controls')
         self.tabs.addTab(self.infos_tab, 'File Infos')
+        self.tabs.addTab(self.decorator_tab, 'Decorators')
 
         self.data_controls_tab_layout = QGridLayout()
 
@@ -223,12 +229,13 @@ class napari_storm(QWidget):
         self.Bstarttestmode.clicked.connect(self.start_test_mode)
         self.data_controls_tab_layout.addWidget(self.Bstarttestmode, 0, 2, 1, 1)
 
-        # visual_control_tab
+        # visual_controls
         self.channel_controls_widget_layout = QFormLayout()
         self.channel_controls_placeholder = QWidget()
         self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 17, 0, 1, 4)
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
+        # infos tab
         self.infos_tab_layout = QGridLayout()
         self.Lnumberoflocs = TestListView(parent=self)
         self.Lnumberoflocs.addItem(
@@ -238,6 +245,48 @@ class napari_storm(QWidget):
         self.Lnumberoflocs.itemDoubleClicked.connect(self.Lnumberoflocs.remove_dataset)
         self.infos_tab_layout.addWidget(self.Lnumberoflocs, 0, 0)
 
+        # Decorators tab
+        self.decorator_tab_layout = QGridLayout()
+
+        self.Cgrid_plane = QCheckBox()
+        self.Cgrid_plane.setText("Grid plane activated?")
+        self.Cgrid_plane.stateChanged.connect(self.grid_plane)
+        self.decorator_tab_layout.addWidget(self.Cgrid_plane, 0, 0)
+
+        self.Lgrid_line_distance = QLabel()
+        self.Lgrid_line_distance.setText("Grid line distance [µm]:")
+        self.decorator_tab_layout.addWidget(self.Lgrid_line_distance, 1, 0)
+
+        self.Egrid_line_distance = QLineEdit()
+        self.Egrid_line_distance.setText("1")
+        self.Egrid_line_distance.textChanged.connect(lambda: self._start_typing_timer(self.typing_timer_grid))
+        self.decorator_tab_layout.addWidget(self.Egrid_line_distance, 1, 1)
+
+        self.typing_timer_grid = QtCore.QTimer()
+        self.typing_timer_grid.setSingleShot(True)
+        self.typing_timer_grid.timeout.connect(
+            lambda: self.data_to_layer_itf.update_grid_plane(
+                line_distance_nm=float(self.Egrid_line_distance.text())*1000))
+
+        self.Lgrid_line_thickness = QLabel()
+        self.Lgrid_line_thickness.setText("Grid line thickness:")
+        self.decorator_tab_layout.addWidget(self.Lgrid_line_thickness, 2, 0)
+
+        self.Sgrid_line_thickness = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
+                                                    type_of_slider='line_thickness', init_range=(1, 100),
+                                                    init_value=50)
+        self.decorator_tab_layout.addWidget(self.Sgrid_line_thickness, 2, 1)
+
+        self.Lgrid_z_pos = QLabel()
+        self.Lgrid_z_pos.setText("Z Pos:")
+        self.decorator_tab_layout.addWidget(self.Lgrid_z_pos, 3, 0)
+
+        self.Sgrid_z_pos = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
+                                           type_of_slider='z_pos', init_range=(0, 100),
+                                           init_value=50)
+        self.decorator_tab_layout.addWidget(self.Sgrid_z_pos, 3, 1)
+
+        self.decorator_tab.setLayout(self.decorator_tab_layout)
         self.layout = QGridLayout()
         self.layout.addWidget(self.tabs)
         self.setLayout(self.layout)
@@ -249,6 +298,18 @@ class napari_storm(QWidget):
         custom_keys_and_scalebar(self)
         self.hide_non_available_widgets()
         self.hide_testing_mode()
+
+    @property
+    def grid_plane_enabled(self):
+        return self._grid_plane_enabled
+
+    @grid_plane_enabled.setter
+    def grid_plane_enabled(self, value):
+        if value == 1 or value == 0:
+            self._grid_plane_enabled = value
+            self.data_to_layer_itf.create_remove_grid_plane_state(value)
+        else:
+            raise ValueError(f"Grid Plane can only be enabled or disabled not {value} of type {type(value)}")
 
     @property
     def data_to_layer_itf(self):
@@ -275,7 +336,7 @@ class napari_storm(QWidget):
         if value == 0 or value == 1:
             self._render_gaussian_mode = value
         else:
-            raise ValueError('Wrong value for gaussian render mode')
+            raise ValueError(f"Wrong value for gaussian render mode, either 0 or 1 not {value} of type {type(value)}")
 
     @property
     def z_color_encoding_mode(self):
@@ -286,7 +347,7 @@ class napari_storm(QWidget):
         if value == 0 or value == 1:
             self._z_color_encoding_mode = value
         else:
-            raise ValueError('Wrong value for Z Colorcoding')
+            raise ValueError(f"Wrong value for Z colorcoding, either 0 or 1 not {value} of type {type(value)}")
 
     @property
     def zdim(self):
@@ -296,12 +357,31 @@ class napari_storm(QWidget):
     def zdim(self, bool):
         """3D or 2D Mode"""
         if not type(bool) == type(True):
-            raise ValueError('Zdim present can either be true or false')
+            raise ValueError(f"Zdim present can either be true or false not {bool} of type {type(bool)}")
         if (self.zdim == True and bool == False) or (self.zdim == False and bool == True):
             raise DimensionError('Error while merging, combination of 2D and 3D datasets not possible')
         else:
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
+
+    def grid_plane(self):
+        if self.Cgrid_plane.isChecked():
+            self.Lgrid_line_thickness.show()
+            self.Lgrid_line_distance.show()
+            self.Lgrid_z_pos.show()
+            self.Egrid_line_distance.show()
+            self.Sgrid_line_thickness.show()
+            self.Sgrid_z_pos.show()
+            self.grid_plane_enabled = 1
+
+        else:
+            self.Lgrid_line_thickness.hide()
+            self.Lgrid_line_distance.hide()
+            self.Lgrid_z_pos.hide()
+            self.Egrid_line_distance.hide()
+            self.Sgrid_line_thickness.hide()
+            self.Sgrid_z_pos.hide()
+            self.grid_plane_enabled = 0
 
     def hide_testing_mode(self):
         if not self.testing_mode_enabled:
@@ -428,6 +508,12 @@ class napari_storm(QWidget):
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
         self.Breset_render_range.hide()
+        self.Lgrid_line_thickness.hide()
+        self.Lgrid_line_distance.hide()
+        self.Lgrid_z_pos.hide()
+        self.Egrid_line_distance.hide()
+        self.Sgrid_line_thickness.hide()
+        self.Sgrid_z_pos.hide()
 
     def show_avaiable_widgets(self):
         """Show the Controls usable atm"""
