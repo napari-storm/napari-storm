@@ -81,15 +81,15 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 self.offset_nm_2d[1] = np.max([self.offset_nm_2d[1],
                                                -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm])
 
-
-
-
-    def create_new_layer(self, dataset, aas=0, layer_name='SMLM Data', idx=-1):
+    def create_new_layer(self, dataset, merge=False, layer_name='SMLM Data', idx=-1):
         """Creating a Particle Layer"""
         self.n_layers += 1
         self.set_offset(dataset)
         coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_range(coords=coords, zdim=dataset.zdim_present)
+        if merge:
+            dataset.update_locs()
+            coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_sigmas(dataset=dataset, create=True)
         self.set_render_values(dataset=dataset, create=True)
         dataset.napari_layer_ref = Particles(

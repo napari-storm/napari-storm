@@ -561,7 +561,7 @@ class napari_storm(QWidget):
         for i in range(len(datasets)):
             self.localization_datasets.append(datasets[i])
             self.n_datasets += 1
-            self.create_layer(self.localization_datasets[-1], idx=i)
+            self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
 
     def get_dataset_from_test_mode(self,datasets):
         self.show_avaiable_widgets()
@@ -575,11 +575,11 @@ class napari_storm(QWidget):
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i)
 
-    def create_layer(self, dataset, idx=-1):
+    def create_layer(self, dataset, idx=-1, merge=False):
         self.adjust_available_options_to_data_dimension()
         self.Lnumberoflocs.show_infos(filename=dataset.name, idx=idx)
         self.localization_datasets[idx].update_locs()
-        self.data_to_layer_itf.create_new_layer(dataset, layer_name=dataset.name, idx=idx)
+        self.data_to_layer_itf.create_new_layer(dataset, layer_name=dataset.name, idx=idx, merge=merge)
         self.add_channel(name=dataset.name)
         self.channel[-1].change_color_map()
         self.channel[-1].adjust_colormap_range()
