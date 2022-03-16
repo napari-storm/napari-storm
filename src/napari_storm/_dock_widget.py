@@ -79,8 +79,6 @@ class napari_storm(QWidget):
         self.decorator_tab = QWidget()
 
         self.tabs.addTab(self.data_control_tab, 'Data Controls')
-        self.tabs.addTab(self.infos_tab, 'File Infos')
-        self.tabs.addTab(self.decorator_tab, 'Decorators')
 
         self.data_controls_tab_layout = QGridLayout()
 
@@ -425,6 +423,8 @@ class napari_storm(QWidget):
         self.Srender_rangex.reset()
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
+        if self.Cgrid_plane.isChecked():
+            self.Cgrid_plane.stateChanged(False)
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
             self.move_camera_center_to_render_range_center()
@@ -436,6 +436,8 @@ class napari_storm(QWidget):
             self.render_range_y_percent = values
         else:
             self.render_range_z_percent = values
+        if self.Cgrid_plane.isChecked():
+            self.Cgrid_plane.stateChanged(False)
         self.move_camera_center_to_render_range_center()
 
     def move_camera_center_to_render_range_center(self):
@@ -514,6 +516,7 @@ class napari_storm(QWidget):
         self.Egrid_line_distance.hide()
         self.Sgrid_line_thickness.hide()
         self.Sgrid_z_pos.hide()
+        self.Cgrid_plane.hide()
 
     def show_avaiable_widgets(self):
         """Show the Controls usable atm"""
@@ -530,6 +533,9 @@ class napari_storm(QWidget):
         self.Esigma_z.show()
         self.Bmerge_with_additional_file.show()
         self.Breset_render_range.show()
+        self.Cgrid_plane.show()
+        self.tabs.addTab(self.infos_tab, 'File Infos')
+        self.tabs.addTab(self.decorator_tab, 'Decorators')
 
     def adjust_available_options_to_data_dimension(self):
         if self.zdim:

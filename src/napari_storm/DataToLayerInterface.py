@@ -54,15 +54,13 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             vectors_x[:, 1, 1] = (self.render_range_y[1] - self.render_range_y[0])
-            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) / num_of_lines_x * (
-                    self.render_range_x[1] - self.render_range_x[0])
+            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0]
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * self.render_range_y[0]
             vectors_x[:, 0, 0] = np.ones(num_of_lines_x + 1) * z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_x[1] - self.render_range_x[0])
-            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) / num_of_lines_y * (
-                    self.render_range_y[1] - self.render_range_y[0])
+            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_y[0]
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * self.render_range_x[0]
             vectors_y[:, 0, 0] = np.ones(num_of_lines_y + 1) * z
 
@@ -82,15 +80,13 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             vectors_x[:, 1, 1] = (self.render_range_y[1] - self.render_range_y[0])
-            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) / num_of_lines_x * (
-                    self.render_range_x[1] - self.render_range_x[0])
+            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * line_distance_nm + self.render_range_x[0]
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * self.render_range_y[0]
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_x[1] - self.render_range_x[0])
-            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) / num_of_lines_y * (
-                    self.render_range_y[1] - self.render_range_y[0])
+            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * line_distance_nm + self.render_range_y[0]
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * self.render_range_x[0]
             vectors_y[:, 0, 0] = z
 
@@ -102,7 +98,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors[:, 0, 0] = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
             self.grid_plane_layer.data = vectors
         if line_thickness:
-            self.grid_plane_layer.edge_width = 0.05*np.exp(line_thickness/10-5) / len(self.grid_plane_layer.data[:, 0, 0]) / 2 \
+            self.grid_plane_layer.edge_width = 0.05 * np.exp(line_thickness / 10 - 5) / len(
+                self.grid_plane_layer.data[:, 0, 0]) / 2 \
                                                * np.mean((self.render_range_x[1] - self.render_range_x[0],
                                                           self.render_range_y[1] - self.render_range_y[0]))
 
