@@ -529,9 +529,9 @@ class napari_storm(QWidget):
         if type == 'XY':
             v.camera.angles = (0, 0, -90)
         elif type == 'XZ':
-            v.camera.angles = (0, 0, 180)
+            v.camera.angles = (180, 180, -180)
         else:
-            v.camera.angles = (-90, -90, -90)
+            v.camera.angles = (0, 90, 0)
         v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.update(values)
 
