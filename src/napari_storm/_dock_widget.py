@@ -1,3 +1,4 @@
+from PyQt5.QtGui import QFont
 from napari_plugin_engine import napari_hook_implementation
 
 from qtpy.QtWidgets import (
@@ -25,7 +26,7 @@ from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .ChannelControls import ChannelControls
 from .CustomErrors import *
-from .GridPlaneSlider import *
+from .CustomSliders import *
 from .PyQTvisuals import *
 from .ns_constants import *
 
@@ -59,6 +60,11 @@ class napari_storm(QWidget):
         self._grid_plane_enabled = False
         self.grid_plane_line_distance_um = 1
         self.grid_plane_standard_color_index = 0
+        self.possible_grid_plane_orientations = ["XY", "YZ", "XZ"]
+        self.active_grid_plane_orientation = self.possible_grid_plane_orientations[0]
+
+        self.active_render_range_box_color = standard_colormaps[0]
+        self.render_range_box_opacity = 0.25
 
         self.render_fixed_gauss_sigma_xy_nm = 20 / 2.354
         self.render_fixed_gauss_sigma_z_nm = 20 / 2.354
@@ -257,6 +263,11 @@ class napari_storm(QWidget):
         # Decorators tab
         self.decorator_tab_layout = QFormLayout()
 
+        self.Lgrid_plane = QLabel()
+        self.Lgrid_plane.setText("Grid Plane")
+        self.Lgrid_plane.setFont(QFont('Arial', 10))
+        self.decorator_tab_layout.addRow(self.Lgrid_plane)
+
         self.Cgrid_plane = QCheckBox()
         self.Cgrid_plane.stateChanged.connect(self.grid_plane)
         self.decorator_tab_layout.addRow("Grid plane activated?", self.Cgrid_plane)
@@ -284,6 +295,27 @@ class napari_storm(QWidget):
         self.Bgrid_plane_color.addItems(standard_colors)
         self.Bgrid_plane_color.currentIndexChanged.connect(self.update_grid_plane_color)
         self.decorator_tab_layout.addRow("Grid line color:", self.Bgrid_plane_color)
+
+        self.HL3 = QHSeperationLine()
+        self.decorator_tab_layout.addRow(self.HL3)
+
+        self.Lrender_range_box = QLabel()
+        self.Lrender_range_box.setText("Render Range Box")
+        self.Lrender_range_box.setFont(QFont('Arial',10))
+        self.decorator_tab_layout.addRow(self.Lrender_range_box)
+
+        self.Brender_range_box_color = QComboBox()
+        self.Brender_range_box_color.addItems(standard_colors)
+        self.Brender_range_box_color.currentIndexChanged.connect(self.update_render_range_box_color)
+        self.decorator_tab_layout.addRow("Render Range Box color:", self.Brender_range_box_color)
+
+        self.Srender_range_box_opacity = QSlider()
+        self.Srender_range_box_opacity.setOrientation(Qt.Horizontal)
+        self.Srender_range_box_opacity.setRange(0, 100)
+        self.Srender_range_box_opacity.setSingleStep(1)
+        self.Srender_range_box_opacity.setValue(self.render_range_box_opacity * 100)
+        self.Srender_range_box_opacity.valueChanged.connect(self.update_render_range_box_opacity)
+        self.decorator_tab_layout.addRow("Render Range Box opacity:", self.Srender_range_box_opacity)
 
         self.decorator_tab.setLayout(self.decorator_tab_layout)
         self.layout = QGridLayout()
@@ -362,6 +394,13 @@ class napari_storm(QWidget):
         else:
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
+
+    def update_render_range_box_opacity(self):
+        self.render_range_box_opacity = self.Srender_range_box_opacity.value()/100
+
+    def update_render_range_box_color(self):
+        idx = self.Brender_range_box_color.currentIndex()
+        self.active_render_range_box_color = standard_colormaps[idx]
 
     def update_grid_plane_color(self):
         idx = self.Bgrid_plane_color.currentIndex()

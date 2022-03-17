@@ -56,7 +56,8 @@ class RangeSlider2(QDoubleRangeSlider):
         v = napari.current_viewer()
         coords, faces = self.get_coords_faces()
         self.range = v.add_surface(
-            (coords, faces), opacity=0, shading="smooth", name="render-range"
+            (coords, faces), opacity=0, shading="smooth", name="render-range",
+            colormap=self.parent().active_render_range_box_color
         )
 
     def update_visual_feedback(self):
@@ -64,7 +65,7 @@ class RangeSlider2(QDoubleRangeSlider):
         coords, faces = self.get_coords_faces()
         # print(coords)
         v.layers["render-range"].data = (coords, faces)
-        v.layers["render-range"].opacity = 0.25
+        v.layers["render-range"].opacity = self.parent().render_range_box_opacity
         self.range.coords = coords
 
     def remove_visual_feedback(self):

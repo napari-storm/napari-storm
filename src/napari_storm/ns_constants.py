@@ -12,3 +12,5 @@ MINFLUX_Z_CORRECTION_FACTOR = 0.7
 list_of_recognized_file_formats = ["h5", "hdf5", "yaml", "csv", "smlm", "npy", "json", "test"]
 
 standard_colors = ["white", "red", "blue", "green", "yellow"]
+
+standard_colormaps = ["gray", "red", "blue", "green", "yellow"]

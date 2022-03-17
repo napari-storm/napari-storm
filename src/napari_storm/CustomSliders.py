@@ -46,3 +46,4 @@ class GridPlaneSlider(QSlider):
                 self.itf.update_grid_plane(line_thickness=self.value())
 
 
+
