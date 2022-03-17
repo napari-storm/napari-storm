@@ -43,9 +43,9 @@ class RangeSlider2(QDoubleRangeSlider):
         if not self.reset_in_progress:
             if self.created_feedback_layer:
                 if self.value()[0] != self.backup[0]:
-                    self.update_visual_feedback(1)
+                    self.update_visual_feedback()
                 elif self.value()[1] != self.backup[1]:
-                    self.update_visual_feedback(2)
+                    self.update_visual_feedback()
                 else:
                     pass
             else:
@@ -54,14 +54,14 @@ class RangeSlider2(QDoubleRangeSlider):
 
     def create_visual_feedback(self, slider):
         v = napari.current_viewer()
-        coords, faces = self.get_coords_faces(slider, create=True)
+        coords, faces = self.get_coords_faces()
         self.range = v.add_surface(
             (coords, faces), opacity=0, shading="smooth", name="render-range"
         )
 
-    def update_visual_feedback(self, slider):
+    def update_visual_feedback(self):
         v = napari.current_viewer()
-        coords, faces = self.get_coords_faces(slider_type=slider)
+        coords, faces = self.get_coords_faces()
         # print(coords)
         v.layers["render-range"].data = (coords, faces)
         v.layers["render-range"].opacity = 0.25
@@ -76,11 +76,20 @@ class RangeSlider2(QDoubleRangeSlider):
         self.created_feedback_layer = False
         DataToLayerInterface.update_layers(self.parent().data_to_layer_itf)
 
-    def get_coords_faces(self, slider_type, create=False):
+    def get_coords_faces(self):
         if self.parent().zdim:
-            rrx = self.parent().data_to_layer_itf.render_range_y
-            rry = self.parent().data_to_layer_itf.render_range_x
-            rrz = self.parent().data_to_layer_itf.render_range_z
+            rrx_tmp = self.parent().data_to_layer_itf.render_range_y
+            rrx = rrx_tmp.copy()
+            rrx[0] += (rrx_tmp[1] - rrx_tmp[0]) * self.parent().render_range_slider_x_percent[0] / 100
+            rrx[1] -= (rrx_tmp[1] - rrx_tmp[0]) * (1 - self.parent().render_range_slider_x_percent[1] / 100)
+            rry_tmp = self.parent().data_to_layer_itf.render_range_x
+            rry = rry_tmp.copy()
+            rry[0] += (rry_tmp[1] - rry_tmp[0]) * self.parent().render_range_slider_y_percent[0] / 100
+            rry[1] -= (rry_tmp[1] - rry_tmp[0]) * (1 - self.parent().render_range_slider_y_percent[1] / 100)
+            rrz_tmp = self.parent().data_to_layer_itf.render_range_z
+            rrz = rrz_tmp.copy()
+            rrz[0] += (rrz_tmp[1] - rrz_tmp[0]) * self.parent().render_range_slider_z_percent[0] / 100
+            rrz[1] -= (rrz_tmp[1] - rrz_tmp[0]) * (1 - self.parent().render_range_slider_z_percent[1] / 100)
             coords = []
             slider_1 = self.value()[0] / self.Range
             slider_2 = self.value()[1] / self.Range

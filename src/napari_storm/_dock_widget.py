@@ -53,7 +53,9 @@ class napari_storm(QWidget):
                                       'Variable-size gaussian']
 
         self._z_color_encoding_mode = False
+
         self._grid_plane_enabled = False
+        self.grid_plane_line_distance_um = 1
 
         self.render_fixed_gauss_sigma_xy_nm = 20 / 2.354
         self.render_fixed_gauss_sigma_z_nm = 20 / 2.354
@@ -63,9 +65,9 @@ class napari_storm(QWidget):
         self.render_var_gauss_sigma_min_xy_nm = 10 / 2.354
         self.render_var_gauss_sigma_min_z_nm = 10 / 2.354
 
-        self.render_range_x_percent = np.arange(2) * 100
-        self.render_range_y_percent = np.arange(2) * 100
-        self.render_range_z_percent = np.arange(2) * 100
+        self.render_range_slider_x_percent = np.arange(2) * 100
+        self.render_range_slider_y_percent = np.arange(2) * 100
+        self.render_range_slider_z_percent = np.arange(2) * 100
 
         self.pixelsize_nm = []
         self._zdim = None
@@ -244,45 +246,48 @@ class napari_storm(QWidget):
         self.infos_tab_layout.addWidget(self.Lnumberoflocs, 0, 0)
 
         # Decorators tab
-        self.decorator_tab_layout = QGridLayout()
+        self.decorator_tab_layout = QFormLayout()
+        #self.decorator_tab_layout = QGridLayout()
 
         self.Cgrid_plane = QCheckBox()
-        self.Cgrid_plane.setText("Grid plane activated?")
+        #self.Cgrid_plane.setText("Grid plane activated?")
         self.Cgrid_plane.stateChanged.connect(self.grid_plane)
-        self.decorator_tab_layout.addWidget(self.Cgrid_plane, 0, 0)
+        #self.decorator_tab_layout.addWidget(self.Cgrid_plane, 0, 0)
+        self.decorator_tab_layout.addRow("Grid plane activated?", self.Cgrid_plane)
 
-        self.Lgrid_line_distance = QLabel()
+        """self.Lgrid_line_distance = QLabel()
         self.Lgrid_line_distance.setText("Grid line distance [µm]:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_line_distance, 1, 0)
+        self.decorator_tab_layout.addWidget(self.Lgrid_line_distance, 1, 0)"""
 
         self.Egrid_line_distance = QLineEdit()
-        self.Egrid_line_distance.setText("1")
+        self.Egrid_line_distance.setText(str(self.grid_plane_line_distance_um))
         self.Egrid_line_distance.textChanged.connect(lambda: self._start_typing_timer(self.typing_timer_grid))
-        self.decorator_tab_layout.addWidget(self.Egrid_line_distance, 1, 1)
+        #self.decorator_tab_layout.addWidget(self.Egrid_line_distance, 1, 1)
+        self.decorator_tab_layout.addRow("Grid line distance [µm]:", self.Egrid_line_distance)
 
         self.typing_timer_grid = QtCore.QTimer()
         self.typing_timer_grid.setSingleShot(True)
-        self.typing_timer_grid.timeout.connect(
-            lambda: self.data_to_layer_itf.update_grid_plane(
-                line_distance_nm=float(self.Egrid_line_distance.text())*1000))
+        self.typing_timer_grid.timeout.connect(self.update_grid_plane_line_distance)
 
-        self.Lgrid_line_thickness = QLabel()
+        """self.Lgrid_line_thickness = QLabel()
         self.Lgrid_line_thickness.setText("Grid line thickness:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_line_thickness, 2, 0)
+        self.decorator_tab_layout.addWidget(self.Lgrid_line_thickness, 2, 0)"""
 
         self.Sgrid_line_thickness = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
                                                     type_of_slider='line_thickness', init_range=(1, 100),
                                                     init_value=50)
-        self.decorator_tab_layout.addWidget(self.Sgrid_line_thickness, 2, 1)
+        #self.decorator_tab_layout.addWidget(self.Sgrid_line_thickness, 2, 1)
+        self.decorator_tab_layout.addRow("Grid line thickness:", self.Sgrid_line_thickness)
 
-        self.Lgrid_z_pos = QLabel()
+        """self.Lgrid_z_pos = QLabel()
         self.Lgrid_z_pos.setText("Z Pos:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_z_pos, 3, 0)
+        self.decorator_tab_layout.addWidget(self.Lgrid_z_pos, 3, 0)"""
 
         self.Sgrid_z_pos = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
                                            type_of_slider='z_pos', init_range=(0, 100),
                                            init_value=50)
-        self.decorator_tab_layout.addWidget(self.Sgrid_z_pos, 3, 1)
+        #self.decorator_tab_layout.addWidget(self.Sgrid_z_pos, 3, 1)
+        self.decorator_tab_layout.addRow("Z Pos:", self.Sgrid_z_pos)
 
         self.decorator_tab.setLayout(self.decorator_tab_layout)
         self.layout = QGridLayout()
@@ -362,20 +367,22 @@ class napari_storm(QWidget):
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
 
+    def update_grid_plane_line_distance(self):
+        value_str = self.Egrid_line_distance.text()
+        value = float(value_str)
+        if value == 0:
+            raise ValueError('Line Distance must be > 0')
+        self.grid_plane_line_distance_um = value
+        self.data_to_layer_itf.update_grid_plane(line_distance_nm=1000*value)
+
     def grid_plane(self):
         if self.Cgrid_plane.isChecked():
-            self.Lgrid_line_thickness.show()
-            self.Lgrid_line_distance.show()
-            self.Lgrid_z_pos.show()
             self.Egrid_line_distance.show()
             self.Sgrid_line_thickness.show()
             self.Sgrid_z_pos.show()
             self.grid_plane_enabled = 1
 
         else:
-            self.Lgrid_line_thickness.hide()
-            self.Lgrid_line_distance.hide()
-            self.Lgrid_z_pos.hide()
             self.Egrid_line_distance.hide()
             self.Sgrid_line_thickness.hide()
             self.Sgrid_z_pos.hide()
@@ -424,20 +431,20 @@ class napari_storm(QWidget):
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
         if self.Cgrid_plane.isChecked():
-            self.Cgrid_plane.stateChanged(False)
+            self.Cgrid_plane.setState(False)
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
             self.move_camera_center_to_render_range_center()
 
     def update_render_range(self, slider_type, values):
         if slider_type == 'x':
-            self.render_range_x_percent = values
+            self.render_range_slider_x_percent = values
         elif slider_type == 'y':
-            self.render_range_y_percent = values
+            self.render_range_slider_y_percent = values
         else:
-            self.render_range_z_percent = values
+            self.render_range_slider_z_percent = values
         if self.Cgrid_plane.isChecked():
-            self.Cgrid_plane.stateChanged(False)
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
         self.move_camera_center_to_render_range_center()
 
     def move_camera_center_to_render_range_center(self):
@@ -445,14 +452,14 @@ class napari_storm(QWidget):
                 or self.data_to_layer_itf.render_range_y[1] == -np.inf
                 or self.data_to_layer_itf.render_range_z[1] == -np.inf):
             tmp_x_center_nm = self.data_to_layer_itf.render_range_x[1] * (
-                    self.render_range_x_percent[0] / 100 + 0.5 * self.render_range_x_percent[1] / 100
-                    - 0.5 * self.render_range_x_percent[0] / 100)
+                    self.render_range_slider_x_percent[0] / 100 + 0.5 * self.render_range_slider_x_percent[1] / 100
+                    - 0.5 * self.render_range_slider_x_percent[0] / 100)
             tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
-                    self.render_range_y_percent[0] / 100 + 0.5 * self.render_range_y_percent[1] / 100
-                    - 0.5 * self.render_range_y_percent[0] / 100)
+                    self.render_range_slider_y_percent[0] / 100 + 0.5 * self.render_range_slider_y_percent[1] / 100
+                    - 0.5 * self.render_range_slider_y_percent[0] / 100)
             tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
-                    self.render_range_z_percent[0] / 100 + 0.5 * self.render_range_z_percent[1] / 100
-                    - 0.5 * self.render_range_z_percent[0] / 100)
+                    self.render_range_slider_z_percent[0] / 100 + 0.5 * self.render_range_slider_z_percent[1] / 100
+                    - 0.5 * self.render_range_slider_z_percent[0] / 100)
             self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
             self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
 
@@ -510,9 +517,9 @@ class napari_storm(QWidget):
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
         self.Breset_render_range.hide()
-        self.Lgrid_line_thickness.hide()
+        """self.Lgrid_line_thickness.hide()
         self.Lgrid_line_distance.hide()
-        self.Lgrid_z_pos.hide()
+        self.Lgrid_z_pos.hide()"""
         self.Egrid_line_distance.hide()
         self.Sgrid_line_thickness.hide()
         self.Sgrid_z_pos.hide()
