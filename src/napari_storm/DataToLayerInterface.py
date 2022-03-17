@@ -3,6 +3,7 @@ from .particles import Particles
 import numpy as np
 from .utils import generate_billboards_2d
 from .CustomErrors import *
+from .ns_constants import *
 
 
 class DataToLayerInterface:  # localization always with z # switch info with channel controlls #
@@ -87,10 +88,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         else:
             self.viewer.layers.remove('Grid_Plane')
 
-    def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None):
+    def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None):
         if line_distance_nm:
             z = np.mean(self.grid_plane_layer.data[:, 0, 0])
-
             self.viewer.layers.remove('Grid_Plane')
 
             num_of_lines_x = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
@@ -126,10 +126,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                                 (self.render_range_x[1] - self.render_range_x[0])
                                                                 * self.parent.render_range_slider_x_percent[0] / 100)
             vectors_y[:, 0, 0] = z
-
             vectors = np.concatenate((vectors_x, vectors_y))
             self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=line_thickness_nm,
-                                                            name="Grid_Plane", edge_color='white', ndim=3)
+                                                            name="Grid_Plane",
+                                                            edge_color=standard_colors[
+                                                                self.parent.grid_plane_standard_color_index], ndim=3)
 
         if z_pos:
             vectors = self.grid_plane_layer.data
@@ -140,6 +141,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 self.grid_plane_layer.data[:, 0, 0]) / 2 \
                                                * np.mean((self.render_range_x[1] - self.render_range_x[0],
                                                           self.render_range_y[1] - self.render_range_y[0]))
+        if color:
+            self.grid_plane_layer.edge_color = color
 
     def reset_render_range_and_offset(self):
         self.render_range_x = [0, -np.inf]
