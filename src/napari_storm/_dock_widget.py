@@ -26,6 +26,8 @@ from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .ChannelControls import ChannelControls
 from .CustomErrors import *
 from .GridPlaneSlider import *
+from .PyQTvisuals import *
+from .ns_constants import *
 
 
 class napari_storm(QWidget):
@@ -56,6 +58,7 @@ class napari_storm(QWidget):
 
         self._grid_plane_enabled = False
         self.grid_plane_line_distance_um = 1
+        self.grid_plane_standard_color_index = 0
 
         self.render_fixed_gauss_sigma_xy_nm = 20 / 2.354
         self.render_fixed_gauss_sigma_z_nm = 20 / 2.354
@@ -174,52 +177,58 @@ class napari_storm(QWidget):
         )
         self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 7, 1, 1, 3)
 
+        self.HL1 = QHSeperationLine()
+        self.data_controls_tab_layout.addWidget(self.HL1, 8, 0, 1, 4)
+
         self.Lrangex = QLabel()
         self.Lrangex.setText('X-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangex, 8, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangex, 9, 0)
 
         self.Lrangey = QLabel()
         self.Lrangey.setText('Y-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangey, 9, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangey, 10, 0)
 
         self.Lrangez = QLabel()
         self.Lrangez.setText('Z-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangez, 10, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangez, 11, 0)
 
         self.Srender_rangex = RangeSlider2(parent=self, type='x')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 8, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 9, 1, 1, 3)
 
         self.Srender_rangey = RangeSlider2(parent=self, type='y')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 9, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 10, 1, 1, 3)
 
         self.Srender_rangez = RangeSlider2(parent=self, type='z')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 10, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 11, 1, 1, 3)
 
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText('Reset Render Range')
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 11, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 12, 0, 1, 4)
+
+        self.HL2 = QHSeperationLine()
+        self.data_controls_tab_layout.addWidget(self.HL2, 13, 0, 1, 4)
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar_state_changed)
         self.Cscalebar.setText("Scalebar")
-        self.data_controls_tab_layout.addWidget(self.Cscalebar, 12, 0, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Cscalebar, 14, 0, 1, 1)
 
         self.Bz_color_coding = QCheckBox()
         self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
         self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 12, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 14, 2, 1, 2)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText('Size of Scalebar [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 13, 0)
+        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 15, 0)
 
         self.Esbsize = QLineEdit()
         self.Esbsize.setText('500')
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controls_tab_layout.addWidget(self.Esbsize, 13, 1, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Esbsize, 15, 1, 1, 1)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
@@ -227,12 +236,12 @@ class napari_storm(QWidget):
         self.Bstarttestmode = QPushButton()
         self.Bstarttestmode.setText("Start Test Mode")
         self.Bstarttestmode.clicked.connect(self.start_test_mode)
-        self.data_controls_tab_layout.addWidget(self.Bstarttestmode, 0, 2, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Bstarttestmode, 0, 17, 1, 1)
 
         # visual_controls
         self.channel_controls_widget_layout = QFormLayout()
         self.channel_controls_placeholder = QWidget()
-        self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 17, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 18, 0, 1, 4)
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
         # infos tab
@@ -247,47 +256,34 @@ class napari_storm(QWidget):
 
         # Decorators tab
         self.decorator_tab_layout = QFormLayout()
-        #self.decorator_tab_layout = QGridLayout()
 
         self.Cgrid_plane = QCheckBox()
-        #self.Cgrid_plane.setText("Grid plane activated?")
         self.Cgrid_plane.stateChanged.connect(self.grid_plane)
-        #self.decorator_tab_layout.addWidget(self.Cgrid_plane, 0, 0)
         self.decorator_tab_layout.addRow("Grid plane activated?", self.Cgrid_plane)
-
-        """self.Lgrid_line_distance = QLabel()
-        self.Lgrid_line_distance.setText("Grid line distance [µm]:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_line_distance, 1, 0)"""
 
         self.Egrid_line_distance = QLineEdit()
         self.Egrid_line_distance.setText(str(self.grid_plane_line_distance_um))
         self.Egrid_line_distance.textChanged.connect(lambda: self._start_typing_timer(self.typing_timer_grid))
-        #self.decorator_tab_layout.addWidget(self.Egrid_line_distance, 1, 1)
         self.decorator_tab_layout.addRow("Grid line distance [µm]:", self.Egrid_line_distance)
 
         self.typing_timer_grid = QtCore.QTimer()
         self.typing_timer_grid.setSingleShot(True)
         self.typing_timer_grid.timeout.connect(self.update_grid_plane_line_distance)
 
-        """self.Lgrid_line_thickness = QLabel()
-        self.Lgrid_line_thickness.setText("Grid line thickness:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_line_thickness, 2, 0)"""
-
         self.Sgrid_line_thickness = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
                                                     type_of_slider='line_thickness', init_range=(1, 100),
                                                     init_value=50)
-        #self.decorator_tab_layout.addWidget(self.Sgrid_line_thickness, 2, 1)
         self.decorator_tab_layout.addRow("Grid line thickness:", self.Sgrid_line_thickness)
-
-        """self.Lgrid_z_pos = QLabel()
-        self.Lgrid_z_pos.setText("Z Pos:")
-        self.decorator_tab_layout.addWidget(self.Lgrid_z_pos, 3, 0)"""
 
         self.Sgrid_z_pos = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
                                            type_of_slider='z_pos', init_range=(0, 100),
                                            init_value=50)
-        #self.decorator_tab_layout.addWidget(self.Sgrid_z_pos, 3, 1)
         self.decorator_tab_layout.addRow("Z Pos:", self.Sgrid_z_pos)
+
+        self.Bgrid_plane_color = QComboBox()
+        self.Bgrid_plane_color.addItems(standard_colors)
+        self.Bgrid_plane_color.currentIndexChanged.connect(self.update_grid_plane_color)
+        self.decorator_tab_layout.addRow("Grid line color:", self.Bgrid_plane_color)
 
         self.decorator_tab.setLayout(self.decorator_tab_layout)
         self.layout = QGridLayout()
@@ -367,6 +363,11 @@ class napari_storm(QWidget):
             self._zdim = bool
         self.adjust_available_options_to_data_dimension()
 
+    def update_grid_plane_color(self):
+        idx = self.Bgrid_plane_color.currentIndex()
+        self.grid_plane_standard_color_index = idx
+        self.data_to_layer_itf.update_grid_plane(color=standard_colors[idx])
+
     def update_grid_plane_line_distance(self):
         value_str = self.Egrid_line_distance.text()
         value = float(value_str)
@@ -380,6 +381,7 @@ class napari_storm(QWidget):
             self.Egrid_line_distance.show()
             self.Sgrid_line_thickness.show()
             self.Sgrid_z_pos.show()
+            self.Bgrid_plane_color.show()
             self.grid_plane_enabled = 1
 
         else:
@@ -387,6 +389,9 @@ class napari_storm(QWidget):
             self.Sgrid_line_thickness.hide()
             self.Sgrid_z_pos.hide()
             self.grid_plane_enabled = 0
+            self.grid_plane_standard_color_index = 0
+            self.Bgrid_plane_color.setCurrentIndex(0)
+            self.Bgrid_plane_color.hide()
 
     def hide_testing_mode(self):
         if not self.testing_mode_enabled:
@@ -431,7 +436,7 @@ class napari_storm(QWidget):
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
         if self.Cgrid_plane.isChecked():
-            self.Cgrid_plane.setState(False)
+            self.Cgrid_plane.setCheckState(False)
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
             self.move_camera_center_to_render_range_center()
@@ -517,13 +522,13 @@ class napari_storm(QWidget):
         self.Baxis_yz.hide()
         self.Baxis_xz.hide()
         self.Breset_render_range.hide()
-        """self.Lgrid_line_thickness.hide()
-        self.Lgrid_line_distance.hide()
-        self.Lgrid_z_pos.hide()"""
         self.Egrid_line_distance.hide()
         self.Sgrid_line_thickness.hide()
         self.Sgrid_z_pos.hide()
         self.Cgrid_plane.hide()
+        self.Bgrid_plane_color.hide()
+        self.HL1.hide()
+        self.HL2.hide()
 
     def show_avaiable_widgets(self):
         """Show the Controls usable atm"""
@@ -543,6 +548,8 @@ class napari_storm(QWidget):
         self.Cgrid_plane.show()
         self.tabs.addTab(self.infos_tab, 'File Infos')
         self.tabs.addTab(self.decorator_tab, 'Decorators')
+        self.HL1.show()
+        self.HL2.show()
 
     def adjust_available_options_to_data_dimension(self):
         if self.zdim:
