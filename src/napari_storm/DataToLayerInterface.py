@@ -48,11 +48,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             z = np.mean(self.render_range_z)
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
-                                          (self.parent.render_range_slider_y_percent[1] -
-                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
-            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
                                           (self.parent.render_range_slider_x_percent[1] -
                                            self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+                                          (self.parent.render_range_slider_y_percent[1] -
+                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
             default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
                 self.render_range_y[1] - self.render_range_y[0],
                 self.render_range_x[1] - self.render_range_x[0]))
@@ -60,27 +60,27 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
             vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] -
-                                  self.parent.render_range_slider_x_percent[0]) / 100
+                                 (self.parent.render_range_slider_y_percent[1] -
+                                  self.parent.render_range_slider_y_percent[0]) / 100
             # x and y start position of vectors
             vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0]-1) / 100
+                                 * (self.parent.render_range_slider_x_percent[0]-1) / 100
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
                                                                 (self.render_range_x[1] - self.render_range_x[0])
-                                                                *(self.parent.render_range_slider_x_percent[0]-1) / 100)
+                                                                *(self.parent.render_range_slider_y_percent[0]-1) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_y[1] - self.render_range_y[0]) * \
-                                 (self.parent.render_range_slider_y_percent[1] -
-                                  self.parent.render_range_slider_y_percent[0]) / 100
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
             vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0]-1) / 100
+                                 * (self.parent.render_range_slider_y_percent[0]-1) / 100
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
                                                                 (self.render_range_y[1] - self.render_range_y[0])
-                                                                *(self.parent.render_range_slider_y_percent[0]-1) / 100)
+                                                                *(self.parent.render_range_slider_x_percent[0]-1) / 100)
             vectors_y[:, 0, 0] = z
 
             vectors = np.concatenate((vectors_x, vectors_y))
@@ -91,47 +91,51 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None):
         if line_distance_nm:
-            z = np.mean(self.grid_plane_layer.data[:, 0, 0])
-            self.viewer.layers.remove('Grid_Plane')
-
-            num_of_lines_x = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+            z = np.mean(self.render_range_z)
+            default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
+            num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
                                           (self.parent.render_range_slider_x_percent[1] -
-                                           self.parent.render_range_slider_x_percent[0]) / 100 / line_distance_nm))
-            num_of_lines_y = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
+                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
                                           (self.parent.render_range_slider_y_percent[1] -
-                                           self.parent.render_range_slider_y_percent[0]) / 100 / line_distance_nm))
-            line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
-                self.render_range_x[1] - self.render_range_x[0],
-                self.render_range_y[1] - self.render_range_y[0]))
+                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
+            if num_of_lines_x < 1 or num_of_lines_y < 1:
+                self.parent.Egrid_line_distance.setText(str(self.parent.grid_plane_line_distance_um/10))
+                raise ValueError('Grid line distance is more than dataset size')
+            self.viewer.layers.remove('Grid_Plane')
+            default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
+                self.render_range_y[1] - self.render_range_y[0],
+                self.render_range_x[1] - self.render_range_x[0]))
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
-            vectors_x[:, 1, 1] = (self.render_range_y[1] - self.render_range_y[0]) * \
+            vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
                                  (self.parent.render_range_slider_y_percent[1] -
                                   self.parent.render_range_slider_y_percent[0]) / 100
             # x and y start position of vectors
-            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * line_distance_nm + self.render_range_x[0] + \
-                                 (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0]-1) / 100
-            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_y[0] +
-                                                                (self.render_range_y[1] - self.render_range_y[0])
-                                                                *(self.parent.render_range_slider_y_percent[0]-1) / 100)
+            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_y[1] - self.render_range_y[0]) \
+                                 * (self.parent.render_range_slider_x_percent[0] - 1) / 100
+            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
+                                                                (self.render_range_x[1] - self.render_range_x[0])
+                                                                * (self.parent.render_range_slider_y_percent[
+                                                                       0] - 1) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
-            vectors_y[:, 1, 2] = (self.render_range_x[1] - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] - self.parent.render_range_slider_x_percent[0]) / 100
-            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * line_distance_nm + self.render_range_y[0] + \
-                                 (self.render_range_y[1] - self.render_range_y[0])\
-                                 *(self.parent.render_range_slider_y_percent[0]-1) / 100
-            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_x[0] +
-                                                                (self.render_range_x[1] - self.render_range_x[0])
-                                                                *(self.parent.render_range_slider_x_percent[0]-1) / 100)
+            vectors_y[:, 1, 2] = (self.render_range_y[1] - self.render_range_y[0]) * \
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
+            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_x[1] - self.render_range_x[0]) \
+                                 * (self.parent.render_range_slider_y_percent[0] - 1) / 100
+            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
+                                                                (self.render_range_y[1] - self.render_range_y[0])
+                                                                * (self.parent.render_range_slider_x_percent[
+                                                                       0] - 1) / 100)
             vectors_y[:, 0, 0] = z
             vectors = np.concatenate((vectors_x, vectors_y))
-            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=line_thickness_nm,
-                                                            name="Grid_Plane",
-                                                            edge_color=standard_colors[
-                                                                self.parent.grid_plane_standard_color_index], ndim=3)
+            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
+                                                            name="Grid_Plane", edge_color='white', ndim=3)
 
         if z_pos:
             vectors = self.grid_plane_layer.data
