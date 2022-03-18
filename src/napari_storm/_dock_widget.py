@@ -699,6 +699,7 @@ class napari_storm(QWidget):
         if not merge:
             self.clear_datasets()
             self.data_to_layer_itf.reset_render_range_and_offset()
+            self.Cgrid_plane.setCheckState(False)
 
         datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
         if datasets[-1].zdim_present:
@@ -709,6 +710,8 @@ class napari_storm(QWidget):
             self.localization_datasets.append(datasets[i])
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
+        if self.Cgrid_plane.isChecked():
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
 
     def get_dataset_from_test_mode(self, datasets):
         self.show_avaiable_widgets()
