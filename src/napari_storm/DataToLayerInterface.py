@@ -148,7 +148,6 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         if color:
             self.grid_plane_layer.edge_color = color
         if opacity:
-            print("here")
             self.grid_plane_layer.opacity = opacity / 100
 
     def reset_render_range_and_offset(self):
