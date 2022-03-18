@@ -62,6 +62,7 @@ class napari_storm(QWidget):
         self.grid_plane_standard_color_index = 0
         self.possible_grid_plane_orientations = ["XY", "YZ", "XZ"]
         self.active_grid_plane_orientation = self.possible_grid_plane_orientations[0]
+        self.grid_plane_opacity = 0.7
 
         self.active_render_range_box_color = standard_colormaps[0]
         self.render_range_box_opacity = 0.25
@@ -296,12 +297,17 @@ class napari_storm(QWidget):
         self.Bgrid_plane_color.currentIndexChanged.connect(self.update_grid_plane_color)
         self.decorator_tab_layout.addRow("Grid line color:", self.Bgrid_plane_color)
 
+        self.Sgrid_plane_opacity = GridPlaneSlider(parent=self, data_to_layer_interface=self.data_to_layer_itf,
+                                                   type_of_slider='opacity', init_range=(0, 100),
+                                                   init_value=100 * self.grid_plane_opacity)
+        self.decorator_tab_layout.addRow("Grid plane opacity:", self.Sgrid_plane_opacity)
+
         self.HL3 = QHSeperationLine()
         self.decorator_tab_layout.addRow(self.HL3)
 
         self.Lrender_range_box = QLabel()
         self.Lrender_range_box.setText("Render Range Box")
-        self.Lrender_range_box.setFont(QFont('Arial',10))
+        self.Lrender_range_box.setFont(QFont('Arial', 10))
         self.decorator_tab_layout.addRow(self.Lrender_range_box)
 
         self.Brender_range_box_color = QComboBox()
@@ -396,7 +402,7 @@ class napari_storm(QWidget):
         self.adjust_available_options_to_data_dimension()
 
     def update_render_range_box_opacity(self):
-        self.render_range_box_opacity = self.Srender_range_box_opacity.value()/100
+        self.render_range_box_opacity = self.Srender_range_box_opacity.value() / 100
 
     def update_render_range_box_color(self):
         idx = self.Brender_range_box_color.currentIndex()
@@ -413,7 +419,7 @@ class napari_storm(QWidget):
         if value == 0:
             raise ValueError('Line Distance must be > 0')
         self.grid_plane_line_distance_um = value
-        self.data_to_layer_itf.update_grid_plane(line_distance_nm=1000*value)
+        self.data_to_layer_itf.update_grid_plane(line_distance_nm=1000 * value)
 
     def grid_plane(self):
         if self.Cgrid_plane.isChecked():
@@ -475,7 +481,7 @@ class napari_storm(QWidget):
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
         if self.Cgrid_plane.isChecked():
-            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
             self.move_camera_center_to_render_range_center()
@@ -488,7 +494,7 @@ class napari_storm(QWidget):
         else:
             self.render_range_slider_z_percent = values
         if self.Cgrid_plane.isChecked():
-            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
         self.move_camera_center_to_render_range_center()
 
     def move_camera_center_to_render_range_center(self):
@@ -711,7 +717,7 @@ class napari_storm(QWidget):
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
         if self.Cgrid_plane.isChecked():
-            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
 
     def get_dataset_from_test_mode(self, datasets):
         self.show_avaiable_widgets()

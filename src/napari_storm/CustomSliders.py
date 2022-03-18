@@ -31,6 +31,8 @@ class GridPlaneSlider(QSlider):
                 self.itf.update_grid_plane(z_pos=self.value())
             elif self.type_of_slider == 'line_thickness':
                 self.itf.update_grid_plane(line_thickness=self.value())
+            elif self.type_of_slider == 'opacity':
+                self.itf.update_grid_plane(opacity=self.value())
         self.mouse_is_pressed = True
 
     def mouseReleaseEvent(self, event):
@@ -44,6 +46,8 @@ class GridPlaneSlider(QSlider):
                 self.itf.update_grid_plane(z_pos=self.value())
             elif self.type_of_slider == 'line_thickness':
                 self.itf.update_grid_plane(line_thickness=self.value())
+            elif self.type_of_slider == 'opacity':
+                self.itf.update_grid_plane(opacity=self.value())
 
 
 
