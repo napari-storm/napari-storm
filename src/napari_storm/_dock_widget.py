@@ -475,7 +475,7 @@ class napari_storm(QWidget):
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
         if self.Cgrid_plane.isChecked():
-            self.Cgrid_plane.setCheckState(False)
+            self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um*1000)
         if not full_reset:
             self.data_to_layer_itf.update_layers(self)
             self.move_camera_center_to_render_range_center()
