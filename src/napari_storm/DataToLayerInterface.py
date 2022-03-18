@@ -101,10 +101,15 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                           (self.parent.render_range_slider_y_percent[1] -
                                            self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
             if num_of_lines_x < 1 or num_of_lines_y < 1:
-                self.parent.Egrid_line_distance.setText(str(self.parent.grid_plane_line_distance_um/10))
-                raise ValueError('Grid line distance is more than dataset size')
+                tmp_max_line_dist = np.round(np.floor(min((self.render_range_y[1] - self.render_range_y[0]) *
+                                            (self.parent.render_range_slider_x_percent[1] -
+                                            self.parent.render_range_slider_x_percent[0]) / 100,
+                                            (self.render_range_x[1] - self.render_range_x[0]) *
+                                            (self.parent.render_range_slider_y_percent[1] -
+                                            self.parent.render_range_slider_y_percent[0]) / 100)) * .001,3)
+                self.parent.Egrid_line_distance.setText(str(tmp_max_line_dist))
+                return
             self.viewer.layers.remove('Grid_Plane')
-
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
             vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
