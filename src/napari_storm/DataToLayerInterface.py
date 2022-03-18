@@ -91,7 +91,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None):
         if line_distance_nm:
-            z = np.mean(self.render_range_z)
+            z = np.mean(self.grid_plane_layer.data[:, 0, 0])
+            default_line_thickness_nm = self.grid_plane_layer.edge_width
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
                                           (self.parent.render_range_slider_x_percent[1] -
@@ -103,9 +104,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 self.parent.Egrid_line_distance.setText(str(self.parent.grid_plane_line_distance_um/10))
                 raise ValueError('Grid line distance is more than dataset size')
             self.viewer.layers.remove('Grid_Plane')
-            default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
-                self.render_range_y[1] - self.render_range_y[0],
-                self.render_range_x[1] - self.render_range_x[0]))
+
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
             vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
