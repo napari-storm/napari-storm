@@ -92,6 +92,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
     def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None, opacity=None):
         if line_distance_nm:
             z = np.mean(self.grid_plane_layer.data[:, 0, 0])
+            opacity_backup = self.grid_plane_layer.opacity
             default_line_thickness_nm = self.grid_plane_layer.edge_width
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
@@ -139,7 +140,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_y[:, 0, 0] = z
             vectors = np.concatenate((vectors_x, vectors_y))
             self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color='white', ndim=3)
+                                                            name="Grid_Plane", edge_color="white", ndim=3,
+                                                            opacity=opacity_backup)
+            self.parent.update_grid_plane_color()
 
         if z_pos:
             vectors = self.grid_plane_layer.data
