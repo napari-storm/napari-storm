@@ -507,9 +507,10 @@ class napari_storm(QWidget):
             tmp_y_center_nm = self.data_to_layer_itf.render_range_y[1] * (
                     self.render_range_slider_y_percent[0] / 100 + 0.5 * self.render_range_slider_y_percent[1] / 100
                     - 0.5 * self.render_range_slider_y_percent[0] / 100)
-            tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
+            """tmp_z_center_nm = self.data_to_layer_itf.render_range_z[1] * (
                     self.render_range_slider_z_percent[0] / 100 + 0.5 * self.render_range_slider_z_percent[1] / 100
-                    - 0.5 * self.render_range_slider_z_percent[0] / 100)
+                    - 0.5 * self.render_range_slider_z_percent[0] / 100)"""
+            tmp_z_center_nm = self.viewer.camera.center[0]
             self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
             self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
 
