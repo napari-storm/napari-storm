@@ -319,7 +319,7 @@ class napari_storm(QWidget):
         self.Srender_range_box_opacity.setOrientation(Qt.Horizontal)
         self.Srender_range_box_opacity.setRange(0, 100)
         self.Srender_range_box_opacity.setSingleStep(1)
-        self.Srender_range_box_opacity.setValue(self.render_range_box_opacity * 100)
+        self.Srender_range_box_opacity.setValue(int(self.render_range_box_opacity * 100))
         self.Srender_range_box_opacity.valueChanged.connect(self.update_render_range_box_opacity)
         self.decorator_tab_layout.addRow("Render Range Box opacity:", self.Srender_range_box_opacity)
 

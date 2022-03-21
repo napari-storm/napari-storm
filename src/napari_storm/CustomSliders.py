@@ -10,8 +10,8 @@ class GridPlaneSlider(QSlider):
         self.setRange(init_range[0], init_range[1])
         self.setOrientation(Qt.Horizontal)
         self.setSingleStep(1)
-        self.init_value = init_value
-        self.setValue(init_value)
+        self.init_value = int(init_value)
+        self.setValue(self.init_value)
         self.mouse_is_pressed = False
         self.itf = data_to_layer_interface
         self.type_of_slider = type_of_slider
@@ -41,7 +41,7 @@ class GridPlaneSlider(QSlider):
     def mouseMoveEvent(self, event):
         if self.mouse_is_pressed:
             delta_x = event.x() / 2.5 - self.value()
-            self.setValue(self.value() + delta_x)
+            self.setValue(int(self.value() + delta_x))
             if self.type_of_slider == 'z_pos':
                 self.itf.update_grid_plane(z_pos=self.value())
             elif self.type_of_slider == 'line_thickness':
