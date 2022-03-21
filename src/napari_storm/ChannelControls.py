@@ -82,8 +82,8 @@ class ChannelControls(QWidget):
         self.Slider_colormap_range.valueChanged.connect(self.adjust_colormap_range)
 
         self.Slider_opacity = QSlider(Qt.Horizontal)
-        self.Slider_opacity.setRange(0.0, 100.0)
-        self.Slider_opacity.setValue(100.0)
+        self.Slider_opacity.setRange(0, 100)
+        self.Slider_opacity.setValue(100)
         self.Slider_opacity.hide()
         self.Slider_opacity.valueChanged.connect(self.adjust_z_color_encoding_opacity)
 
@@ -94,10 +94,10 @@ class ChannelControls(QWidget):
             items.append(cmap.name)
             pixmap = QPixmap(20, 20)
             color = QColor(
-                cmap.colors[1][0] * 255,
-                cmap.colors[1][1] * 255,
-                cmap.colors[1][2] * 255,
-                cmap.colors[1][3] * 255,
+                int(cmap.colors[1][0] * 255),
+                int(cmap.colors[1][1] * 255),
+                int(cmap.colors[1][2] * 255),
+                int(cmap.colors[1][3] * 255),
             )
             pixmap.fill(color)
             icons.append(QIcon(pixmap))
@@ -181,8 +181,8 @@ class ChannelControls(QWidget):
         tmp_layer.opacity = tmp_opacity / 100.0
 
     def reset(self):
-        self.Slider_colormap_range.setValue((10.0, 90.0))
-        self.Slider_opacity.setValue(100.0)
+        self.Slider_colormap_range.setValue((10, 90))
+        self.Slider_opacity.setValue(100)
 
     def change_color_map(self):
         tmp_cmap_index = self.Colormap_selector.currentIndex()
