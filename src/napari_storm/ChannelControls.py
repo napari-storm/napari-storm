@@ -181,8 +181,8 @@ class ChannelControls(QWidget):
         tmp_layer.opacity = tmp_opacity / 100.0
 
     def reset(self):
-        self.Slider_colormap_range.setValue((10.0, 90.0))
-        self.Slider_opacity.setValue(100.0)
+        self.Slider_colormap_range.setValue((10, 90))
+        self.Slider_opacity.setValue(100)
 
     def change_color_map(self):
         tmp_cmap_index = self.Colormap_selector.currentIndex()

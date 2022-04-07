@@ -82,6 +82,7 @@ class napari_storm(QWidget):
         self.pixelsize_nm = []
         self._zdim = None
         self.channel = []
+        self.zoom = 0
 
         # GUI
         self.setAcceptDrops(True)
@@ -112,19 +113,19 @@ class napari_storm(QWidget):
 
         self.Baxis_xy = QPushButton()
         self.Baxis_xy.setText('XY')
-        self.Baxis_xy.clicked.connect(lambda: self.change_camera(type='XY'))
+        self.Baxis_xy.clicked.connect(lambda: self.change_camera(set_view_to='XY'))
         self.Baxis_xy.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_xy, 2, 1)
 
         self.Baxis_yz = QPushButton()
         self.Baxis_yz.setText('YZ')
-        self.Baxis_yz.clicked.connect(lambda: self.change_camera(type='YZ'))
+        self.Baxis_yz.clicked.connect(lambda: self.change_camera(set_view_to='YZ'))
         self.Baxis_yz.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_yz, 2, 2)
 
         self.Baxis_xz = QPushButton()
         self.Baxis_xz.setText('XZ')
-        self.Baxis_xz.clicked.connect(lambda: self.change_camera(type='XZ'))
+        self.Baxis_xz.clicked.connect(lambda: self.change_camera(set_view_to='XZ'))
         self.Baxis_xz.setFixedSize(75, 20)
         self.data_controls_tab_layout.addWidget(self.Baxis_xz, 2, 3)
 
@@ -677,16 +678,17 @@ class napari_storm(QWidget):
     def _start_typing_timer(self, timer):
         timer.start(500)
 
-    def change_camera(self, type='XY'):
+    def change_camera(self, set_view_to='XY'):
         v = napari.current_viewer()
         values = {}
-        if type == 'XY':
+        if set_view_to == 'XY':
             v.camera.angles = (0, 0, -90)
-        elif type == 'XZ':
+        elif set_view_to == 'XZ':
             v.camera.angles = (180, 180, -180)
         else:
             v.camera.angles = (0, 90, 0)
         v.camera.center = self.data_to_layer_itf.camera[1]
+        v.camera.zoom = self.zoom
         v.camera.update(values)
 
     def update_sigma(self):
@@ -737,6 +739,7 @@ class napari_storm(QWidget):
         self.Lnumberoflocs.show_infos(filename=dataset.name, idx=idx)
         self.localization_datasets[idx].update_locs()
         self.data_to_layer_itf.create_new_layer(dataset, layer_name=dataset.name, idx=idx, merge=merge)
+        self.zoom = self.viewer.camera.zoom
         self.add_channel(name=dataset.name)
         self.channel[-1].change_color_map()
         self.channel[-1].adjust_colormap_range()
