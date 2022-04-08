@@ -11,6 +11,8 @@ class TestModeWindow(QWidget):
         self.setWindowTitle("TestMode")
         self.parent = parent
 
+        self.recreate = False  # If the simulated points are changed
+
         self.available_arrangement_modes = ["line", "grid", "lattice", "random"]
         self.current_arrangement_mode = 0
 
@@ -151,6 +153,9 @@ class TestModeWindow(QWidget):
             self.current_arrangement_mode = 3
 
     def accept_evaluate_return_dataset(self):
+        if self.recreate:
+            self.parent.clear_datasets()
+            self.parent.data_to_layer_itf.reset_render_range_and_offset()
 
         if self.current_arrangement_mode == 0:
             locs_pos_nm = self.create_line_dataset()
@@ -191,7 +196,8 @@ class TestModeWindow(QWidget):
                                        zdim_present=True,
                                        sigma_present=True, photon_count_present=False,
                                        parent=self.parent)])
-        self.Baccept.setText("Reset")
+        self.Baccept.setText("Recreate")
+        self.recreate=True
 
     def create_line_dataset(self):
         locs = np.ones((3, self.num_of_locs))
