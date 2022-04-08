@@ -262,6 +262,68 @@ class NapariStormGUI(QWidget):
         self.data_control_tab.setLayout(self.data_controls_tab_layout)
         self.infos_tab.setLayout(self.infos_tab_layout)
 
+    #### D and D
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls:
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls:
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls:
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            links = []
+            u = event.mimeData().urls()
+            file = u[0].toString()[8:]
+            self.open_localization_data_file_and_get_dataset(file_path=file)
+        else:
+            event.ignore()
+        #####
+
+    def hide_non_available_widgets(self):
+        """Hide controls which are better untouched atm"""
+        self.Srender_rangex.hide()
+        self.Srender_rangey.hide()
+        self.Lrangex.hide()
+        self.Lrangey.hide()
+        self.Cscalebar.hide()
+        self.Brenderoptions.hide()
+        self.Lrenderoptions.hide()
+        self.Lsigma_xy.hide()
+        self.Esigma_xy.hide()
+        self.Lsigma_z.hide()
+        self.Esigma_z.hide()
+        self.Lsigma_xy_min.hide()
+        self.Lsigma_z_min.hide()
+        self.Esigma_min_xy.hide()
+        self.Esigma_min_z.hide()
+        self.Bz_color_coding.hide()
+        self.Lscalebarsize.hide()
+        self.Esbsize.hide()
+        self.Bmerge_with_additional_file.hide()
+        self.Srender_rangez.hide()
+        self.Lrangez.hide()
+        self.Lresetview.hide()
+        self.Baxis_xy.hide()
+        self.Baxis_yz.hide()
+        self.Baxis_xz.hide()
+        self.Breset_render_range.hide()
+        self.Egrid_line_distance.hide()
+        self.Sgrid_line_thickness.hide()
+        self.Sgrid_z_pos.hide()
+        self.Cgrid_plane.hide()
+        self.Bgrid_plane_color.hide()
+        self.HL1.hide()
+        self.HL2.hide()
+
     def hide_testing_mode(self):
         if self.testing_mode_enabled:
             self.tabs.addTab(self.test_mode_tab, 'Test Mode')

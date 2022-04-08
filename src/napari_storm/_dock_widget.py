@@ -102,6 +102,11 @@ class napari_storm(NapariStormGUI):
     @render_gaussian_mode.setter
     def render_gaussian_mode(self, value):
         if value == 0 or value == 1:
+            if self._z_color_encoding_mode == 1 and value == 1:
+                self.z_color_encoding_mode = 0
+                self.Bz_color_coding.hide()
+            else:
+                self.Bz_color_coding.show()
             self._render_gaussian_mode = value
         else:
             raise ValueError(f"Wrong value for gaussian render mode, either 0 or 1 not {value} of type {type(value)}")
@@ -113,7 +118,11 @@ class napari_storm(NapariStormGUI):
     @z_color_encoding_mode.setter
     def z_color_encoding_mode(self, value):
         if value == 0 or value == 1:
-            self._z_color_encoding_mode = value
+            if self._render_gaussian_mode == 0:
+                self._z_color_encoding_mode = value
+            else:
+                self._z_color_encoding_mode = 0
+                raise ValueError(f"Color Encoding only works for fixed gaussian mode")
         else:
             raise ValueError(f"Wrong value for Z colorcoding, either 0 or 1 not {value} of type {type(value)}")
 
@@ -168,8 +177,6 @@ class napari_storm(NapariStormGUI):
             self.grid_plane_standard_color_index = 0
             self.Bgrid_plane_color.setCurrentIndex(0)
             self.Bgrid_plane_color.hide()
-
-
 
     def scalebar_state_changed(self):
         if self.Cscalebar.isChecked():
@@ -235,68 +242,6 @@ class napari_storm(NapariStormGUI):
             tmp_z_center_nm = self.viewer.camera.center[0]
             self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
             self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
-
-    #### D and D
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.accept()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.setDropAction(Qt.CopyAction)
-            event.accept()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.setDropAction(Qt.CopyAction)
-            event.accept()
-            links = []
-            u = event.mimeData().urls()
-            file = u[0].toString()[8:]
-            self.open_localization_data_file_and_get_dataset(file_path=file)
-        else:
-            event.ignore()
-        #####
-
-    def hide_non_available_widgets(self):
-        """Hide controls which are better untouched atm"""
-        self.Srender_rangex.hide()
-        self.Srender_rangey.hide()
-        self.Lrangex.hide()
-        self.Lrangey.hide()
-        self.Cscalebar.hide()
-        self.Brenderoptions.hide()
-        self.Lrenderoptions.hide()
-        self.Lsigma_xy.hide()
-        self.Esigma_xy.hide()
-        self.Lsigma_z.hide()
-        self.Esigma_z.hide()
-        self.Lsigma_xy_min.hide()
-        self.Lsigma_z_min.hide()
-        self.Esigma_min_xy.hide()
-        self.Esigma_min_z.hide()
-        self.Bz_color_coding.hide()
-        self.Lscalebarsize.hide()
-        self.Esbsize.hide()
-        self.Bmerge_with_additional_file.hide()
-        self.Srender_rangez.hide()
-        self.Lrangez.hide()
-        self.Lresetview.hide()
-        self.Baxis_xy.hide()
-        self.Baxis_yz.hide()
-        self.Baxis_xz.hide()
-        self.Breset_render_range.hide()
-        self.Egrid_line_distance.hide()
-        self.Sgrid_line_thickness.hide()
-        self.Sgrid_z_pos.hide()
-        self.Cgrid_plane.hide()
-        self.Bgrid_plane_color.hide()
-        self.HL1.hide()
-        self.HL2.hide()
 
     def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controls"""
@@ -422,7 +367,9 @@ class napari_storm(NapariStormGUI):
         self.channel[-1].change_color_map()
         self.channel[-1].adjust_colormap_range()
         if dataset.sigma_present:
+            self.render_gaussian_mode = 1
             self.Brenderoptions.setCurrentIndex(1)
+            self.Bz_color_coding.hide()
 
 
 @napari_hook_implementation
