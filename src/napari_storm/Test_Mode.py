@@ -1,10 +1,10 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QLineEdit, QComboBox, QPushButton, QDialog
+from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QLineEdit, QComboBox, QPushButton, QDialog, QFormLayout
 import numpy as np
 from .ns_constants import *
 from .LocalizationData import LocalizationData
 
 
-class TestModeWindow(QDialog):
+class TestModeWindow(QWidget):
     def __init__(self, parent):
         super().__init__()
         print("test mode started")
@@ -23,7 +23,7 @@ class TestModeWindow(QDialog):
         self.sigma_y_nm = 10
         self.sigma_z_nm = 10
 
-        self.layout = QGridLayout()
+        self.layout = QFormLayout()
 
         self.Lnum_locs = QLabel()
         self.Lnum_locs.setText("Number of locs")
@@ -41,6 +41,7 @@ class TestModeWindow(QDialog):
 
         self.Edist_of_locs_nm = QLineEdit()
         self.Edist_of_locs_nm.setText(str(self.dist_of_locs_nm))
+        self.Edist_of_locs_nm.textChanged.connect(self.dist_of_locs_changed)
 
         self.Lsize_mode = QLabel()
         self.Lsize_mode.setText("Size mode")
@@ -78,21 +79,24 @@ class TestModeWindow(QDialog):
         self.Baccept.setText("accept")
         self.Baccept.clicked.connect(self.accept_evaluate_return_dataset)
 
-        self.layout.addWidget(self.Lnum_locs, 0, 0)
-        self.layout.addWidget(self.Enum_locs, 0, 1)
-        self.layout.addWidget(self.Larrangement_mode, 1, 0)
-        self.layout.addWidget(self.Carrangement_mode, 1, 1)
-        self.layout.addWidget(self.Edist_of_locs_nm, 1, 2)
-        self.layout.addWidget(self.Lsize_mode, 2, 0)
-        self.layout.addWidget(self.Csize_mode, 2, 1)
-        self.layout.addWidget(self.Lsigma_x_nm, 3, 0)
-        self.layout.addWidget(self.Lsigma_y_nm, 3, 1)
-        self.layout.addWidget(self.Lsigma_z_nm, 3, 2)
-        self.layout.addWidget(self.Esigma_x_nm, 4, 0)
-        self.layout.addWidget(self.Esigma_y_nm, 4, 1)
-        self.layout.addWidget(self.Esigma_z_nm, 4, 2)
-        self.layout.addWidget(self.Baccept, 5, 1)
+        self.layout.addRow("Number of locs", self.Enum_locs)
+        self.Warrangemet_widget = self.form_layout_workaround([self.Carrangement_mode, self.Edist_of_locs_nm])
+        self.layout.addRow("loc arrangement and distance [nm]", self.Warrangemet_widget)
+        self.layout.addRow("Size mode", self.Csize_mode)
+        self.Wsigma_labels = self.form_layout_workaround([self.Lsigma_x_nm, self.Lsigma_y_nm, self.Lsigma_z_nm])
+        self.layout.addRow(self.Wsigma_labels)
+        self.Wsigma_line_edits = self.form_layout_workaround([self.Esigma_x_nm, self.Esigma_y_nm, self.Esigma_z_nm])
+        self.layout.addRow(self.Wsigma_line_edits)
+        self.layout.addRow(self.Baccept)
         self.setLayout(self.layout)
+
+    def form_layout_workaround(self, list_of_widgets):
+        tmp_widget = QWidget()
+        tmp_widget_layout = QGridLayout()
+        for i in range(len(list_of_widgets)):
+            tmp_widget_layout.addWidget(list_of_widgets[i], 0, i)
+        tmp_widget.setLayout(tmp_widget_layout)
+        return tmp_widget
 
     def num_locs_changed(self):
         self.num_of_locs = int(self.Enum_locs.text())
@@ -105,6 +109,9 @@ class TestModeWindow(QDialog):
 
     def sigma_z_changed(self):
         self.sigma_z_nm = float(self.Esigma_z_nm.text())
+
+    def dist_of_locs_changed(self):
+        self.dist_of_locs_nm = float(self.Edist_of_locs_nm.text())
 
     def size_mode_changed(self):
         if self.Csize_mode.currentText() == self.available_size_modes[0]:
@@ -132,7 +139,6 @@ class TestModeWindow(QDialog):
             self.Lsigma_y_nm.setText("<Sigma Y> [nm]")
             self.Lsigma_z_nm.setText("<Sigma Z> [nm]")
             self.current_size_mode = 2
-
 
     def arrangement_mode_changed(self):
         if self.Carrangement_mode.currentText() == self.available_arrangement_modes[0]:
@@ -182,10 +188,10 @@ class TestModeWindow(QDialog):
 
         self.parent.get_dataset_from_test_mode(
             datasets=[LocalizationData(locs=locs, name="Generated in Testmode", pixelsize_nm=1,
-                                      offset_pixels=(0, 0, 0), zdim_present=True,
-                                      sigma_present=True, photon_count_present=False,
-                                      parent=self.parent)])
-        self.hide()
+                                       zdim_present=True,
+                                       sigma_present=True, photon_count_present=False,
+                                       parent=self.parent)])
+        self.Baccept.setText("Reset")
 
     def create_line_dataset(self):
         locs = np.ones((3, self.num_of_locs))
