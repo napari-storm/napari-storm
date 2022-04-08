@@ -139,7 +139,7 @@ class ChannelControls(QWidget):
 
     @render_gaussian_mode.setter
     def render_gaussian_mode(self, value):
-        self.parent.render_gaussian_mode = value
+        raise ParentError("Should be set in Parent not here")
 
     @property
     def name(self):
