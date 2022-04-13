@@ -61,9 +61,9 @@ class LocalizationData:
         ycoords = coords.y_pos_pixels - np.min(coords.y_pos_pixels)
         zcoords = coords.z_pos_pixels - np.min(coords.z_pos_pixels)
 
-        render_xrange = self.parent.render_range_x_percent
-        render_yrange = self.parent.render_range_y_percent
-        render_zrange = self.parent.render_range_z_percent
+        render_xrange = self.parent.render_range_slider_x_percent
+        render_yrange = self.parent.render_range_slider_y_percent
+        render_zrange = self.parent.render_range_slider_z_percent
 
         xmin = render_xrange[0] / 100 * np.max(xcoords)
         xmax = render_xrange[1] / 100 * np.max(xcoords)

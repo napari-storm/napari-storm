@@ -77,8 +77,8 @@ class ChannelControls(QWidget):
         self.Breset.clicked.connect(self.reset)
 
         self.Slider_colormap_range = RangeSlider(parent=parent)
-        self.Slider_colormap_range.setRange(0.0, 100.0)
-        self.Slider_colormap_range.setValue((10.0, 90.0))
+        self.Slider_colormap_range.setRange(0, 100)
+        self.Slider_colormap_range.setValue((10, 90))
         self.Slider_colormap_range.valueChanged.connect(self.adjust_colormap_range)
 
         self.Slider_opacity = QSlider(Qt.Horizontal)
@@ -139,7 +139,7 @@ class ChannelControls(QWidget):
 
     @render_gaussian_mode.setter
     def render_gaussian_mode(self, value):
-        self.parent.render_gaussian_mode = value
+        raise ParentError("Should be set in Parent not here")
 
     @property
     def name(self):

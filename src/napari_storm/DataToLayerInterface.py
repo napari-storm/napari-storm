@@ -3,10 +3,11 @@ from .particles import Particles
 import numpy as np
 from .utils import generate_billboards_2d
 from .CustomErrors import *
+from .ns_constants import *
 
 
-class DataToLayerInterface: #localization always with z # switch info with channel controlls #
-    def __init__(self, parent, viewer, surface_layer=None):
+class DataToLayerInterface:  # localization always with z # switch info with channel controlls #
+    def __init__(self, parent, viewer, surface_layer=None, grid_plane_layer=None):
 
         # assert isinstance(parent, napari_storm) == True
         self._parent = parent
@@ -14,18 +15,19 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         self.n_layers = 0
         self.colormap = self.colormaps()
         self.scalebar_layer = surface_layer
-        self.scalebar_exists=True
+        self.scalebar_exists = True
         if not self.scalebar_layer:
             self.scalebar_exists = False
+        self.grid_plane_layer = grid_plane_layer
 
-        #Render properties for every dataset, stored in lists
+        # Render properties for every dataset, stored in lists
         self.render_sigma = []
         self.render_size = []
         self.render_values = []
-        #self.render_colormap = []
+        # self.render_colormap = []
         self.render_anti_alias = 0
 
-        self.render_range_x = [0, -np.inf]  # the -np.inf causes the runtime warning, why ?
+        self.render_range_x = [0, -np.inf]
         self.render_range_y = [0, -np.inf]
         self.render_range_z = [0, -np.inf]
         self.offset_nm_3d = [0, 0, 0]
@@ -40,6 +42,121 @@ class DataToLayerInterface: #localization always with z # switch info with chann
     @parent.setter
     def parent(self, value):
         raise ParentError('Cannot change parent of existing Widget')
+
+    def create_remove_grid_plane_state(self, enable):
+        if enable:
+            z = np.mean(self.render_range_z)
+            default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
+            num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
+                                          (self.parent.render_range_slider_x_percent[1] -
+                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+                                          (self.parent.render_range_slider_y_percent[1] -
+                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
+            default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
+                self.render_range_y[1] - self.render_range_y[0],
+                self.render_range_x[1] - self.render_range_x[0]))
+
+            vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
+            # length of vectors
+            vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
+                                 (self.parent.render_range_slider_y_percent[1] -
+                                  self.parent.render_range_slider_y_percent[0]) / 100
+            # x and y start position of vectors
+            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_y[1] - self.render_range_y[0]) \
+                                 * (self.parent.render_range_slider_x_percent[0]-1) / 100
+            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
+                                                                (self.render_range_x[1] - self.render_range_x[0])
+                                                                *(self.parent.render_range_slider_y_percent[0]-1) / 100)
+            vectors_x[:, 0, 0] = z
+
+            vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
+            vectors_y[:, 1, 2] = (self.render_range_y[1] - self.render_range_y[0]) * \
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
+            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_x[1] - self.render_range_x[0]) \
+                                 * (self.parent.render_range_slider_y_percent[0]-1) / 100
+            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
+                                                                (self.render_range_y[1] - self.render_range_y[0])
+                                                                *(self.parent.render_range_slider_x_percent[0]-1) / 100)
+            vectors_y[:, 0, 0] = z
+
+            vectors = np.concatenate((vectors_x, vectors_y))
+            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
+                                                            name="Grid_Plane", edge_color='white', ndim=3,)
+        else:
+            self.viewer.layers.remove('Grid_Plane')
+
+    def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None, opacity=None):
+        if line_distance_nm:
+            z = np.mean(self.grid_plane_layer.data[:, 0, 0])
+            opacity_backup = self.grid_plane_layer.opacity
+            default_line_thickness_nm = self.grid_plane_layer.edge_width
+            default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
+            num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
+                                          (self.parent.render_range_slider_x_percent[1] -
+                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+                                          (self.parent.render_range_slider_y_percent[1] -
+                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
+            if num_of_lines_x < 1 or num_of_lines_y < 1:
+                tmp_max_line_dist = np.round(np.floor(min((self.render_range_y[1] - self.render_range_y[0]) *
+                                            (self.parent.render_range_slider_x_percent[1] -
+                                            self.parent.render_range_slider_x_percent[0]) / 100,
+                                            (self.render_range_x[1] - self.render_range_x[0]) *
+                                            (self.parent.render_range_slider_y_percent[1] -
+                                            self.parent.render_range_slider_y_percent[0]) / 100)) * .001,3)
+                self.parent.Egrid_line_distance.setText(str(tmp_max_line_dist))
+                return
+            self.viewer.layers.remove('Grid_Plane')
+            vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
+            # length of vectors
+            vectors_x[:, 1, 1] = (self.render_range_x[1] - self.render_range_x[0]) * \
+                                 (self.parent.render_range_slider_y_percent[1] -
+                                  self.parent.render_range_slider_y_percent[0]) / 100
+            # x and y start position of vectors
+            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_y[1] - self.render_range_y[0]) \
+                                 * (self.parent.render_range_slider_x_percent[0] - 1) / 100
+            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
+                                                                (self.render_range_x[1] - self.render_range_x[0])
+                                                                * (self.parent.render_range_slider_y_percent[
+                                                                       0] - 1) / 100)
+            vectors_x[:, 0, 0] = z
+
+            vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
+            vectors_y[:, 1, 2] = (self.render_range_y[1] - self.render_range_y[0]) * \
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
+            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
+                                 (self.render_range_x[1] - self.render_range_x[0]) \
+                                 * (self.parent.render_range_slider_y_percent[0] - 1) / 100
+            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
+                                                                (self.render_range_y[1] - self.render_range_y[0])
+                                                                * (self.parent.render_range_slider_x_percent[
+                                                                       0] - 1) / 100)
+            vectors_y[:, 0, 0] = z
+            vectors = np.concatenate((vectors_x, vectors_y))
+            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
+                                                            name="Grid_Plane", edge_color="white", ndim=3,
+                                                            opacity=opacity_backup)
+            self.parent.update_grid_plane_color()
+
+        if z_pos:
+            vectors = self.grid_plane_layer.data
+            vectors[:, 0, 0] = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
+            self.grid_plane_layer.data = vectors
+        if line_thickness:
+            self.grid_plane_layer.edge_width = 0.05 * np.exp(line_thickness / 10 - 5) / len(
+                self.grid_plane_layer.data[:, 0, 0]) / 2 \
+                                               * np.mean((self.render_range_x[1] - self.render_range_x[0],
+                                                          self.render_range_y[1] - self.render_range_y[0]))
+        if color:
+            self.grid_plane_layer.edge_color = color
+        if opacity:
+            self.grid_plane_layer.opacity = opacity / 100
 
     def reset_render_range_and_offset(self):
         self.render_range_x = [0, -np.inf]
@@ -106,9 +223,8 @@ class DataToLayerInterface: #localization always with z # switch info with chann
         dataset.napari_layer_ref.add_to_viewer(self.viewer)
         self.viewer.camera.perspective = 50
         dataset.napari_layer_ref.shading = 'gaussian'
-        self.viewer.camera.angles=(0, 0, -90)
+        self.viewer.camera.angles = (0, 0, -90)
         self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
-
 
         # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
 
@@ -138,8 +254,8 @@ class DataToLayerInterface: #localization always with z # switch info with chann
             self.parent.channel[i].adjust_z_color_encoding_opacity()
             self.parent.channel[i].change_color_map()
             dataset.napari_layer_ref.shading = "gaussian"
-            i+=1
-        #v.dims.ndisplay=3
+            i += 1
+        # v.dims.ndisplay=3
         v.camera.angles = self.camera[2]
         v.camera.zoom = self.camera[0]
         v.camera.center = self.camera[1]
@@ -168,8 +284,8 @@ class DataToLayerInterface: #localization always with z # switch info with chann
             vertices_old, faces_old, values_old = v.layers[
                 self.list_of_datasets[i].name
             ].data
-            #print(f"before: {len(vertices_old), len(faces_old), len(values_old)}")
-            #print(f"after: {len(vertices), len(faces), len(values)}")
+            # print(f"before: {len(vertices_old), len(faces_old), len(values_old)}")
+            # print(f"after: {len(vertices), len(faces), len(values)}")
             v.layers[self.list_of_datasets[i].name].data = (vertices, faces, values)
 
     def colormaps(self):
@@ -233,7 +349,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     tmp_values = 1.0 / tmp_product
 
                     if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values-np.min(tmp_values))/(np.max(tmp_values)-np.min(tmp_values))
+                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
 
                 else:
                     # Calculate sigma according to photon count
@@ -251,7 +367,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
 
                     tmp_values = 1.0 / tmp_product
                     if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values-np.min(tmp_values))/(np.max(tmp_values)-np.min(tmp_values))
+                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
 
             else:
                 # 2D data
@@ -267,7 +383,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     tmp_values = 1.0 / tmp_product
 
                     if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values-np.min(tmp_values))/(np.max(tmp_values)-np.min(tmp_values))
+                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
 
                 else:
                     # Calculate sigma according to photon count
@@ -283,9 +399,9 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     tmp_values = 1.0 / tmp_product
 
                     if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values-np.min(tmp_values))/(np.max(tmp_values)-np.min(tmp_values))
-            #if not all the same values map 99th percentile to 1
-            tmp_values /= np.percentile(tmp_values,99)
+                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
+            # if not all the same values map 99th percentile to 1
+            tmp_values /= np.percentile(tmp_values, 99)
 
         if self.parent.z_color_encoding_mode == 1:
             # Color the localizations according to their Z-coordinate
@@ -335,7 +451,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                 sigma_y_nm = dataset.locs_active.sigma_y_pixels * dataset.pixelsize_nm
                 sigma_z_nm = dataset.locs_active.sigma_z_pixels * dataset.pixelsize_nm
 
-                sigma_x_nm[sigma_x_nm < self.parent.render_var_gauss_sigma_min_xy_nm] =\
+                sigma_x_nm[sigma_x_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
                     self.parent.render_var_gauss_sigma_min_xy_nm
                 sigma_y_nm[sigma_y_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
                     self.parent.render_var_gauss_sigma_min_xy_nm
@@ -343,7 +459,7 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                     self.parent.render_var_gauss_sigma_min_z_nm
 
                 # leave out biggest 1 percent
-                sigma_x_nm[sigma_x_nm > np.percentile(sigma_x_nm, 99)] = np.percentile(sigma_x_nm,99)
+                sigma_x_nm[sigma_x_nm > np.percentile(sigma_x_nm, 99)] = np.percentile(sigma_x_nm, 99)
                 sigma_y_nm[sigma_y_nm > np.percentile(sigma_y_nm, 99)] = np.percentile(sigma_y_nm, 99)
                 sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
 
@@ -426,26 +542,26 @@ class DataToLayerInterface: #localization always with z # switch info with chann
                         [-list[1], -list[1], list[2]],
                         [-list[1], list[1], -list[2]],
                         [-list[1], -list[1], -list[2]],
-                        [l-list[1], list[1], list[2]],
-                        [l-list[1], -list[1], list[2]],
-                        [l-list[1], list[1], -list[2]],
-                        [l-list[1], -list[1], -list[2]],
+                        [l - list[1], list[1], list[2]],
+                        [l - list[1], -list[1], list[2]],
+                        [l - list[1], list[1], -list[2]],
+                        [l - list[1], -list[1], -list[2]],
                         [list[1], -list[1], list[2]],
                         [-list[1], -list[1], list[2]],
                         [list[1], -list[1], -list[2]],
                         [-list[1], -list[1], -list[2]],
-                        [list[1], l-list[1], list[2]],
-                        [-list[1], l-list[1], list[2]],
-                        [list[1], l-list[1], -list[2]],
-                        [-list[1], l-list[1], -list[2]],
+                        [list[1], l - list[1], list[2]],
+                        [-list[1], l - list[1], list[2]],
+                        [list[1], l - list[1], -list[2]],
+                        [-list[1], l - list[1], -list[2]],
                         [list[1], list[2], -list[1]],
                         [-list[1], list[2], -list[1]],
                         [list[1], -list[2], -list[1]],
                         [-list[1], -list[2], -list[1]],
-                        [list[1], list[2], l-list[1]],
-                        [-list[1], list[2], l-list[1]],
-                        [list[1], -list[2], l-list[1]],
-                        [-list[1], -list[2], l-list[1]],
+                        [list[1], list[2], l - list[1]],
+                        [-list[1], list[2], l - list[1]],
+                        [list[1], -list[2], l - list[1]],
+                        [-list[1], -list[2], l - list[1]],
                     ]
                 )
                 for i in range(len(vertices)):

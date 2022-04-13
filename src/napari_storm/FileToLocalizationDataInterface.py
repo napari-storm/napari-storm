@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 import os.path as _ospath
 from tkinter import Tk
@@ -248,7 +249,33 @@ class FileToLocalizationDataInterface:
 
     def load_mfx_json(self, file_path):
         """Loads MFX Data from json files -> Needs to be redone when a working example file is present """
-        pass
+        filename = file_path.split("/")[-1]
+        raw_data = pd.read_json(file_path)
+        raw_data = raw_data[raw_data["vld"] == True]
+        n_locs = len(raw_data.itr)
+        vld_indices = raw_data.itr.keys()
+        if len(raw_data.itr) == 10:
+            raw_locs = np.zeros((3, n_locs))
+            zdim = True
+            for i in range(n_locs):
+                raw_locs[:, i] = raw_data.itr[vld_indices[i]][9]["loc"]
+        else:
+            zdim = False
+            raw_locs = np.zeros((3, n_locs))
+            for i in range(n_locs):
+                raw_locs[:, i] = raw_data.itr[vld_indices[i]][4]["loc"]
+        frames = np.ones(n_locs)
+        photons = 1000 * np.ones(n_locs)
+        pixelsize = 1
+        locs = np.rec.array(
+            (frames, raw_locs[0, :]*1E9, raw_locs[1, :]*1E9, raw_locs[2, :]*1E9*MINFLUX_Z_CORRECTION_FACTOR,
+             np.ones(n_locs), np.ones(n_locs),
+             np.ones(n_locs), photons), dtype=LOCS_DTYPE,)
+        filename = self.check_namespace(filename)
+        self.dataset_names.append(filename)
+        return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
+                                 zdim_present=zdim,
+                                 sigma_present=False, photon_count_present=True, parent=self.parent)]
 
     def load_mfx_npy(self, file_path):
         """Loads MFX Data from numpy (.npy) files"""
@@ -290,7 +317,7 @@ class FileToLocalizationDataInterface:
                 (frames, locsx, locsy, locsz,np.ones(len(locsx)),np.ones(len(locsx)),np.ones(len(locsx)), photons),
                 dtype=LOCS_DTYPE,
             )
-        filename = self.check_namespace( filename)
+        filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         return [LocalizationData(locs=locs, name=filename, pixelsize_nm=pixelsize,
                                  zdim_present=zdim,
