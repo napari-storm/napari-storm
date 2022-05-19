@@ -59,33 +59,35 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
-            vectors_x[:, 1, 1] = (self.render_range_x[1]*1.01 - self.render_range_x[0]) * \
+            vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
                                  (self.parent.render_range_slider_y_percent[1] -
                                   self.parent.render_range_slider_y_percent[0]) / 100
             # x and y start position of vectors
             vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0]-1) / 100
+                                 * (self.parent.render_range_slider_x_percent[0] - 1) / 100
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
                                                                 (self.render_range_x[1] - self.render_range_x[0])
-                                                                *(self.parent.render_range_slider_y_percent[0]-1) / 100)
+                                                                * (self.parent.render_range_slider_y_percent[
+                                                                       0] - 1) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
-            vectors_y[:, 1, 2] = (self.render_range_y[1]*1.01 - self.render_range_y[0]) * \
+            vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
                                  (self.parent.render_range_slider_x_percent[1] -
                                   self.parent.render_range_slider_x_percent[0]) / 100
             vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0]-1) / 100
+                                 * (self.parent.render_range_slider_y_percent[0] - 1) / 100
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
                                                                 (self.render_range_y[1] - self.render_range_y[0])
-                                                                *(self.parent.render_range_slider_x_percent[0]-1) / 100)
+                                                                * (self.parent.render_range_slider_x_percent[
+                                                                       0] - 1) / 100)
             vectors_y[:, 0, 0] = z
 
             vectors = np.concatenate((vectors_x, vectors_y))
             self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color='white', ndim=3,)
+                                                            name="Grid_Plane", edge_color='white', ndim=3, )
         else:
             self.viewer.layers.remove('Grid_Plane')
 
@@ -103,17 +105,18 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                            self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
             if num_of_lines_x < 1 or num_of_lines_y < 1:
                 tmp_max_line_dist = np.round(np.floor(min((self.render_range_y[1] - self.render_range_y[0]) *
-                                            (self.parent.render_range_slider_x_percent[1] -
-                                            self.parent.render_range_slider_x_percent[0]) / 100,
-                                            (self.render_range_x[1] - self.render_range_x[0]) *
-                                            (self.parent.render_range_slider_y_percent[1] -
-                                            self.parent.render_range_slider_y_percent[0]) / 100)) * .001,3)
+                                                          (self.parent.render_range_slider_x_percent[1] -
+                                                           self.parent.render_range_slider_x_percent[0]) / 100,
+                                                          (self.render_range_x[1] - self.render_range_x[0]) *
+                                                          (self.parent.render_range_slider_y_percent[1] -
+                                                           self.parent.render_range_slider_y_percent[0]) / 100)) * .001,
+                                             3)
                 self.parent.Egrid_line_distance.setText(str(tmp_max_line_dist))
                 return
             self.viewer.layers.remove('Grid_Plane')
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
-            vectors_x[:, 1, 1] = (self.render_range_x[1]*1.01 - self.render_range_x[0]) * \
+            vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
                                  (self.parent.render_range_slider_y_percent[1] -
                                   self.parent.render_range_slider_y_percent[0]) / 100
             # x and y start position of vectors
@@ -127,7 +130,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
-            vectors_y[:, 1, 2] = (self.render_range_y[1]*1.01 - self.render_range_y[0]) * \
+            vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
                                  (self.parent.render_range_slider_x_percent[1] -
                                   self.parent.render_range_slider_x_percent[0]) / 100
             vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
@@ -317,7 +320,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             cmaps.append(
                 napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
             )
-        colors = np.ones((2, 4))
+        colors = np.zeros((2, 4))
+        colors[-1][:] = 1
+        colors[:][-1] = 1
         cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray"))
         return cmaps
 
