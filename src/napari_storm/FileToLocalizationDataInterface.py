@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 
 import os.path as _ospath
-from tkinter import Tk
-from tkinter import filedialog as fd
 
 
 import h5py
@@ -16,7 +14,7 @@ import struct
 # load_SMLM adapted from Marting Weigerts readSmlmFile
 import zipfile
 
-from PyQt5.QtWidgets import QInputDialog
+from PyQt5.QtWidgets import QInputDialog, QFileDialog as fd
 
 from .ns_constants import *
 from .LocalizationData import LocalizationData
@@ -45,9 +43,8 @@ class FileToLocalizationDataInterface:
     def open_localization_data_file_and_get_dataset(self, file_path=None):
         """Determine which file type is being opened, and call the
         corresponding importer function"""
-        Tk().withdraw()
         if not file_path:
-            file_path = fd.askopenfilename()
+            file_path = fd.getOpenFileName(None, 'Open mol list', '.', 'Localization files (*.h5)')[0]
         return self.recognize_storm_data_and_return_dataset(file_path)
 
     def recognize_storm_data_and_return_dataset(self, file_path):
