@@ -337,6 +337,7 @@ class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
             super().__init__(None, name, zdim_present)
         self.dataset_type = "MinfluxDataAIIterationClass(MinfluxDataBaseClass)"
         self.itr = itr
+        self.locs_dtype = minflux_AI_data_dtype
 
     def export_current_iteration_as_mfx_file(self, filename=None):
         if filename is None:

@@ -6,11 +6,12 @@ from PyQt5.QtWidgets import QTabWidget, QWidget, QGridLayout, QPushButton, QLabe
 from qtpy import QtCore
 
 from napari_storm.CustomErrors import ParentError
-from napari_storm.pyqt.CustomSliders import GridPlaneSlider
+from napari_storm.pyqt.GridPlaneSlider import GridPlaneSlider
 from napari_storm.pyqt.PyQTvisuals import QHSeperationLine
 from napari_storm.pyqt.RenderRangeSlider import RangeSlider2
 from napari_storm.ns_constants import standard_colors
 from .Test_Mode import TestModeWindow
+from .DataFilter import DataFilterWindow
 
 
 class NapariStormGUI(QWidget):
@@ -25,6 +26,8 @@ class NapariStormGUI(QWidget):
         self.data_control_tab = QWidget()
         self.infos_tab = QWidget()
         self.decorator_tab = QWidget()
+        self.datafilter_tab = DataFilterWindow(parent=self)
+
         self.test_mode_tab = TestModeWindow(parent=self)
 
         self.tabs.addTab(self.data_control_tab, 'Data Controls')
@@ -346,6 +349,7 @@ class NapariStormGUI(QWidget):
         self.Cgrid_plane.show()
         self.tabs.addTab(self.infos_tab, 'File Infos')
         self.tabs.addTab(self.decorator_tab, 'Decorators')
+        self.tabs.addTab(self.datafilter_tab, 'Data Filter')
         self.HL1.show()
         self.HL2.show()
 

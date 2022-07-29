@@ -3,17 +3,19 @@ from napari_plugin_engine import napari_hook_implementation
 from .Exp_Controls import *
 from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
+from .DataFilter import DataFilterInterface
 from .ChannelControls import ChannelControls
-from .pyqt.CustomSliders import *
+from .pyqt.GridPlaneSlider import *
 from .ns_constants import *
 from .GUI import *
 
 
 class napari_storm(NapariStormGUI):
     """The Heart of this code: A Dock Widget, but also
-    an object where everthing runs together"""
+    an object where everything runs together"""
 
     def __init__(self, napari_viewer):
+
 
         napari_viewer.window.qt_viewer.dockLayerControls.setVisible(False)
         napari_viewer.window.qt_viewer.dockLayerList.setVisible(False)
@@ -64,6 +66,7 @@ class napari_storm(NapariStormGUI):
 
         # GUI
         super().__init__()
+        self._data_filter_itf = DataFilterInterface(parent=self, data_filter_window=self.datafilter_tab)
 
         # Init Function Calls
         custom_keys_and_scalebar(self)
@@ -89,6 +92,14 @@ class napari_storm(NapariStormGUI):
     @data_to_layer_itf.setter
     def data_to_layer_itf(self, value):
         raise StaticAttributeError('the dataset to layer interface should never be changed')
+
+    @property
+    def data_filter_itf(self):
+        return self._data_filter_itf
+
+    @data_filter_itf.setter
+    def data_filter_itf(self, value):
+        raise StaticAttributeError('the data filter interface should never be changed')
 
     @property
     def file_to_data_itf(self):
@@ -332,6 +343,7 @@ class napari_storm(NapariStormGUI):
     def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None):
         self.show_avaiable_widgets()
         if not merge:
+            self.data_filter_itf.clear_entries()
             self.clear_datasets()
             self.Cgrid_plane.setCheckState(False)
             self.data_to_layer_itf.reset_render_range_and_offset()
@@ -343,6 +355,7 @@ class napari_storm(NapariStormGUI):
             self.zdim = False
         for i in range(len(datasets)):
             self.localization_datasets.append(datasets[i])
+            self.data_filter_itf.add_dataset_entry(datasets[i].name)
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
         if self.Cgrid_plane.isChecked():
