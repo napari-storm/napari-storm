@@ -35,7 +35,7 @@ class ChannelControls(QWidget):
             z_color_encoding_mode=None,
             render_gaussian_mode=None,
     ):
-        from .RangeSlider import RangeSlider
+        from .pyqt.Colormap_Slider import RangeSlider
 
         super().__init__()
         # Attributes

@@ -4,7 +4,7 @@ from .Exp_Controls import *
 from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .ChannelControls import ChannelControls
-from .CustomSliders import *
+from .pyqt.CustomSliders import *
 from .ns_constants import *
 from .GUI import *
 
@@ -14,6 +14,9 @@ class napari_storm(NapariStormGUI):
     an object where everthing runs together"""
 
     def __init__(self, napari_viewer):
+
+        napari_viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        napari_viewer.window.qt_viewer.dockLayerList.setVisible(False)
 
         # Interfaces
         self._data_to_layer_itf = DataToLayerInterface(parent=self, viewer=napari_viewer)
@@ -240,8 +243,8 @@ class napari_storm(NapariStormGUI):
                     self.render_range_slider_z_percent[0] / 100 + 0.5 * self.render_range_slider_z_percent[1] / 100
                     - 0.5 * self.render_range_slider_z_percent[0] / 100)"""
             tmp_z_center_nm = self.viewer.camera.center[0]
-            self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
-            self.viewer.camera.center = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+            self.data_to_layer_itf.camera[1] = (tmp_z_center_nm, tmp_x_center_nm, tmp_y_center_nm)
+            self.viewer.camera.center = (tmp_z_center_nm, tmp_x_center_nm, tmp_y_center_nm)
 
     def add_channel(self, name='Channel'):
         """Adds a Channel in the visual controls"""
@@ -305,11 +308,11 @@ class napari_storm(NapariStormGUI):
         v = napari.current_viewer()
         values = {}
         if set_view_to == 'XY':
-            v.camera.angles = (0, 0, -90)
+            v.camera.angles = (90, 0, -90)
         elif set_view_to == 'XZ':
-            v.camera.angles = (180, 180, -180)
+            v.camera.angles = (-180, 90, 180)
         else:
-            v.camera.angles = (0, 90, 0)
+            v.camera.angles = (-180, 0, -180)
         v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.zoom = self.zoom
         v.camera.update(values)
@@ -330,8 +333,8 @@ class napari_storm(NapariStormGUI):
         self.show_avaiable_widgets()
         if not merge:
             self.clear_datasets()
-            self.data_to_layer_itf.reset_render_range_and_offset()
             self.Cgrid_plane.setCheckState(False)
+            self.data_to_layer_itf.reset_render_range_and_offset()
 
         datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
         if datasets[-1].zdim_present:
@@ -360,7 +363,6 @@ class napari_storm(NapariStormGUI):
     def create_layer(self, dataset, idx=-1, merge=False):
         self.adjust_available_options_to_data_dimension()
         self.Lnumberoflocs.show_infos(filename=dataset.name, idx=idx)
-        self.localization_datasets[idx].update_locs()
         self.data_to_layer_itf.create_new_layer(dataset, layer_name=dataset.name, idx=idx, merge=merge)
         self.zoom = self.viewer.camera.zoom
         self.add_channel(name=dataset.name)

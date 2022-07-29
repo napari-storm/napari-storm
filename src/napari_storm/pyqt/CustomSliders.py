@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QSlider
-from .CustomErrors import *
+from ..CustomErrors import *
 from PyQt5.QtCore import Qt
 
 

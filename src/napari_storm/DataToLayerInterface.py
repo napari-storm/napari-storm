@@ -1,9 +1,8 @@
 import napari
-from .particles import Particles
+from .napari_particles.particles import Particles
 import numpy as np
-from .utils import generate_billboards_2d
+from .napari_particles.utils import generate_billboards_2d
 from .CustomErrors import *
-from .ns_constants import *
 
 
 class DataToLayerInterface:  # localization always with z # switch info with channel controlls #
@@ -45,14 +44,17 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def create_remove_grid_plane_state(self, enable):
         if enable:
-            z = np.mean(self.render_range_z)
+            if self.parent.zdim:
+                z = np.mean(self.render_range_z)
+            else:
+                z = 1
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
-                                          (self.parent.render_range_slider_x_percent[1] -
-                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
-            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
                                           (self.parent.render_range_slider_y_percent[1] -
                                            self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+                                          (self.parent.render_range_slider_x_percent[1] -
+                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
             default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
                 self.render_range_y[1] - self.render_range_y[0],
                 self.render_range_x[1] - self.render_range_x[0]))
@@ -60,29 +62,29 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
             vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_y_percent[1] -
-                                  self.parent.render_range_slider_y_percent[0]) / 100
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
             # x and y start position of vectors
             vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0] - 1) / 100
+                                 * (self.parent.render_range_slider_y_percent[0]) / 100
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
                                                                 (self.render_range_x[1] - self.render_range_x[0])
-                                                                * (self.parent.render_range_slider_y_percent[
-                                                                       0] - 1) / 100)
+                                                                * (self.parent.render_range_slider_x_percent[
+                                                                       0]) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] -
-                                  self.parent.render_range_slider_x_percent[0]) / 100
+                                 (self.parent.render_range_slider_y_percent[1] -
+                                  self.parent.render_range_slider_y_percent[0]) / 100
             vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0] - 1) / 100
+                                 * (self.parent.render_range_slider_x_percent[0]) / 100
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
                                                                 (self.render_range_y[1] - self.render_range_y[0])
-                                                                * (self.parent.render_range_slider_x_percent[
-                                                                       0] - 1) / 100)
+                                                                * (self.parent.render_range_slider_y_percent[
+                                                                       0]) / 100)
             vectors_y[:, 0, 0] = z
 
             vectors = np.concatenate((vectors_x, vectors_y))
@@ -98,11 +100,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             default_line_thickness_nm = self.grid_plane_layer.edge_width
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
-                                          (self.parent.render_range_slider_x_percent[1] -
-                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
-            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
                                           (self.parent.render_range_slider_y_percent[1] -
                                            self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
+            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
+                                          (self.parent.render_range_slider_x_percent[1] -
+                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
             if num_of_lines_x < 1 or num_of_lines_y < 1:
                 tmp_max_line_dist = np.round(np.floor(min((self.render_range_y[1] - self.render_range_y[0]) *
                                                           (self.parent.render_range_slider_x_percent[1] -
@@ -117,29 +119,29 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
             vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_y_percent[1] -
-                                  self.parent.render_range_slider_y_percent[0]) / 100
+                                 (self.parent.render_range_slider_x_percent[1] -
+                                  self.parent.render_range_slider_x_percent[0]) / 100
             # x and y start position of vectors
             vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0] - 1) / 100
+                                 * (self.parent.render_range_slider_y_percent[0]) / 100
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
                                                                 (self.render_range_x[1] - self.render_range_x[0])
-                                                                * (self.parent.render_range_slider_y_percent[
-                                                                       0] - 1) / 100)
+                                                                * (self.parent.render_range_slider_x_percent[
+                        0]) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] -
-                                  self.parent.render_range_slider_x_percent[0]) / 100
+                                 (self.parent.render_range_slider_y_percent[1] -
+                                  self.parent.render_range_slider_y_percent[0]) / 100
             vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
                                  (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0] - 1) / 100
+                                 * (self.parent.render_range_slider_x_percent[0]) / 100
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
                                                                 (self.render_range_y[1] - self.render_range_y[0])
-                                                                * (self.parent.render_range_slider_x_percent[
-                                                                       0] - 1) / 100)
+                                                                * (self.parent.render_range_slider_y_percent[
+                        0]) / 100)
             vectors_y[:, 0, 0] = z
             vectors = np.concatenate((vectors_x, vectors_y))
             self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
@@ -149,7 +151,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
         if z_pos:
             vectors = self.grid_plane_layer.data
-            vectors[:, 0, 0] = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
+            if self.parent.zdim:
+                vectors[:, 0, 0] = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
+            else:
+                vectors[:, 0, 0] = 1
             self.grid_plane_layer.data = vectors
         if line_thickness:
             self.grid_plane_layer.edge_width = 0.05 * np.exp(line_thickness / 10 - 5) / len(
@@ -174,32 +179,32 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             self.render_range_y[1] = max(np.max(coords[:, 2]), self.render_range_y[1])
             self.render_range_z[1] = max(np.max(coords[:, 0]), self.render_range_z[1])
         else:
-            self.render_range_x[1] = max(np.max(coords[:, 0]), self.render_range_x[1])
+            self.render_range_x[1] = max(np.max(coords[:, 2]), self.render_range_x[1])
             self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
 
     def set_offset(self, dataset):
         if dataset.zdim_present:
             if self.offset_nm_3d == [0, 0, 0]:
-                self.offset_nm_3d = [-np.min(dataset.locs.z_pos_pixels) * dataset.pixelsize_nm,
-                                     -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm,
-                                     -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm]
+                self.offset_nm_3d = [-np.min(dataset.z_pos_nm),
+                                     -np.min(dataset.x_pos_nm),
+                                     -np.min(dataset.y_pos_nm)]
             else:
                 self.offset_nm_3d[2] = np.max([self.offset_nm_3d[2],
-                                               -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm])
+                                               -np.min(dataset.y_pos_nm)])
                 self.offset_nm_3d[1] = np.max([self.offset_nm_3d[1],
-                                               -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm])
+                                               -np.min(dataset.x_pos_nm)])
                 self.offset_nm_3d[0] = np.max([self.offset_nm_3d[0],
-                                               -np.min(dataset.locs.z_pos_pixels) * dataset.pixelsize_nm])
+                                               -np.min(dataset.z_pos_nm)])
 
         else:
             if self.offset_nm_2d == [0, 0]:
-                self.offset_nm_3d = [-np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm,
-                                     -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm]
+                self.offset_nm_2d = [-np.min(dataset.x_pos_nm),
+                                     -np.min(dataset.y_pos_nm)]
             else:
                 self.offset_nm_2d[0] = np.max([self.offset_nm_2d[0],
-                                               -np.min(dataset.locs.x_pos_pixels) * dataset.pixelsize_nm])
+                                               -np.min(dataset.x_pos_nm)])
                 self.offset_nm_2d[1] = np.max([self.offset_nm_2d[1],
-                                               -np.min(dataset.locs.y_pos_pixels) * dataset.pixelsize_nm])
+                                               -np.min(dataset.y_pos_nm)])
 
     def create_new_layer(self, dataset, merge=False, layer_name='SMLM Data', idx=-1):
         """Creating a Particle Layer"""
@@ -208,7 +213,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_range(coords=coords, zdim=dataset.zdim_present)
         if merge:
-            dataset.update_locs()
+            dataset.restrict_locs_by_percent(self.parent.render_range_slider_x_percent,
+                                             self.parent.render_range_slider_y_percent,
+                                             self.parent.render_range_slider_z_percent)
             coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_sigmas(dataset=dataset, create=True)
         self.set_render_values(dataset=dataset, create=True)
@@ -226,7 +233,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         dataset.napari_layer_ref.add_to_viewer(self.viewer)
         self.viewer.camera.perspective = 50
         dataset.napari_layer_ref.shading = 'gaussian'
-        self.viewer.camera.angles = (0, 0, -90)
+        self.viewer.camera.angles = (90, 0, -90)
         self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
 
         # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
@@ -237,7 +244,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
         i = 0
         for dataset in self.parent.localization_datasets:
-            dataset.update_locs()
+            self.update_data_range(dataset)
             v.layers.remove(dataset.name)
             coords = self.get_coords_from_locs(dataset)
             self.set_render_sigmas(dataset=dataset, channel_index=i)
@@ -263,6 +270,22 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         v.camera.zoom = self.camera[0]
         v.camera.center = self.camera[1]
         v.camera.update({})
+
+    def update_data_range(self, dataset):
+        if dataset.zdim_present:
+            dataset.restrict_locs_by_absolute(np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) *
+                                              (self.render_range_x[1]) - self.offset_nm_3d[1],
+                                              np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) *
+                                              (self.render_range_y[1]) - self.offset_nm_3d[2],
+                                              np.asarray(self.parent.render_range_slider_z_percent) / 100 * np.ones(2) *
+                                              (self.render_range_z[1]) - self.offset_nm_3d[0])
+        else:
+            dataset.restrict_locs_by_absolute(np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) *
+                                              (self.render_range_x[1]) - self.offset_nm_2d[0],
+                                              np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) *
+                                              (self.render_range_y[1]) - self.offset_nm_2d[1])
+
+
 
     def update_layers2(self):
         """Still doesn't work"""
@@ -418,7 +441,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
             assert dataset.zdim_present == True
 
-            tmp_coords = dataset.get_active_coords_rec_array()
+            tmp_coords = self.active_locs_to_choords(dataset)
 
             tmp_values = tmp_coords.z_pos_pixels
 
@@ -441,8 +464,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             sigma_xy_nm = self.parent.render_fixed_gauss_sigma_xy_nm
             sigma_z_nm = self.parent.render_fixed_gauss_sigma_z_nm
 
-            tmp_sigma_xy = sigma_xy_nm * np.ones_like(dataset.locs_active.x_pos_pixels)
-            tmp_sigma_z = sigma_z_nm * np.ones_like(dataset.locs_active.x_pos_pixels)
+            tmp_sigma_xy = sigma_xy_nm * np.ones_like(dataset.x_pos_nm)
+            tmp_sigma_z = sigma_z_nm * np.ones_like(dataset.x_pos_nm)
 
             tmp_render_sigma_nm = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
 
@@ -489,6 +512,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
 
                 tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
+        else:
+            raise RuntimeError('Render Gaussian Mode undefined')
         tmp_render_sigma_norm = tmp_render_sigma_nm / np.max(tmp_render_sigma_nm)
 
         # Store sigma values and set render size
@@ -502,17 +527,17 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
     def get_coords_from_locs(self, dataset):
         """Calculating Particle Coordinates from Locs"""
         if dataset.zdim_present:
-            num_of_locs = len(dataset.locs.x_pos_pixels)
+            num_of_locs = len(dataset.x_pos_nm)
             coords = np.zeros([num_of_locs, 3])
-            coords[:, 0] = dataset.locs.z_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[0]
-            coords[:, 1] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[1]
-            coords[:, 2] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm + self.offset_nm_3d[2]
+            coords[:, 0] = dataset.z_pos_nm + self.offset_nm_3d[0]
+            coords[:, 1] = dataset.x_pos_nm + self.offset_nm_3d[1]
+            coords[:, 2] = dataset.y_pos_nm + self.offset_nm_3d[2]
 
         else:
-            num_of_locs = len(dataset.locs.x_pos_pixels)
+            num_of_locs = len(dataset.x_pos_nm)
             coords = np.zeros([num_of_locs, 3])
-            coords[:, 1] = dataset.locs.x_pos_pixels * dataset.pixelsize_nm + self.offset_nm_2d[0]
-            coords[:, 2] = dataset.locs.y_pos_pixels * dataset.pixelsize_nm + self.offset_nm_2d[1]
+            coords[:, 1] = dataset.x_pos_nm + self.offset_nm_2d[0]
+            coords[:, 2] = dataset.y_pos_nm + self.offset_nm_2d[1]
             coords[:, 0] = np.ones(num_of_locs)
         return coords
 
@@ -603,3 +628,35 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             if self.scalebar_exists:
                 v.layers.remove('scalebar')
                 self.scalebar_exists = False
+
+    def active_locs_to_choords(self, dataset):
+        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
+                        ('y_pos_pixels', 'f4'),
+                        ('z_pos_pixels', 'f4')]
+
+        tmp_x = dataset.x_pos_nm
+        tmp_y = dataset.y_pos_nm
+        tmp_z = dataset.z_pos_nm
+
+        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
+        tmp_records.x_pos_pixels = tmp_y
+        tmp_records.y_pos_pixels = tmp_x
+        tmp_records.z_pos_pixels = tmp_z
+
+        return tmp_records
+
+    def all_locs_to_choords(self, dataset):
+        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
+                        ('y_pos_pixels', 'f4'),
+                        ('z_pos_pixels', 'f4')]
+
+        tmp_x = dataset.x_pos_nm_all
+        tmp_y = dataset.y_pos_nm_all
+        tmp_z = dataset.z_pos_nm_all
+
+        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
+        tmp_records.x_pos_pixels = tmp_y
+        tmp_records.y_pos_pixels = tmp_x
+        tmp_records.z_pos_pixels = tmp_z
+
+        return tmp_records

@@ -1,15 +1,7 @@
-from typing import Tuple
 
-import napari
 import numpy as np
-from PyQt5 import QtGui
-from PyQt5.QtCore import QPoint, QPointF, Qt
-from PyQt5.QtWidgets import QStyle, QStyleOptionSlider
+from PyQt5.QtCore import Qt
 from superqt import QDoubleRangeSlider
-from superqt.sliders._generic_range_slider import SC_BAR
-from superqt.sliders._generic_slider import SC_HANDLE
-
-from .DataToLayerInterface import DataToLayerInterface
 
 
 class RangeSlider(QDoubleRangeSlider):

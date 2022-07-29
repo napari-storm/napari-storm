@@ -3,7 +3,7 @@ import numpy as np
 from PyQt5.QtCore import Qt
 from superqt import QDoubleRangeSlider
 
-from .DataToLayerInterface import DataToLayerInterface
+from ..DataToLayerInterface import DataToLayerInterface
 
 
 class RangeSlider2(QDoubleRangeSlider):
@@ -36,7 +36,10 @@ class RangeSlider2(QDoubleRangeSlider):
 
     def mouseReleaseEvent(self, event):
         self.backup = self.value()
-        self.parent().update_render_range(self.type, self.getRange())
+        if self.type == "x":  # Napari coordinate system is weird
+            self.parent().update_render_range(self.type, (self.Range-self.getRange()[1], self.Range-self.getRange()[0]))
+        else:
+            self.parent().update_render_range(self.type, self.getRange())
         self.remove_visual_feedback()
 
     def virtual_feedback(self):
@@ -79,11 +82,11 @@ class RangeSlider2(QDoubleRangeSlider):
 
     def get_coords_faces(self):
         if self.parent().zdim:
-            rrx_full = self.parent().data_to_layer_itf.render_range_y
+            rrx_full = self.parent().data_to_layer_itf.render_range_x
             rrx = rrx_full.copy()
             rrx[0] += (rrx_full[1] - rrx_full[0]) * self.parent().render_range_slider_x_percent[0] / 100
             rrx[1] -= (rrx_full[1] - rrx_full[0]) * (1 - self.parent().render_range_slider_x_percent[1] / 100)
-            rry_full = self.parent().data_to_layer_itf.render_range_x
+            rry_full = self.parent().data_to_layer_itf.render_range_y
             rry = rry_full.copy()
             rry[0] += (rry_full[1] - rry_full[0]) * self.parent().render_range_slider_y_percent[0] / 100
             rry[1] -= (rry_full[1] - rry_full[0]) * (1 - self.parent().render_range_slider_y_percent[1] / 100)
@@ -97,18 +100,18 @@ class RangeSlider2(QDoubleRangeSlider):
             if self.type == "x":
                 for i in [rrz[1], rrz[0]]:
                     for j in [rry[1], rry[0]]:
-                        for k in [slider_1 * rrx_full[1], slider_2 * rrx_full[1]]:
-                            coords.append([i, j, k])
+                        for k in [(1-slider_1) * rrx_full[1], (1-slider_2) * rrx_full[1]]:
+                            coords.append([i, k, j])
             elif self.type == "y":
                 for i in [rrz[1], rrz[0]]:
                     for j in [slider_1 * rry_full[1], slider_2 * rry_full[1]]:
                         for k in [rrx[1], rrx[0]]:
-                            coords.append([i, j, k])
+                            coords.append([i, k, j])
             else:
                 for i in [slider_1 * rrz_full[1], slider_2 * rrz_full[1]]:
                     for j in [rry[1], rry[0]]:
                         for k in [rrx[1], rrx[0]]:
-                            coords.append([i, j, k])
+                            coords.append([i, k, j])
             faces = [
                 [1, 2, 5],
                 [2, 5, 6],
@@ -128,11 +131,11 @@ class RangeSlider2(QDoubleRangeSlider):
                 np.asarray(faces) - 1,
             )
         else:
-            rrx_full = self.parent().data_to_layer_itf.render_range_y
+            rrx_full = self.parent().data_to_layer_itf.render_range_x
             rrx = rrx_full.copy()
             rrx[0] += (rrx_full[1] - rrx_full[0]) * self.parent().render_range_slider_x_percent[0] / 100
             rrx[1] -= (rrx_full[1] - rrx_full[0]) * (1 - self.parent().render_range_slider_x_percent[1] / 100)
-            rry_full = self.parent().data_to_layer_itf.render_range_x
+            rry_full = self.parent().data_to_layer_itf.render_range_y
             rry = rry_full.copy()
             rry[0] += (rry_full[1] - rry_full[0]) * self.parent().render_range_slider_y_percent[0] / 100
             rry[1] -= (rry_full[1] - rry_full[0]) * (1 - self.parent().render_range_slider_y_percent[1] / 100)
@@ -141,12 +144,12 @@ class RangeSlider2(QDoubleRangeSlider):
             slider_2 = self.value()[1] / self.Range
             if self.type == "x":
                 for j in [rry[1], rry[0]]:
-                    for k in [slider_1 * rrx_full[1], slider_2 * rrx_full[1]]:
-                        coords.append([j, k])
+                    for k in [(1-slider_1) * rrx_full[1], (1-slider_2) * rrx_full[1]]:
+                        coords.append([k, j])
             elif self.type == "y":
                 for j in [slider_1 * rry_full[1], slider_2 * rry_full[1]]:
                     for k in [rrx[1], rrx[0]]:
-                        coords.append([j, k])
+                        coords.append([k, j])
             faces = [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]
             return (
                 np.reshape(np.asarray(coords), (4, 2)),
