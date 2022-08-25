@@ -1,3 +1,6 @@
+
+
+
 lm_base_data_dtype = [
     ('x_pos_nm', 'f4'),
     ('y_pos_nm', 'f4'),
@@ -39,4 +42,7 @@ minflux_AI_data_dtype = [('x_pos_nm', 'f4'),
                          ('ext_y', 'f4'),
                          ('ext_z', 'f4'),
                          ('time_s', 'f4'),
-                         ('activation', 'i4')]
+                         ('activation', 'i4'),
+                         ('trace_id', 'i4')]
+
+list_of_dataset_classes = [lm_base_data_dtype, storm_data_dtype, minflux_AI_data_dtype]

@@ -89,9 +89,12 @@ class LocalizationDataBaseClass:
         assert isinstance(self.locs, np.recarray), f"locs should be numpy rec array"
         assert self.locs.dtype == self.locs_dtype, f"locs should have {self.locs_dtype} as datatype"
 
-    def restrict_locs_by_percent(self, x_range_pc, y_range_pc, z_range_pc=None):
-
+    def reset_filters(self):
         self.locs_active = self.locs_all.copy()
+
+    def restrict_locs_by_percent(self, x_range_pc, y_range_pc, z_range_pc=None, reset=False):
+        if reset:
+            self.locs_active = self.locs_all.copy()
         xcoords_nm = self.x_pos_nm - np.min(self.x_pos_nm)
         ycoords_nm = self.y_pos_nm - np.min(self.y_pos_nm)
 
@@ -108,15 +111,25 @@ class LocalizationDataBaseClass:
         self.bandpass_locs_filter_by_property('x_pos_nm', xmin, xmax)
         self.bandpass_locs_filter_by_property('y_pos_nm', ymin, ymax)
 
-    def restrict_locs_by_absolute(self, x_range_nm, y_range_nm, z_range_nm=None):
+    def restrict_locs_by_absolute(self, x_range_nm, y_range_nm, z_range_nm=None, reset=False):
         assert not (not self.zdim_present and not (z_range_nm is None)), "cannot use restrict in z when" \
                                                                          " z dimension not present "
-        self.locs_active = self.locs_all.copy()
+        if reset:
+            self.locs_active = self.locs_all.copy()
 
         if self.zdim_present:
             self.bandpass_locs_filter_by_property('z_pos_nm', z_range_nm[0], z_range_nm[1])
         self.bandpass_locs_filter_by_property('x_pos_nm', x_range_nm[0], x_range_nm[1])
         self.bandpass_locs_filter_by_property('y_pos_nm', y_range_nm[0], y_range_nm[1])
+
+    def remove_locs_by_index(self, filter_idx, reset=False):
+        if reset:
+            self.locs_active = self.locs_all.copy()
+        self.locs_active = np.delete(self.locs_active, filter_idx)
+
+    def get_idx_of_specified_prop_all(self, prop, l_val, u_val):
+        values = getattr(self.locs_all, prop)
+        return np.where(np.invert((values < l_val) | (values > u_val)))[0]
 
     def bandpass_locs_filter_by_property(self, prop, l_val=-np.inf, u_val=np.inf):
         if l_val == -np.inf and u_val == np.inf:
@@ -124,6 +137,7 @@ class LocalizationDataBaseClass:
         else:
             filter_idx = np.where((getattr(self.locs_active, prop) < l_val) | (getattr(self.locs_active, prop) > u_val))
             self.locs_active = np.delete(self.locs_active, filter_idx)
+        print(len(self.x_pos_nm))
 
     def value_specific_locs_filter_by_property(self, prop, values):
         try:
@@ -133,5 +147,22 @@ class LocalizationDataBaseClass:
         for i in range(len(values)):
             filter_idx = np.where(not (getattr(self.locs, prop) == values[i]))
             self.locs_active = np.delete(self.locs_active, filter_idx)
+
+    def number_of_active_entries(self):
+        return len(self.locs_active.x_pos_nm)
+
+    def number_of_entries(self):
+        return len(self.locs_all.x_pos_nm)
+
+    def check_if_imported_data_fits_to_datatype(self, data=None, metadata=None):
+        if data is None and metadata is None:
+            return -1
+        if metadata is not None:
+            if type(metadata["dataset_class"]).__name__ == self.__class__.__name__:
+                return self
+        else:
+            if data.dtype == self.dataset_type:
+                return self
+        return False
 
 

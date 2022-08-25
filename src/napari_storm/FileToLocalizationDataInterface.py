@@ -6,6 +6,7 @@ from .CustomErrors import *
 from .localization_dataset_types.base_class import *
 from .localization_dataset_types.Minflux_class import *
 from .localization_dataset_types.storm_class import *
+from .file_and_data_recognition import *
 
 
 class FileToLocalizationDataInterface:
@@ -23,9 +24,8 @@ class FileToLocalizationDataInterface:
     def parent(self, value):
         raise ParentError('Cannot change parent of existing Widget')
 
-    def filetype_recognition(self):
-        # Check what kind of filetype and compare with defined featrues of a list of recognized filetypes
-        pass
+    def filetype_recognition(self, file_path):
+        return file_and_data_recognition(file_path)
 
     def open_localization_data_file_and_get_dataset(self, file_path=None):
         """Determine which file type is being opened, and call the

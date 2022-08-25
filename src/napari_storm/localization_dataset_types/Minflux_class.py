@@ -27,12 +27,11 @@ class MinfluxDataBaseClass(LocalizationDataBaseClass):
             pass
         else:
             self.add_minflux_dtype()
-
-        self.locs_sanity_check()
+            self.locs_sanity_check()
 
     def add_minflux_dtype(self):
         self.init_dtype(self.zdim_present)
-        self.locs_dtype.append(('trace_number', 'i4'))
+        self.locs_dtype.append(('trace_id', 'i4'))
 
     @property
     def sigma_present(self):
@@ -50,13 +49,18 @@ class MinfluxDataBaseClass(LocalizationDataBaseClass):
 class MinfluxDataAIClass:
     # Collection of several minflux datasets
     def __init__(self,
-                 list_of_datasets=None
+                 list_of_datasets=None,
+                 name=None
                  ):
         self.dataset_type = "MinfluxDataAIClass"
         self.list_of_datasets = []
         self.locs_dtype = []
         self.add_ai_mfx_dtype()
         if list_of_datasets is not None:
+            if name is None:
+                self.name = 'untitled'
+            else:
+                self.name = name
             for i in range(len(list_of_datasets)):
                 self.list_of_datasets.append(list_of_datasets[i])
                 assert list_of_datasets.locs.dtype == self.locs_dtype
@@ -64,7 +68,7 @@ class MinfluxDataAIClass:
     def add_ai_mfx_dtype(self):
         self.locs_dtype = minflux_AI_data_dtype
 
-    def load_mfxs(self, file_path, name=None):
+    def load_mfxs(self, file_path, name=None, as_list=False):
         data = np.load(file_path)
         for i in range(len(data)):
             mfx_data = np.rec.array(data[i])
@@ -76,14 +80,18 @@ class MinfluxDataAIClass:
                     zdim = False
             self.list_of_datasets.append(MinfluxDataAIIterationClass(locs=mfx_data, itr=i, zdim_present=zdim,
                                                                      name=name))
-        return self
+        if as_list:
+            return self.list_of_datasets
+        else:
+            return self
 
-    def load_ai_json(self, file_path, specific_itr=None):
+    def load_ai_json(self, file_path, specific_itr=None, as_list=False):
         filename = file_path.split("/")[-1]
         raw_data = pd.read_json(file_path)
         raw_data = raw_data[raw_data["vld"] == True]
         mes_time_s = raw_data["tim"]
         activation = raw_data["act"]
+        tid = raw_data["tid"]
         n_locs = len(raw_data.itr)
         vld_indices = raw_data.itr.keys()
         raw_locs_m = np.zeros((3, n_locs))
@@ -161,10 +169,15 @@ class MinfluxDataAIClass:
                      ext[1],
                      ext[2],
                      mes_time_s,
-                     activation
+                     activation,
+                     tid,
                      ), dtype=minflux_AI_data_dtype, )
                 self.list_of_datasets.append(MinfluxDataAIIterationClass(itr=itr, locs=mfx_data, zdim_present=zdim,
                                                                          name=filename))
+            if as_list:
+                return self.list_of_datasets
+            else:
+
                 return self
         else:
             for i in range(n_locs):
@@ -216,15 +229,17 @@ class MinfluxDataAIClass:
                  ext[1],
                  ext[2],
                  mes_time_s,
-                 activation
+                 activation,
+                 tid,
                  ), dtype=minflux_AI_data_dtype, )
             return mfx_data, filename, zdim
 
-    def load_ai_npy(self, file_path, specific_itr=None):
+    def load_ai_npy(self, file_path, specific_itr=None, as_list=False):
         filename = file_path.split("/")[-1]
         raw_data = np.load(file_path)
         mes_time_s = raw_data["tim"]
         activation = raw_data["act"]
+        tid = raw_data["tid"]
         vld = raw_data["vld"]
         raw_data = (raw_data[vld])["itr"]
 
@@ -287,10 +302,14 @@ class MinfluxDataAIClass:
                      ext[:, itr, 2],
                      mes_time_s,
                      activation,
+                     tid,
                      ), dtype=self.locs_dtype, )
                 self.list_of_datasets.append(MinfluxDataAIIterationClass(itr=itr, locs=mfx_data, zdim_present=zdim,
                                                                          name=filename))
-            return self
+            if as_list:
+                return self.list_of_datasets
+            else:
+                return self
         else:
             mfx_data = np.rec.array(
                 (raw_locs_m[:, specific_itr, 0] * 1E9,
@@ -321,6 +340,7 @@ class MinfluxDataAIClass:
                  ext[:, specific_itr, 2],
                  mes_time_s,
                  activation,
+                 tid,
                  ), dtype=minflux_AI_data_dtype, )
             return mfx_data, filename, zdim
 
@@ -335,9 +355,16 @@ class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
 
         if locs is not None:
             super().__init__(None, name, zdim_present)
+            self.locs_all = locs
+            self.locs_active = locs
+            if name is None:
+                self.name = 'untitled'
+            else:
+                self.name = name
         self.dataset_type = "MinfluxDataAIIterationClass(MinfluxDataBaseClass)"
         self.itr = itr
         self.locs_dtype = minflux_AI_data_dtype
+        self.zdim_present = zdim_present
 
     def export_current_iteration_as_mfx_file(self, filename=None):
         if filename is None:
@@ -349,6 +376,8 @@ class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
     def load_mfx(self, file_path, name=None):
         if name is None:
             self.name = 'Untitled'
+        else:
+            self.name = name
         try:
             itr = int(file_path.split("_")[-1].split(".")[0])
         except ValueError:
@@ -371,3 +400,6 @@ class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
             self.name = name
         self.locs_active = self.locs_all
         return self
+
+
+

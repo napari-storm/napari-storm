@@ -3,6 +3,7 @@ from PyQt5.QtGui import (
     QIcon,
     QColor,
 )
+from qtpy import QtCore
 
 from qtpy.QtWidgets import (
     QPushButton,
@@ -92,18 +93,10 @@ class ChannelControls(QWidget):
         icons = []
         for cmap in self.data_to_layer_itf.colormap:
             items.append(cmap.name)
-            pixmap = QPixmap(20, 20)
-            color = QColor(
-                int(cmap.colors[1][0] * 255),
-                int(cmap.colors[1][1] * 255),
-                int(cmap.colors[1][2] * 255),
-                int(cmap.colors[1][3] * 255),
-            )
-            pixmap.fill(color)
-            icons.append(QIcon(pixmap))
         self.Colormap_selector.addItems(items)
+        self.Colormap_selector.setIconSize(QtCore.QSize(32, 32))
         for i in range(len(items)):
-            self.Colormap_selector.setItemIcon(i, icons[i])
+            self.Colormap_selector.setItemIcon(i, self.data_to_layer_itf.colormap_icons[i])
         self.Colormap_selector.setCurrentText(items[channel_index])
         self.Colormap_selector.currentIndexChanged.connect(self.change_color_map)
 

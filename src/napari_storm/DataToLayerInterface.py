@@ -1,4 +1,7 @@
 import napari
+from PIL import ImageQt, Image
+from PyQt5.QtGui import QIcon, QPixmap
+
 from .napari_particles.particles import Particles
 import numpy as np
 from .napari_particles.utils import generate_billboards_2d
@@ -12,7 +15,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         self._parent = parent
         self.viewer = viewer
         self.n_layers = 0
-        self.colormap = self.colormaps()
+        self.colormap, self.colormap_icons = self.colormaps()
         self.scalebar_layer = surface_layer
         self.scalebar_exists = True
         if not self.scalebar_layer:
@@ -41,6 +44,14 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
     @parent.setter
     def parent(self, value):
         raise ParentError('Cannot change parent of existing Widget')
+
+    @property
+    def localization_datasets(self):
+        return self.parent.localization_datasets
+
+    @localization_datasets.setter
+    def localization_datasets(self, value):
+        raise ParentError('Cannot change parent\'s attribute from here')
 
     def create_remove_grid_plane_state(self, enable):
         if enable:
@@ -71,7 +82,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
                                                                 (self.render_range_x[1] - self.render_range_x[0])
                                                                 * (self.parent.render_range_slider_x_percent[
-                                                                       0]) / 100)
+                        0]) / 100)
             vectors_x[:, 0, 0] = z
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
@@ -84,7 +95,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
                                                                 (self.render_range_y[1] - self.render_range_y[0])
                                                                 * (self.parent.render_range_slider_y_percent[
-                                                                       0]) / 100)
+                        0]) / 100)
             vectors_y[:, 0, 0] = z
 
             vectors = np.concatenate((vectors_x, vectors_y))
@@ -244,48 +255,66 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
         i = 0
         for dataset in self.parent.localization_datasets:
-            self.update_data_range(dataset)
-            v.layers.remove(dataset.name)
-            coords = self.get_coords_from_locs(dataset)
-            self.set_render_sigmas(dataset=dataset, channel_index=i)
-            self.set_render_values(dataset=dataset, channel_index=i)
-            dataset.napari_layer_ref = Particles(
-                coords,
-                size=self.render_size[i],
-                values=self.render_values[i],
-                antialias=self.render_anti_alias,
-                colormap=self.colormap[i],
-                sigmas=self.render_sigma[i],
-                filter=None,
-                name=dataset.name
-            )
-            dataset.napari_layer_ref.add_to_viewer(v)
-            self.parent.channel[i].adjust_colormap_range()
-            self.parent.channel[i].adjust_z_color_encoding_opacity()
-            self.parent.channel[i].change_color_map()
-            dataset.napari_layer_ref.shading = "gaussian"
-            i += 1
-        # v.dims.ndisplay=3
+            self.update_data_range(dataset, dataset_idx=i)
+            if not dataset.x_pos_nm.size == 0:
+                v.layers.remove(dataset.name)
+                coords = self.get_coords_from_locs(dataset)
+                self.set_render_range(dataset.zdim_present, coords)
+                self.set_render_sigmas(dataset=dataset, channel_index=i)
+                self.set_render_values(dataset=dataset, channel_index=i)
+                dataset.napari_layer_ref = Particles(
+                    coords,
+                    size=self.render_size[i],
+                    values=self.render_values[i],
+                    antialias=self.render_anti_alias,
+                    colormap=self.colormap[i],
+                    sigmas=self.render_sigma[i],
+                    filter=None,
+                    name=dataset.name,
+                    visible=True
+                )
+                dataset.napari_layer_ref.add_to_viewer(v)
+                self.parent.channel[i].adjust_colormap_range()
+                self.parent.channel[i].adjust_z_color_encoding_opacity()
+                self.parent.channel[i].change_color_map()
+                dataset.napari_layer_ref.shading = "gaussian"
+                i += 1
+            else:
+                dataset.napari_layer_ref.visible = False
         v.camera.angles = self.camera[2]
         v.camera.zoom = self.camera[0]
         v.camera.center = self.camera[1]
         v.camera.update({})
 
-    def update_data_range(self, dataset):
+    def update_data_range(self, dataset, dataset_idx=-1):
         if dataset.zdim_present:
-            dataset.restrict_locs_by_absolute(np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) *
-                                              (self.render_range_x[1]) - self.offset_nm_3d[1],
-                                              np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) *
-                                              (self.render_range_y[1]) - self.offset_nm_3d[2],
-                                              np.asarray(self.parent.render_range_slider_z_percent) / 100 * np.ones(2) *
-                                              (self.render_range_z[1]) - self.offset_nm_3d[0])
+            x_range = np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) * (
+                self.render_range_x[1]) - self.offset_nm_3d[1]
+            y_range = np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) * (
+                self.render_range_y[1]) - self.offset_nm_3d[2]
+            z_range = np.asarray(self.parent.render_range_slider_z_percent) / 100 * np.ones(2) * (
+                self.render_range_z[1]) - self.offset_nm_3d[0]
+            x_indices = dataset.get_idx_of_specified_prop_all(prop="x_pos_nm", l_val=x_range[0], u_val=x_range[1])
+            y_indices = dataset.get_idx_of_specified_prop_all(prop="y_pos_nm", l_val=y_range[0], u_val=y_range[1])
+            z_indices = dataset.get_idx_of_specified_prop_all(prop="z_pos_nm", l_val=z_range[0], u_val=z_range[1])
+            render_indices = np.intersect1d(x_indices, y_indices)
+            render_indices = np.intersect1d(render_indices, z_indices)
         else:
-            dataset.restrict_locs_by_absolute(np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) *
-                                              (self.render_range_x[1]) - self.offset_nm_2d[0],
-                                              np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) *
-                                              (self.render_range_y[1]) - self.offset_nm_2d[1])
-
-
+            x_range = np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) * (
+                self.render_range_x[1]) - self.offset_nm_2d[0]
+            y_range = np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) * (
+                self.render_range_y[1]) - self.offset_nm_2d[1]
+            x_indices = dataset.get_idx_of_specified_prop_all(prop="x_pos_nm", l_val=x_range[0], u_val=x_range[1])
+            y_indices = dataset.get_idx_of_specified_prop_all(prop="y_pos_nm", l_val=y_range[0], u_val=y_range[1])
+            render_indices = np.intersect1d(x_indices, y_indices)
+        to_be_removed_by_index = np.delete(np.arange(len(dataset.x_pos_nm_all)), render_indices)
+        if len(self.parent.data_filter_itf.filter_idx_list) > dataset_idx:
+            to_be_removed_by_index = np.concatenate((to_be_removed_by_index,
+                                      self.parent.data_filter_itf.filter_idx_list[dataset_idx]), dtype=int)
+        if to_be_removed_by_index.size > 1:
+            dataset.locs_active = np.delete(dataset.locs_all, to_be_removed_by_index)
+        else:
+            dataset.reset_filters()
 
     def update_layers2(self):
         """Still doesn't work"""
@@ -317,6 +346,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
     def colormaps(self):
         """Creating the Custom Colormaps"""
         cmaps = []
+        cmap_icons = []
         names = ["red", "green", "blue"]
         for i in range(3):
             colors = np.zeros((2, 4))
@@ -325,6 +355,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             cmaps.append(
                 napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
             )
+            icon = np.zeros((128, 128, 4))
+            icon[:, :, -1] = 1
+            icon[:, :, i] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
+            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
+            cmap_icons.append(icon)
         names = ["yellow", "cyan", "pink"]
         for i in range(3):
             colors = np.zeros((2, 4))
@@ -334,6 +369,12 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             cmaps.append(
                 napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
             )
+            icon = np.zeros((128, 128, 4))
+            icon[:, :, -1] = 1
+            icon[:, :, i] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
+            icon[:, :, (i + 1) % 3] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
+            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
+            cmap_icons.append(icon)
         names = ["orange", "mint", "purple"]
         for i in range(3):
             colors = np.zeros((2, 4))
@@ -343,11 +384,38 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             cmaps.append(
                 napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
             )
+            icon = np.zeros((128, 128, 4))
+            icon[:, :, -1] = 1
+            icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
+            icon[:, :, (i + 1) % 3] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
+            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
+            cmap_icons.append(icon)
         colors = np.zeros((2, 4))
         colors[-1][:] = 1
         colors[:][-1] = 1
         cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray"))
-        return cmaps
+        icon = np.zeros((128, 128, 4))
+        icon[:, :, -1] = 1
+        for i in range(4):
+            icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
+        icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
+        cmap_icons.append(icon)
+        colors = np.zeros((4, 4))
+        colors[1:, -1] = 1
+        colors[1:, 0] = 1
+        colors[2:, 1] = 1
+        colors[3, 2] = 1
+        cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="red hot"))
+        icon = np.zeros((128, 128, 4))
+        icon[:, :, -1] = 1
+        icon[:, 16:48, 0] = np.ones((128, 32)) * np.arange(32) / 32
+        icon[:, 48:, 0] = 1
+        icon[:, 48:112, 1] = np.ones((128, 64)) * np.arange(64) / 64
+        icon[:, 96:, 1] = 1
+        icon[:, 96:, 2] = np.ones((128, 32)) * np.arange(32) / 32
+        icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
+        cmap_icons.append(icon)
+        return cmaps, cmap_icons
 
     def set_render_values(self, dataset, channel_index=-1, create=False):
         """Update values, which are used to determine the rendered

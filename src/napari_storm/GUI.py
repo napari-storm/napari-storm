@@ -12,6 +12,7 @@ from napari_storm.pyqt.RenderRangeSlider import RangeSlider2
 from napari_storm.ns_constants import standard_colors
 from .Test_Mode import TestModeWindow
 from .DataFilter import DataFilterWindow
+from .pyqt.detachable_tab import DetachableTabWidget
 
 
 class NapariStormGUI(QWidget):
@@ -21,7 +22,7 @@ class NapariStormGUI(QWidget):
         # GUI
         self.setAcceptDrops(True)
 
-        self.tabs = QTabWidget()
+        self.tabs = DetachableTabWidget()
         # Tabs
         self.data_control_tab = QWidget()
         self.infos_tab = QWidget()
@@ -32,6 +33,8 @@ class NapariStormGUI(QWidget):
 
         self.tabs.addTab(self.data_control_tab, 'Data Controls')
         self.data_controls_tab_layout = QGridLayout()
+
+        # self.tabs.tabBarClicked.connect(self.handle_tab_bar_clicked)
 
         # Set up the GUI
         self.Bopen = QPushButton()
@@ -290,6 +293,11 @@ class NapariStormGUI(QWidget):
         else:
             event.ignore()
         #####
+
+    """def handle_tab_bar_clicked(self, index):
+
+        if self.tabs.tabText(index) == 'Data Filter':
+            self.reset_render_range()"""
 
     def hide_non_available_widgets(self):
         """Hide controls which are better untouched atm"""

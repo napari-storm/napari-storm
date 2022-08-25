@@ -37,19 +37,23 @@ class StormDatasetCollection:
                     locs_file["molecule_set_data"]["xy_pixel_size_um"][...] * 1e3
             )  # to µm to nm
         try:
-            data["Z_POS_PIXELS"]
+            frames = data["FRAME_NUMBER"]
+        except:
+            frames = np.ones(len(data["X_POS_PIXELS"]))
+        try:
+            z_pos_px = data["Z_POS_PIXELS"]
             zdim = True
         except:
-            data["Z_POS_PIXELS"] = np.ones(len(data["X_POS_PIXELS"]))
+            z_pos_px = np.ones(len(data["X_POS_PIXELS"]))
             zdim = False
         locs = np.rec.array(
-            (data["FRAME_NUMBER"],
+            (frames,
              data["X_POS_PIXELS"],
              data["Y_POS_PIXELS"],
-             data["Z_POS_PIXELS"],
-             np.ones(len(data["Z_POS_PIXELS"])),
-             np.ones(len(data["Z_POS_PIXELS"])),
-             np.ones(len(data["Z_POS_PIXELS"])),
+             z_pos_px,
+             np.ones(len(data["X_POS_PIXELS"])),
+             np.ones(len(data["X_POS_PIXELS"])),
+             np.ones(len(data["X_POS_PIXELS"])),
              data["PHOTONS"],)
             , dtype=storm_data_dtype)
         num_channel = max(data["CHANNEL"]) + 1
@@ -79,6 +83,7 @@ class StormDataClass(LocalizationDataBaseClass):
 
         super().__init__(locs, name, zdim_present)
         self.dataset_type = "StormDataClass(LocalizationDataBaseClass)"
+        self.add_storm_dtype()
         if locs is None:
             self.pixelsize_nm = None
             self.sigma_present = None
@@ -86,7 +91,6 @@ class StormDataClass(LocalizationDataBaseClass):
             self.uncertainty_defined = None
 
         else:
-            self.add_storm_dtype()
             assert locs.dtype == self.locs_dtype, f"locs should be numpy rec array of format: {self.locs_dtype}"
             if pixelsize_nm is None:
                 self.pixelsize_nm = 100.0
@@ -124,6 +128,12 @@ class StormDataClass(LocalizationDataBaseClass):
     def z_pos_nm_all(self):
         return self.locs_all.z_pos_pixels * self.pixelsize_nm
 
+    def number_of_active_entries(self):
+        return len(self.locs_active.x_pos_pixels)
+
+    def number_of_entries(self):
+        return len(self.locs_all.x_pos_pixels)
+
     def add_storm_dtype(self):
         self.locs_dtype = storm_data_dtype
 
@@ -158,6 +168,14 @@ class StormDataClass(LocalizationDataBaseClass):
                                         pixelsize_nm=data[1]['pixelsize_nm'],
                                         sigma_present=data[1]['sigma_present'],
                                         photon_count_present=data[1]['photon_count_present'])
+
+    def get_idx_of_specified_prop_all(self, prop, l_val, u_val):
+        if "_nm" in prop:
+            prop = prop.replace("_nm", "_pixels")
+            l_val = l_val / self.pixelsize_nm
+            u_val = u_val / self.pixelsize_nm
+        values = getattr(self.locs_all, prop)
+        return np.where(np.invert((values < l_val) | (values > u_val)))[0]
 
     def restrict_locs_by_sigma_threshold(self, sigma_min_pixels=-np.inf, sigma_max_pixels=np.inf):
         assert self.sigma_present
@@ -206,39 +224,39 @@ class StormDataClass(LocalizationDataBaseClass):
         """Wrapper for load_locs and load_infos -> picassos hdf5"""
         filename = file_path.split("/")[-1]
         locs, info = self.load_locs(file_path)
-        try:
+        if hasattr(locs, "pixelsize"):
             pixelsize = locs.pixelsize_nm
-        except AttributeError:
+        else:
             pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
             if not ok:
                 raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
-        try:
+        if hasattr(locs, "z"):
             locs.z = locs.z / pixelsize
             zdim = True
-        except AttributeError:
+        else:
             locs.z = np.ones(len(locs.x))
             zdim = False
 
         sigma_present = False
         photon_count_present = False
 
-        try:
+        if hasattr(locs, "lpx") and hasattr(locs, "lpy"):
             uncertainty_x_pixels = locs.lpx
             uncertainty_y_pixels = locs.lpy
             sigma_present = True
-        except AttributeError:
+        else:
             uncertainty_x_pixels = np.ones(len(locs.x))
             uncertainty_y_pixels = np.ones(len(locs.x))
-        try:
+        if hasattr(locs, "lpz") and zdim:
             uncertainty_z_pixels = locs.lpz
-        except AttributeError:
+        else:
             uncertainty_z_pixels = 2 * np.sqrt(locs.lpx ** 2 + locs.lpy ** 2)
 
-        try:
+        if hasattr(locs, "photons"):
             intensity_photons = locs.photons
             photon_count_present = True
-        except AttributeError:
+        else:
             intensity_photons = np.ones(len(locs.x))
         locs = np.rec.array(
             (locs.frame,
