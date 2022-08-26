@@ -7,12 +7,17 @@ import io
 import h5py
 import yaml
 from PyQt5.QtWidgets import QFileDialog, QInputDialog
+from qtpy import QtCore
+
 from .base_class import LocalizationDataBaseClass
 from .data_formats import *
 import os
 import numpy as np
+from ..pyqt.yes_or_no_dialog import *
+from ..pyqt.get_string_dialog import *
 
-from ..CustomErrors import PixelSizeIsNeccessaryError
+from ..CustomErrors import PixelSizeIsNecessaryError
+
 
 
 class StormDatasetCollection:
@@ -137,6 +142,58 @@ class StormDataClass(LocalizationDataBaseClass):
     def add_storm_dtype(self):
         self.locs_dtype = storm_data_dtype
 
+    def check_if_imported_data_isnm_or_px(self):
+        window = YesNoWrapper("Is data saved in nm?")
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        if window.exec_() == QDialog.Accepted:
+            data_in_nm = window.tobereturned
+            assert isinstance(data_in_nm, bool)
+            return data_in_nm
+
+    def check_if_metadata_is_complete(self, metadata):
+        if "name" not in metadata:
+            metadata["name"] = "Untitled"
+        if "zdim_present" not in metadata:
+            window = YesNoWrapper("Is zdim present?")
+            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            if window.exec_() == QDialog.Accepted:
+                zdim_present = window.tobereturned
+                assert isinstance(zdim_present, bool)
+                metadata["zdim_present"] = zdim_present
+        if "pixelsize_nm" not in metadata:
+            window = GetStringWrapper("Pixelsize in nm as integer:")
+            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            if window.exec_() == QDialog.Accepted:
+                pixelsize_nm = window.tobereturned
+                metadata["pixelsize_nm"] = int(pixelsize_nm)
+        if "sigma_present" not in metadata:
+            window = YesNoWrapper("Are uncertainty values present?")
+            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            if window.exec_() == QDialog.Accepted:
+                sigma_present = window.tobereturned
+                assert isinstance(sigma_present, bool)
+                metadata["sigma_present"] = sigma_present
+        if "photon_count_present" not in metadata:
+            window = YesNoWrapper("Are photon count values present?")
+            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            if window.exec_() == QDialog.Accepted:
+                photon_count_present = window.tobereturned
+                assert isinstance(photon_count_present, bool)
+                metadata["photon_count_present"] = photon_count_present
+        return metadata
+
+    def import_recognized_data(self, data, metadata=None):
+        data = np.rec.array(data, metadata["dataset_class_dtype"])
+        metadata = StormDataClass().check_if_metadata_is_complete(metadata)
+        if StormDataClass().check_if_imported_data_isnm_or_px():
+            data.x_pos_pixels /= metadata["pixelsize_nm"]
+            data.y_pos_pixels /= metadata["pixelsize_nm"]
+            data.z_pos_pixels /= metadata["pixelsize_nm"]
+
+        return StormDataClass(locs=data, name=metadata["name"], zdim_present=metadata["zdim_present"],
+                              pixelsize_nm=metadata["pixelsize_nm"], sigma_present=metadata["sigma_present"],
+                              photon_count_present=metadata["photon_count_present"])
+
     def save_as_npy(self, filename=None):
         if filename is None:
             filename = QFileDialog.getSaveFileName(caption="Save File", filter=".np")
@@ -229,7 +286,7 @@ class StormDataClass(LocalizationDataBaseClass):
         else:
             pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
             if not ok:
-                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
         if hasattr(locs, "z"):
             locs.z = locs.z / pixelsize
@@ -296,7 +353,7 @@ class StormDataClass(LocalizationDataBaseClass):
         else:
             pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
             if not ok:
-                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
 
         if '"x [nm]"' in header:
@@ -501,7 +558,7 @@ class StormDataClass(LocalizationDataBaseClass):
         except:
             pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
             if not ok:
-                raise PixelSizeIsNeccessaryError('Pixelsize is mandatory')
+                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
         pixelsize = float(pixelsize)
         if (
                 not "intensity_photon_" in prop.keys()

@@ -1,5 +1,5 @@
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QComboBox, QFormLayout, QLabel, QSpinBox, QPushButton
+from PyQt5.QtWidgets import QWidget, QComboBox, QFormLayout,  QSpinBox, QPushButton
 from PyQt5 import QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as Canvas
 from matplotlib.figure import Figure
@@ -8,7 +8,7 @@ from .pyqt.filter_slider import RangeSlider3, RangeSlider4
 
 
 class DataFilterWindow(QWidget):
-
+    """GUI Elements for the data filter widget"""
     def __init__(self, parent):
         super().__init__()
 
@@ -72,6 +72,7 @@ class DataFilterWindow(QWidget):
 
 
 class ParameterHistogrammCanvas(QWidget):
+    """Multipurpose canvas that is used in data filter widget"""
     def __init__(self, parent):
         super().__init__()
         # Attributes
@@ -106,6 +107,7 @@ class ParameterHistogrammCanvas(QWidget):
 
 
 class MplCanvas(Canvas):
+    """Multipurpose canvas"""
     def __init__(self):
         self.fig = Figure()
         self.fig.set_facecolor('#262930')
@@ -128,6 +130,7 @@ class MplCanvas(Canvas):
 
 
 class DataFilterInterface:
+    """Core code of the data filtering functions"""
     def __init__(self, parent, data_filter_window):
         self._parent = parent
         self.dfw = data_filter_window
@@ -171,6 +174,7 @@ class DataFilterInterface:
                                        bins=self.n_bins)
 
     def connect_dfw_with_functions(self):
+        """Connect GUI with functionalities"""
         self.dfw.Cparameter.currentIndexChanged.connect(self.current_parameter_changed)
         self.dfw.Cdatasets.currentIndexChanged.connect(self.current_dataset_changed)
         self.dfw.Sfilter_slider.add_data_filter_itf(self)
@@ -187,6 +191,7 @@ class DataFilterInterface:
         self.filter_mode_active_idx = self.dfw.Cfilter_mode.currentIndex()
 
     def apply_filtering(self, idx=None, update_layers=True):
+        """Find indices of datapoints which are meant to be filtered out"""
         if isinstance(idx, bool):
             idx = self.current_dataset_idx
         while len(self.filter_idx_list) - 1 <= idx:
@@ -228,6 +233,7 @@ class DataFilterInterface:
             self.current_parameter_changed()
 
     def apply_filtering_to_all(self):
+        """like apply_filtering but apply filter to all open datasets"""
         while len(self.filter_idx_list) - 1 <= len(self.list_of_datasets):
             self.filter_idx_list.append(np.asarray([], dtype=np.int32))
         tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
@@ -267,7 +273,7 @@ class DataFilterInterface:
         self.current_parameter_changed()
 
     def reset_all_filtering(self):
-        print("reset in progress")
+        """Reset all filtering that has been done, by simply removing all indices saved in filtering list"""
         for idx in range(len(self.filter_idx_list)):
             self.filter_idx_list[idx] = np.asarray([], dtype=np.int32)
         for dataset in self.list_of_datasets:
@@ -276,6 +282,7 @@ class DataFilterInterface:
         self.parent.data_to_layer_itf.update_layers()
 
     def clear_entries(self):
+        """Reset GUI and filters"""
         self.n_datasets = 0
         self.current_dataset_idx = 0
         self.current_parameter_idx = 0
@@ -283,6 +290,7 @@ class DataFilterInterface:
         self.dfw.clear_entries()
 
     def add_dataset_entry(self, dataset_name):
+        """Tell data filter itf that a new dataset was imported"""
         self.n_datasets += 1
         self.current_dataset_idx = self.n_datasets - 1
         self.active_filters.append({})
@@ -310,6 +318,7 @@ class DataFilterInterface:
             self.reset_slider_positions()
 
     def adjust_available_parameters_to_dataset_type(self):
+        """Depending on Dataset type set the available filterable parameters"""
         self.list_of_filterable_parameters = []
         if self.list_of_datasets:
             for param in self.list_of_datasets[self.current_dataset_idx].locs_dtype:

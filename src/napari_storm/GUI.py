@@ -13,6 +13,7 @@ from napari_storm.ns_constants import standard_colors
 from .Test_Mode import TestModeWindow
 from .DataFilter import DataFilterWindow
 from .pyqt.detachable_tab import DetachableTabWidget
+from .file_and_data_recognition import *
 
 
 class NapariStormGUI(QWidget):
@@ -48,59 +49,71 @@ class NapariStormGUI(QWidget):
         self.Bmerge_with_additional_file.clicked.connect(lambda:
                                                          self.open_localization_data_file_and_get_dataset(merge=True))
 
+        self.Bimport_by_file_recognition = QPushButton()
+        self.Bimport_by_file_recognition.setText("File Recognition Import")
+        self.data_controls_tab_layout.addWidget(self.Bimport_by_file_recognition, 2, 0, 1, 2)
+        self.Bimport_by_file_recognition.clicked.connect(
+            lambda:self.open_localization_data_file_and_get_dataset(merge=False, file_recognition=True))
+
+        self.Bcustom_import = QPushButton()
+        self.Bcustom_import.setText("Custom Import")
+        self.data_controls_tab_layout.addWidget(self.Bcustom_import, 2, 2, 1, 2)
+        self.Bcustom_import.clicked.connect(
+            lambda: self.open_localization_data_file_and_get_dataset(merge=False, custom_import=True))
+
         self.Lresetview = QLabel()
         self.Lresetview.setText('Reset view:')
-        self.data_controls_tab_layout.addWidget(self.Lresetview, 2, 0)
+        self.data_controls_tab_layout.addWidget(self.Lresetview, 3, 0)
 
         self.Baxis_xy = QPushButton()
         self.Baxis_xy.setText('XY')
         self.Baxis_xy.clicked.connect(lambda: self.change_camera(set_view_to='XY'))
         self.Baxis_xy.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_xy, 2, 1)
+        self.data_controls_tab_layout.addWidget(self.Baxis_xy, 3, 1)
 
         self.Baxis_yz = QPushButton()
         self.Baxis_yz.setText('YZ')
         self.Baxis_yz.clicked.connect(lambda: self.change_camera(set_view_to='YZ'))
         self.Baxis_yz.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_yz, 2, 2)
+        self.data_controls_tab_layout.addWidget(self.Baxis_yz, 3, 2)
 
         self.Baxis_xz = QPushButton()
         self.Baxis_xz.setText('XZ')
         self.Baxis_xz.clicked.connect(lambda: self.change_camera(set_view_to='XZ'))
         self.Baxis_xz.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_xz, 2, 3)
+        self.data_controls_tab_layout.addWidget(self.Baxis_xz, 3, 3)
 
         self.Lrenderoptions = QLabel()
         self.Lrenderoptions.setText('Rendering options:')
-        self.data_controls_tab_layout.addWidget(self.Lrenderoptions, 3, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrenderoptions, 4, 0)
 
         self.Brenderoptions = QComboBox()
         self.Brenderoptions.addItems(self.gaussian_render_modes)
         self.Brenderoptions.currentIndexChanged.connect(self._render_options_changed)
-        self.data_controls_tab_layout.addWidget(self.Brenderoptions, 3, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Brenderoptions, 4, 1, 1, 3)
 
         self.Lsigma_xy = QLabel()
         self.Lsigma_xy.setText('FWHM in XY [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lsigma_xy, 4, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy, 5, 0)
 
         self.Lsigma_z = QLabel()
         self.Lsigma_z.setText('FWHM in Z [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lsigma_z, 5, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z, 6, 0)
 
         self.Lsigma_xy_min = QLabel()
         self.Lsigma_xy_min.setText('Min. FWHM in XY [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lsigma_xy_min, 6, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy_min, 7, 0)
 
         self.Lsigma_z_min = QLabel()
         self.Lsigma_z_min.setText('Min. FWHM in Z [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lsigma_z_min, 7, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z_min, 8, 0)
 
         self.Esigma_xy = QLineEdit()
         self.Esigma_xy.setText(str(self.render_fixed_gauss_sigma_xy_nm * 2.354))
         self.Esigma_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_xy, 4, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_xy, 5, 1, 1, 3)
         self.typing_timer_sigma = QtCore.QTimer()
         self.typing_timer_sigma.setSingleShot(True)
         self.typing_timer_sigma.timeout.connect(self.update_sigma)
@@ -110,74 +123,74 @@ class NapariStormGUI(QWidget):
         self.Esigma_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_z, 5, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_z, 6, 1, 1, 3)
 
         self.Esigma_min_xy = QLineEdit()
         self.Esigma_min_xy.setText(str(self.render_var_gauss_sigma_min_xy_nm * 2.354))
         self.Esigma_min_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_min_xy, 6, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_xy, 7, 1, 1, 3)
 
         self.Esigma_min_z = QLineEdit()
         self.Esigma_min_z.setText(str(self.render_var_gauss_sigma_min_z_nm * 2.354))
         self.Esigma_min_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 7, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 8, 1, 1, 3)
 
         self.HL1 = QHSeperationLine()
-        self.data_controls_tab_layout.addWidget(self.HL1, 8, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.HL1, 9, 0, 1, 4)
 
         self.Lrangex = QLabel()
         self.Lrangex.setText('X-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangex, 9, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangex, 10, 0)
 
         self.Lrangey = QLabel()
         self.Lrangey.setText('Y-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangey, 10, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangey, 11, 0)
 
         self.Lrangez = QLabel()
         self.Lrangez.setText('Z-range')
-        self.data_controls_tab_layout.addWidget(self.Lrangez, 11, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrangez, 12, 0)
 
         self.Srender_rangex = RangeSlider2(parent=self, type='x')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 9, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 10, 1, 1, 3)
 
         self.Srender_rangey = RangeSlider2(parent=self, type='y')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 10, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 11, 1, 1, 3)
 
         self.Srender_rangez = RangeSlider2(parent=self, type='z')
-        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 11, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 12, 1, 1, 3)
 
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText('Reset Render Range')
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 12, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 13, 0, 1, 4)
 
         self.HL2 = QHSeperationLine()
-        self.data_controls_tab_layout.addWidget(self.HL2, 13, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.HL2, 14, 0, 1, 4)
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar_state_changed)
         self.Cscalebar.setText("Scalebar")
-        self.data_controls_tab_layout.addWidget(self.Cscalebar, 14, 0, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Cscalebar, 15, 0, 1, 1)
 
         self.Bz_color_coding = QCheckBox()
         self.Bz_color_coding.setText('Activate Rainbow colorcoding in Z')
         self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 14, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 15, 2, 1, 2)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText('Size of Scalebar [nm]:')
-        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 15, 0)
+        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 16, 0)
 
         self.Esbsize = QLineEdit()
         self.Esbsize.setText('500')
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controls_tab_layout.addWidget(self.Esbsize, 15, 1, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Esbsize, 16, 1, 1, 1)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self.data_to_layer_itf.scalebar)
@@ -185,7 +198,7 @@ class NapariStormGUI(QWidget):
         # visual_controls
         self.channel_controls_widget_layout = QFormLayout()
         self.channel_controls_placeholder = QWidget()
-        self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 18, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 19, 0, 1, 4)
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
         # infos tab
@@ -414,9 +427,9 @@ class TestListView(QListWidget):
                 + f"File: {filename}\n"
                 + f"Dataset-type: {self.datasets[idx].dataset_type}\n"
                 + f"Number of locs: {len(self.datasets[idx].x_pos_nm)}\n"
-                  f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm)))/1000}  µm\n"
-                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm)))/1000}  µm\n"
-                + f"Imagedepth: {np.round((max(self.datasets[idx].z_pos_nm) - min(self.datasets[idx].z_pos_nm)))/1000}  µm\n"
+                  f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm))) / 1000}  µm\n"
+                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm))) / 1000}  µm\n"
+                + f"Imagedepth: {np.round((max(self.datasets[idx].z_pos_nm) - min(self.datasets[idx].z_pos_nm))) / 1000}  µm\n"
             )
         else:
             self.addItem(
@@ -424,8 +437,8 @@ class TestListView(QListWidget):
                 + f"File: {filename}\n"
                 + f"Dataset-type: {self.datasets[idx].dataset_type}\n"
                 + f"Number of locs: {len(self.datasets[idx].x_pos_nm)}\n"
-                  f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm)))/1000}  µm\n"
-                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm)))/1000}  µm\n"
+                  f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm))) / 1000}  µm\n"
+                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm))) / 1000}  µm\n"
 
             )
 
@@ -455,4 +468,3 @@ class TestListView(QListWidget):
 
     def remove_dataset(self, item):
         print("Dataset removal not implemented yet...", item)
-

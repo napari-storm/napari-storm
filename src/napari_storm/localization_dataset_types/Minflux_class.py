@@ -29,6 +29,11 @@ class MinfluxDataBaseClass(LocalizationDataBaseClass):
             self.add_minflux_dtype()
             self.locs_sanity_check()
 
+    def import_recognized_data(self, data, metadata=None):
+        data = np.rec.array(data, metadata["dataset_class_dtype"])
+        metadata = MinfluxDataBaseClass().check_if_metadata_is_complete(metadata)
+        return MinfluxDataBaseClass(locs=data, name=metadata["name"], zdim_present=metadata["zdim_present"])
+
     def add_minflux_dtype(self):
         self.init_dtype(self.zdim_present)
         self.locs_dtype.append(('trace_id', 'i4'))

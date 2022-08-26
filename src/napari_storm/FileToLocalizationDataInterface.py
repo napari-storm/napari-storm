@@ -1,12 +1,8 @@
 import os.path as _ospath
 
 from .ns_constants import *
-from .CustomErrors import *
-
-from .localization_dataset_types.base_class import *
-from .localization_dataset_types.Minflux_class import *
-from .localization_dataset_types.storm_class import *
 from .file_and_data_recognition import *
+from .Custom_Import import *
 
 
 class FileToLocalizationDataInterface:
@@ -27,17 +23,28 @@ class FileToLocalizationDataInterface:
     def filetype_recognition(self, file_path):
         return file_and_data_recognition(file_path)
 
-    def open_localization_data_file_and_get_dataset(self, file_path=None):
+    def open_localization_data_file_and_get_dataset(self, file_path=None, file_type_recognizer=False,
+                                                    custom_import=False):
         """Determine which file type is being opened, and call the
         corresponding importer function"""
         if not file_path:
             file_path = QFileDialog.getOpenFileName()[0]
-        return self.recognize_storm_data_and_return_dataset(file_path)
+        try:
+            self.n_datasets += 1
+            if file_type_recognizer:
+                return [file_and_data_recognition(file_path)]
+            elif custom_import:
+                return [custom_import_function(file_path)]
 
-    def recognize_storm_data_and_return_dataset(self, file_path):
+            else:
+                return self.open_known_filetype_and_import_dataset(file_path)
+
+        except FileImportAbortedError:
+            self.n_datasets -= 1
+
+    def open_known_filetype_and_import_dataset(self, file_path):
+        """Find out dataset type by ending or other clues and try to import the known dataset type directly"""
         filetype = file_path.split('.')[-1]
-        self.n_datasets += 1
-        # Picasso hdf5 -> always needs a yaml present
         if filetype == 'hdf5':
             if _ospath.isfile(file_path[: -(len(filetype))] + 'yaml'):
                 return self.load_hdf5(file_path)
@@ -62,14 +69,14 @@ class FileToLocalizationDataInterface:
             return self.load_mfx_json(file_path)
         elif filetype == 'npy':
             return self.load_mfx_npy(file_path)
-        elif filetype =='mfx':
+        elif filetype == 'mfx':
             return self.load_mfx(file_path)
         elif filetype == 'test':
             return self.start_testing()
-        self.n_datasets -= 1
-        raise TypeError('Unknown SMLM data file extension')
+        raise FileImportAbortedError('Unknown data file extension, try file recognition import')
 
     def check_namespace(self, name, idx=1):
+        """Assure that no other dataset with the same name is already open or otherwise change the name """
         # print("checking the namespace:",name)
         for i in range(self.n_datasets - 1):
             if self.dataset_names[i] == name:
@@ -99,6 +106,7 @@ class FileToLocalizationDataInterface:
         return dataset_collection.list_of_datasets
 
     def load_mfx_json(self, file_path, itr=-1):
+        """loads localizations from AIs json format"""
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
@@ -106,6 +114,7 @@ class FileToLocalizationDataInterface:
         return [dataset]
 
     def load_mfx_npy(self, file_path, itr=-1):
+        """loads localizations from AIs npy format"""
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
@@ -113,12 +122,14 @@ class FileToLocalizationDataInterface:
         return [dataset]
 
     def load_csv(self, file_path):
+        """loads localizations thunderstorms csv format"""
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         return StormDataClass().load_csv(file_path=file_path, name=filename)
 
     def load_smlm(self, file_path):
+        """loads localizations from smlm format"""
         filename = file_path.split(".")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)

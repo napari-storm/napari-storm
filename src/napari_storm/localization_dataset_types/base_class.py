@@ -1,7 +1,10 @@
 
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QDialog
 
 import numpy as np
+from qtpy import QtCore
+
+from ..pyqt.yes_or_no_dialog import YesNoWrapper
 
 
 class LocalizationDataBaseClass:
@@ -68,6 +71,23 @@ class LocalizationDataBaseClass:
             locs_dtype = [('x_pos_nm', 'f4'),
                           ('y_pos_nm', 'f4')]
         return locs_dtype
+
+    def check_if_metadata_is_complete(self, metadata):
+        if "name" not in metadata:
+            metadata["name"] = "Untitled"
+        if "zdim_present" not in metadata:
+            window = YesNoWrapper("Is zdim present?")
+            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            if window.exec_() == QDialog.Accepted:
+                zdim_present = window.tobereturned
+                assert isinstance(zdim_present, bool)
+                metadata["zdim_present"] = zdim_present
+        return metadata
+
+    def import_recognized_data(self, data, metadata=None):
+        data = np.rec.array(data, metadata["dataset_class_dtype"])
+        metadata = LocalizationDataBaseClass().check_if_metadata_is_complete(metadata)
+        return LocalizationDataBaseClass(locs=data, name=metadata["name"], zdim_present=metadata["zdim_present"])
 
     def save_as_npy(self, filename=None):
         if filename is None:

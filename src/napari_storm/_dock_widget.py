@@ -16,7 +16,6 @@ class napari_storm(NapariStormGUI):
 
     def __init__(self, napari_viewer):
 
-
         napari_viewer.window.qt_viewer.dockLayerControls.setVisible(False)
         napari_viewer.window.qt_viewer.dockLayerList.setVisible(False)
 
@@ -282,6 +281,15 @@ class napari_storm(NapariStormGUI):
         self.data_to_layer_itf.update_layers(self)
 
     def _render_options_changed(self):
+        only_storm_datasets = True
+        zdim_present = True
+        for dataset in self.localization_datasets:
+            if not isinstance(dataset, StormDataClass):
+                only_storm_datasets = False
+            if not dataset.zdim_present:
+                zdim_present = False
+        if only_storm_datasets is False:
+            self.Brenderoptions.setCurrentIndex(0)
         if self.Brenderoptions.currentText() == self.gaussian_render_modes[1]:
             self.render_gaussian_mode = 1
             self.Lsigma_xy.setText('PSF FWHM in XY [nm]')
@@ -307,6 +315,8 @@ class napari_storm(NapariStormGUI):
             self.Esigma_min_z.hide()
             self.Lsigma_xy_min.hide()
             self.Lsigma_z_min.hide()
+        if not zdim_present:
+            self.Bz_color_coding.hide()
         self.data_to_layer_itf.update_layers(self)
 
     def _start_typing_timer(self, timer):
@@ -337,7 +347,18 @@ class napari_storm(NapariStormGUI):
             self.render_var_gauss_sigma_min_z_nm = float(self.Esigma_min_z.text()) / 2.354
         self.data_to_layer_itf.update_layers()
 
-    def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None):
+    def allow_variable_gaussian_mode_for_storm_datasets(self):
+        only_storm_datasets = True
+        for dataset in self.localization_datasets:
+            if not isinstance(dataset, LocalizationDataBaseClass):
+                only_storm_datasets = False
+
+        if not only_storm_datasets:
+            self.Brenderoptions.removeItem(1)
+
+
+    def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None, file_recognition=False,
+                                                    custom_import=False):
         self.show_avaiable_widgets()
         if not merge:
             self.data_filter_itf.clear_entries()
@@ -345,7 +366,9 @@ class napari_storm(NapariStormGUI):
             self.Cgrid_plane.setCheckState(False)
             self.data_to_layer_itf.reset_render_range_and_offset()
 
-        datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(file_path=file_path)
+        datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(
+            file_path=file_path,
+            file_type_recognizer=file_recognition, custom_import=custom_import)
         if datasets[-1].zdim_present:
             self.zdim = True
         else:
@@ -357,6 +380,7 @@ class napari_storm(NapariStormGUI):
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
+
 
     def get_dataset_from_test_mode(self, datasets):
         self.show_avaiable_widgets()
@@ -378,10 +402,11 @@ class napari_storm(NapariStormGUI):
         self.add_channel(name=dataset.name)
         self.channel[-1].change_color_map()
         self.channel[-1].adjust_colormap_range()
-        if dataset.sigma_present:
-            self.render_gaussian_mode = 1
-            self.Brenderoptions.setCurrentIndex(1)
-            self.Bz_color_coding.hide()
+        if hasattr(dataset, "sigma_present"):
+            if dataset.sigma_present:
+                self.render_gaussian_mode = 1
+                self.Brenderoptions.setCurrentIndex(1)
+                self.Bz_color_coding.hide()
 
 
 @napari_hook_implementation

@@ -131,11 +131,11 @@ class RangeSlider2(QDoubleRangeSlider):
                 np.asarray(faces) - 1,
             )
         else:
-            rrx_full = self.parent().data_to_layer_itf.render_range_x
+            rrx_full = self.parent().data_to_layer_itf.render_range_y
             rrx = rrx_full.copy()
             rrx[0] += (rrx_full[1] - rrx_full[0]) * self.parent().render_range_slider_x_percent[0] / 100
             rrx[1] -= (rrx_full[1] - rrx_full[0]) * (1 - self.parent().render_range_slider_x_percent[1] / 100)
-            rry_full = self.parent().data_to_layer_itf.render_range_y
+            rry_full = self.parent().data_to_layer_itf.render_range_x
             rry = rry_full.copy()
             rry[0] += (rry_full[1] - rry_full[0]) * self.parent().render_range_slider_y_percent[0] / 100
             rry[1] -= (rry_full[1] - rry_full[0]) * (1 - self.parent().render_range_slider_y_percent[1] / 100)
