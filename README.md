@@ -53,9 +53,9 @@ the menu bar under plug-ins.
 Standard file formats from picasso, thunderstorm, AI Minflux files,... can be imported by simply dragging them into
 napari or the import file dialog. If that's not the case for the file:
 
-a) one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
-b) try the (rather experimental) file recognition import button, which will try to extract the headers of your file
-and lets you assign your data. This should work for any .hdf5, .csv ord npy. file. 
+- one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
+- try the (rather experimental) file recognition import button, which will try to extract the headers of your file
+and lets you assign your data. This should work for any .hdf5, .csv or npy. file. 
 
 ### Basic usage
 When a dataset is imported you should be able to see 4 tabs in the widget: Data Controls, File Infos, Decorators and 
