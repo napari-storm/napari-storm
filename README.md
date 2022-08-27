@@ -1,4 +1,4 @@
-![alt text](/ressources/napari_storm_logo.png)
+![alt text](/resources/napari_storm_logo.png)
 
 # napari-storm
 
