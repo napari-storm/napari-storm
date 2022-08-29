@@ -8,7 +8,7 @@ from .napari_particles.utils import generate_billboards_2d
 from .CustomErrors import *
 
 
-class DataToLayerInterface:  # localization always with z # switch info with channel controlls #
+class DataToLayerInterface:  # localization always with z # switch info with channel controls #
     def __init__(self, parent, viewer, surface_layer=None, grid_plane_layer=None):
 
         # assert isinstance(parent, napari_storm) == True
@@ -21,6 +21,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         if not self.scalebar_layer:
             self.scalebar_exists = False
         self.grid_plane_layer = grid_plane_layer
+        self.default_line_thickness_nm = None
+        self.grid_plane_layer_opacity = .75
+        self.current_grid_plane_color = "white"
+        self.current_grid_plane_z_pos = None
 
         # Render properties for every dataset, stored in lists
         self.render_sigma = []
@@ -55,10 +59,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def create_remove_grid_plane_state(self, enable):
         if enable:
-            if self.parent.zdim:
-                z = np.mean(self.render_range_z)
-            else:
-                z = 1
+            if not self.current_grid_plane_z_pos:
+                if self.parent.zdim:
+                    self.current_grid_plane_z_pos = np.mean(self.render_range_z)
+                else:
+                    self.current_grid_plane_z_pos = 1
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
                                           (self.parent.render_range_slider_y_percent[1] -
@@ -66,9 +71,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
                                           (self.parent.render_range_slider_x_percent[1] -
                                            self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
-            default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
-                self.render_range_y[1] - self.render_range_y[0],
-                self.render_range_x[1] - self.render_range_x[0]))
+            if not self.default_line_thickness_nm:
+                self.default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
+                    self.render_range_y[1] - self.render_range_y[0],
+                    self.render_range_x[1] - self.render_range_x[0]))
 
             vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
             # length of vectors
@@ -83,7 +89,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                                 (self.render_range_x[1] - self.render_range_x[0])
                                                                 * (self.parent.render_range_slider_x_percent[
                         0]) / 100)
-            vectors_x[:, 0, 0] = z
+            vectors_x[:, 0, 0] = self.current_grid_plane_z_pos
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
@@ -96,18 +102,21 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                                 (self.render_range_y[1] - self.render_range_y[0])
                                                                 * (self.parent.render_range_slider_y_percent[
                         0]) / 100)
-            vectors_y[:, 0, 0] = z
+            vectors_y[:, 0, 0] = self.current_grid_plane_z_pos
 
             vectors = np.concatenate((vectors_x, vectors_y))
-            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color='white', ndim=3, )
+            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=self.default_line_thickness_nm,
+                                                            name="Grid_Plane", edge_color=self.current_grid_plane_color,
+                                                            ndim=3,
+                                                            opacity=self.grid_plane_layer_opacity)
         else:
+            self.default_line_thickness_nm = self.grid_plane_layer.edge_width
+            self.grid_plane_layer_opacity = self.grid_plane_layer.opacity
             self.viewer.layers.remove('Grid_Plane')
 
     def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None, opacity=None):
         if line_distance_nm:
-            z = np.mean(self.grid_plane_layer.data[:, 0, 0])
-            opacity_backup = self.grid_plane_layer.opacity
+            self.grid_plane_layer_opacity = self.grid_plane_layer.opacity
             default_line_thickness_nm = self.grid_plane_layer.edge_width
             default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
             num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
@@ -140,7 +149,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                                 (self.render_range_x[1] - self.render_range_x[0])
                                                                 * (self.parent.render_range_slider_x_percent[
                         0]) / 100)
-            vectors_x[:, 0, 0] = z
+            vectors_x[:, 0, 0] = self.current_grid_plane_z_pos
 
             vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
             vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
@@ -153,17 +162,19 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                                 (self.render_range_y[1] - self.render_range_y[0])
                                                                 * (self.parent.render_range_slider_y_percent[
                         0]) / 100)
-            vectors_y[:, 0, 0] = z
+            vectors_y[:, 0, 0] = self.current_grid_plane_z_pos
             vectors = np.concatenate((vectors_x, vectors_y))
             self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color="white", ndim=3,
-                                                            opacity=opacity_backup)
+                                                            name="Grid_Plane", edge_color=self.current_grid_plane_color,
+                                                            ndim=3,
+                                                            opacity=self.grid_plane_layer_opacity)
             self.parent.update_grid_plane_color()
 
         if z_pos:
             vectors = self.grid_plane_layer.data
             if self.parent.zdim:
-                vectors[:, 0, 0] = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
+                self.current_grid_plane_z_pos = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
+                vectors[:, 0, 0] = self.current_grid_plane_z_pos
             else:
                 vectors[:, 0, 0] = 1
             self.grid_plane_layer.data = vectors
@@ -173,6 +184,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                                                * np.mean((self.render_range_x[1] - self.render_range_x[0],
                                                           self.render_range_y[1] - self.render_range_y[0]))
         if color:
+            self.current_grid_plane_color = color
             self.grid_plane_layer.edge_color = color
         if opacity:
             self.grid_plane_layer.opacity = opacity / 100

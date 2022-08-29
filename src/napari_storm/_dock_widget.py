@@ -164,6 +164,7 @@ class napari_storm(NapariStormGUI):
     def update_grid_plane_color(self):
         idx = self.Bgrid_plane_color.currentIndex()
         self.grid_plane_standard_color_index = idx
+        self.data_to_layer_itf.current_grid_plane_color = standard_colors[idx]
         self.data_to_layer_itf.update_grid_plane(color=standard_colors[idx])
 
     def update_grid_plane_line_distance(self):
@@ -187,8 +188,6 @@ class napari_storm(NapariStormGUI):
             self.Sgrid_line_thickness.hide()
             self.Sgrid_z_pos.hide()
             self.grid_plane_enabled = 0
-            self.grid_plane_standard_color_index = 0
-            self.Bgrid_plane_color.setCurrentIndex(0)
             self.Bgrid_plane_color.hide()
 
     def scalebar_state_changed(self):

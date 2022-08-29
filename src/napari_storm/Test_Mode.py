@@ -7,7 +7,6 @@ from .LocalizationData import LocalizationData
 class TestModeWindow(QWidget):
     def __init__(self, parent):
         super().__init__()
-        print("test mode started")
         self.setWindowTitle("TestMode")
         self.parent = parent
 
