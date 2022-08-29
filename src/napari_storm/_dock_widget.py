@@ -3,6 +3,7 @@ from napari_plugin_engine import napari_hook_implementation
 from .Exp_Controls import *
 from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
+from .DataAdjustment import DataAdjustmentInterface
 from .DataFilter import DataFilterInterface
 from .ChannelControls import ChannelControls
 from .pyqt.GridPlaneSlider import *
@@ -66,6 +67,8 @@ class napari_storm(NapariStormGUI):
         # GUI
         super().__init__()
         self._data_filter_itf = DataFilterInterface(parent=self, data_filter_window=self.datafilter_tab)
+        self._data_adjustment_itf = DataAdjustmentInterface(parent=self,
+                                                            data_adjustment_window=self.data_adjustment_tab)
 
         # Init Function Calls
         custom_keys_and_scalebar(self)
@@ -101,8 +104,16 @@ class napari_storm(NapariStormGUI):
         raise StaticAttributeError('the data filter interface should never be changed')
 
     @property
+    def data_adjustment_itf(self):
+        return self._data_adjustment_itf
+
+    @data_adjustment_itf.setter
+    def data_adjustment_itf(self, value):
+        raise StaticAttributeError('the data adjustment interface should never be changed')
+
+    @property
     def file_to_data_itf(self):
-        return self._file_to_itf
+        return self._file_to_data_itf
 
     @file_to_data_itf.setter
     def file_to_data_itf(self, value):
@@ -376,11 +387,15 @@ class napari_storm(NapariStormGUI):
             self.zdim = False
         for i in range(len(datasets)):
             self.localization_datasets.append(datasets[i])
-            self.data_filter_itf.add_dataset_entry(datasets[i].name)
+            self.add_dataset_entries_for_all_itfs(dataset=datasets[i])
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
+
+    def add_dataset_entries_for_all_itfs(self, dataset):
+        self.data_filter_itf.add_dataset_entry(dataset.name)
+        self.data_adjustment_itf.add_dataset_entry(dataset.name)
 
 
     def get_dataset_from_test_mode(self, datasets):

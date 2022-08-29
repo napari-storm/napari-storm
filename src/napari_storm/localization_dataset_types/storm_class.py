@@ -19,7 +19,6 @@ from ..pyqt.get_string_dialog import *
 from ..CustomErrors import PixelSizeIsNecessaryError
 
 
-
 class StormDatasetCollection:
     def __init__(self, list_of_datasets=None):
         self.dataset_type = "StormDatasetCollection"

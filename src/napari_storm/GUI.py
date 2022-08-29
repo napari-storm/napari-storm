@@ -12,6 +12,7 @@ from napari_storm.pyqt.RenderRangeSlider import RangeSlider2
 from napari_storm.ns_constants import standard_colors
 from .Test_Mode import TestModeWindow
 from .DataFilter import DataFilterWindow
+from .DataAdjustment import DataAdjustmentWindow
 from .pyqt.detachable_tab import DetachableTabWidget
 from .file_and_data_recognition import *
 
@@ -29,6 +30,7 @@ class NapariStormGUI(QWidget):
         self.infos_tab = QWidget()
         self.decorator_tab = QWidget()
         self.datafilter_tab = DataFilterWindow(parent=self)
+        self.data_adjustment_tab = DataAdjustmentWindow(parent=self)
 
         self.test_mode_tab = TestModeWindow(parent=self)
 
@@ -371,6 +373,7 @@ class NapariStormGUI(QWidget):
         self.tabs.addTab(self.infos_tab, 'File Infos')
         self.tabs.addTab(self.decorator_tab, 'Decorators')
         self.tabs.addTab(self.datafilter_tab, 'Data Filter')
+        self.tabs.addTab(self.data_adjustment_tab, "Data adjustment")
         self.HL1.show()
         self.HL2.show()
 
