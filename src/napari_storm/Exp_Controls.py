@@ -21,7 +21,8 @@ class RightClickPaninng(QWidget):
 
     def create_anker(self):
         center = self.viewer.camera.center
-        h = 200
+        h = 200 / self.viewer.camera.zoom
+        print(h)
         self.anker_coords = np.asarray(
             [
                 [h, 0, 0],
@@ -258,7 +259,7 @@ class Panning_create_anker(QWidget):
 
     def create_anker(self):
         center = self.viewer.camera.center
-        h = 100
+        h = 100 * 0.06 / self.viewer.camera.zoom
         coords = []
         for i in [-h / 2, h / 2]:
             for j in [-h / 2, h / 2]:
