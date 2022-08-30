@@ -162,10 +162,10 @@ class DataAdjustmentInterface:
             try:
                 dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
             except ValueError:
-                dset[tmp_dataset.__name__] = tmp_dataset.locs_all
+                dset["dataset"] = tmp_dataset.locs_all
             dset.attrs["name"] = tmp_dataset.name
             dset.attrs["zdim_present"] = tmp_dataset.zdim_present
-
+            dset.attrs["dataset_class"] = tmp_dataset.__class__.__name__
             if isinstance(tmp_dataset, StormDataClass):
                 dset.attrs["pixelsize_nm"] = tmp_dataset.pixelsize_nm
                 dset.attrs["sigma_present"] = tmp_dataset.sigma_present

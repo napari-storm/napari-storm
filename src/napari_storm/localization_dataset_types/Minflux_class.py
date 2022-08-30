@@ -371,6 +371,13 @@ class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
         self.locs_dtype = minflux_AI_data_dtype
         self.zdim_present = zdim_present
 
+    def load_ns(self, dataset):
+        tmp_name = dataset.attrs["name"]
+        tmp_zdim_present = dataset.attrs["zdim_present"]
+        tmp_itr = dataset.attrs["itr"]
+        return MinfluxDataAIIterationClass(locs=np.rec.array(dataset[...]), name=tmp_name, zdim_present=tmp_zdim_present,
+                                           itr=tmp_itr)
+
     def export_current_iteration_as_mfx_file(self, filename=None):
         if filename is None:
             filename = QFileDialog.getSaveFileName(caption="Save File", filter=".mfx")

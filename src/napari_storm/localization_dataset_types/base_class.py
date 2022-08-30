@@ -72,6 +72,11 @@ class LocalizationDataBaseClass:
                           ('y_pos_nm', 'f4')]
         return locs_dtype
 
+    def load_ns(self, dataset):
+        tmp_name = dataset.attrs["name"]
+        tmp_zdim_present = dataset.attrs["zdim_present"]
+        return LocalizationDataBaseClass(np.rec.array(locs=dataset[...]), name=tmp_name, zdim_present=tmp_zdim_present)
+
     def check_if_metadata_is_complete(self, metadata):
         if "name" not in metadata:
             metadata["name"] = "Untitled"

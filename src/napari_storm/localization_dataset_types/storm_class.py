@@ -141,6 +141,17 @@ class StormDataClass(LocalizationDataBaseClass):
     def add_storm_dtype(self):
         self.locs_dtype = storm_data_dtype
 
+    def load_ns(self, dataset):
+        tmp_name = dataset.attrs["name"]
+        tmp_zdim_present = dataset.attrs["zdim_present"]
+        tmp_photon_count_present = dataset.attrs["photon_count_present"]
+        tmp_pixelsize_nm = dataset.attrs["pixelsize_nm"]
+        tmp_sigma_present = dataset.attrs["sigma_present"]
+
+        return StormDataClass(locs=np.rec.array(dataset[...]), name=tmp_name, zdim_present=tmp_zdim_present,
+                              photon_count_present=tmp_photon_count_present, pixelsize_nm=tmp_pixelsize_nm,
+                              sigma_present=tmp_sigma_present)
+
     def check_if_imported_data_isnm_or_px(self):
         window = YesNoWrapper("Is data saved in nm?")
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)

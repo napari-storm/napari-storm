@@ -1,8 +1,8 @@
 import os.path as _ospath
-
 from .ns_constants import *
 from .file_and_data_recognition import *
 from .Custom_Import import *
+import napari_storm.localization_dataset_types as dataset_classes
 
 
 class FileToLocalizationDataInterface:
@@ -37,7 +37,7 @@ class FileToLocalizationDataInterface:
                 return [custom_import_function(file_path)]
 
             else:
-                return self.open_known_filetype_and_import_dataset(file_path)
+                return [self.open_known_filetype_and_import_dataset(file_path)]
 
         except FileImportAbortedError:
             self.n_datasets -= 1
@@ -71,6 +71,8 @@ class FileToLocalizationDataInterface:
             return self.load_mfx_npy(file_path)
         elif filetype == 'mfx':
             return self.load_mfx(file_path)
+        elif filetype == 'ns':
+            return self.load_ns(file_path)
         elif filetype == 'test':
             return self.start_testing()
         raise FileImportAbortedError('Unknown data file extension, try file recognition import')
@@ -82,6 +84,14 @@ class FileToLocalizationDataInterface:
             if self.dataset_names[i] == name:
                 return self.check_namespace(name + "_" + str(idx + 1), idx + 1)
         return name
+
+    def load_ns(self, file_path):
+        filename = file_path.split("/")[1]
+        filename = self.check_namespace(filename)
+
+        with h5py.File(file_path, "r") as f:
+            class_ = getattr(dataset_classes, f["dataset"].attrs["dataset_class"])
+            return class_.load_ns(None, f["dataset"])
 
     def load_mfx(self, file_path):
         """wrapper to load .mfx files"""
