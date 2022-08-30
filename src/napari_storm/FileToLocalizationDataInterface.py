@@ -41,6 +41,8 @@ class FileToLocalizationDataInterface:
 
         except FileImportAbortedError:
             self.n_datasets -= 1
+        except FileNotFoundError:
+            self.n_datasets -= 1
 
     def open_known_filetype_and_import_dataset(self, file_path):
         """Find out dataset type by ending or other clues and try to import the known dataset type directly"""

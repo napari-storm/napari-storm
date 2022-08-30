@@ -155,9 +155,9 @@ class DataAdjustmentInterface:
                 self.daw.Cparameter.addItem(param)
 
     def save_current_dataset_as_ns(self, filename=None):
+        tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
         if not filename:
             filename = QFileDialog.getSaveFileName()[0]
-        tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
         with h5py.File(filename, 'a') as f:
             try:
                 dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
