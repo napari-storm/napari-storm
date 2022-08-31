@@ -8,7 +8,8 @@ from .CustomErrors import *
 def custom_import_function(filepath):
     """This function is called when you press the custom import button, load your own data here with code you
     write yourself. Also make a backup copy of this code in case you update napari-storm this might get lost.
-    Just follow the instructions and replace the print and error. I already took care of the most important imports (s. above)"""
+    Just follow the instructions and replace the print and error. I already took care of the most important imports
+     (s. above)"""
 
     """
     I) 
@@ -36,13 +37,13 @@ def custom_import_function(filepath):
     ##################################
     
     II)
-    After you decided on a dataset class and got everthing you need:
+    After you decided on a dataset class and got everything you need:
     1) create a data_rec_array=numpy.rec.array(<your_data_here>,dtype=<dataset_class_dtype>)
     2) initialize the datasetclass and return the result return <datasetclass>(data=data_rec_array, ...), 
     
     example: 
         file = D:/really_good_measurements/best_example_I_could_think_of.npy
-        raw_data = np.load(file)
+        raw_data = np.load(file) 
         data_rec_array=numpy.rec.array(raw_data, dtype=lm_base_data_dtype)
         zdim_present = True 
         name = file.split(/)[-1]
