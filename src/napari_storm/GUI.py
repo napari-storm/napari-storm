@@ -1,6 +1,8 @@
+import os.path
+
 import numpy as np
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap, QImage
 from PyQt5.QtWidgets import QTabWidget, QWidget, QGridLayout, QPushButton, QLabel, QComboBox, QLineEdit, QCheckBox, \
     QFormLayout, QSlider, QListWidget
 from qtpy import QtCore
@@ -202,6 +204,13 @@ class NapariStormGUI(QWidget):
         self.channel_controls_placeholder = QWidget()
         self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 19, 0, 1, 4)
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
+
+        self.Lcolor_encoding_scalebar = ZColorCodingScaleBarWidget()
+        self.Lcolor_encoding_scalebar.hide()
+
+        self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_scalebar, 20, 0, 1, 4)
+
+
 
         # infos tab
         self.infos_tab_layout = QGridLayout()
@@ -471,3 +480,30 @@ class TestListView(QListWidget):
 
     def remove_dataset(self, item):
         print("Dataset removal not implemented yet...", item)
+
+
+class ZColorCodingScaleBarWidget(QWidget):
+
+    def __init__(self):
+        super().__init__()
+
+        self.colorbar_set = False
+        self.setFixedWidth(256)
+        self.setFixedHeight(128)
+        self.titel = QLabel("Z-color-encoding scalebar:")
+        self.colorbar = QLabel("")
+
+        self.label = QLabel("min                                                   max")
+
+        self.layout = QFormLayout()
+        self.layout.addRow(self.titel)
+        self.layout.addRow(self.scalebar)
+        self.layout.addRow(self.label)
+
+        self.setLayout(self.layout)
+
+    def set_pixmap(self, scalebar_pixmap):
+        if not self.colorbar_set:
+            self.colorbar.setPixmap(scalebar_pixmap.scaledToWidth(194))
+            self.colorbar_set = True
+

@@ -427,6 +427,22 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         icon[:, 96:, 2] = np.ones((128, 32)) * np.arange(32) / 32
         icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
         cmap_icons.append(icon)
+        icon = np.zeros((128, 600, 4))
+        icon[:, :100, 0] = 1
+        icon[:, :100, 1] = np.ones((128, 100)) * np.arange(100)/100
+        icon[:, 100:200, 0] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
+        icon[:, 100:200, 1] = 1
+        icon[:, 200:300, 2] = np.ones((128, 100)) * np.arange(100) / 100
+        icon[:, 200:300, 1] = 1
+        icon[:, 300:400, 2] = 1
+        icon[:, 300:400, 1] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
+        icon[:, 400:500, 0] = np.ones((128, 100)) * np.arange(100) / 100
+        icon[:, 400:500, 2] = 1
+        icon[:, 500:, 0] = 1
+        icon[:, 500:, 2] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
+        icon[:, :, 3] = 1
+        qpm = QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon * 255))))
+        cmap_icons.append(qpm)
         return cmaps, cmap_icons
 
     def set_render_values(self, dataset, channel_index=-1, create=False):
