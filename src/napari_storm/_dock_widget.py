@@ -282,8 +282,8 @@ class napari_storm(NapariStormGUI):
                 self.channel[i].reset()
                 self.channel[i].Label.setText('Contrast ' + self.channel[i].name)
                 self.z_color_encoding_mode = True
-                self.Lcolor_encoding_scalebar.set_pixmap(self.data_to_layer_itf.colormap_icons[-1])
-                self.Lcolor_encoding_scalebar.show()
+                self.Lcolor_encoding_bar.set_pixmap(self.data_to_layer_itf.colormap_icons[-1])
+                self.Lcolor_encoding_bar.show()
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()
@@ -292,7 +292,7 @@ class napari_storm(NapariStormGUI):
                 self.channel[i].Label.setText('Opacity ' + self.channel[i].name)
                 self.channel[i].reset()
                 self.z_color_encoding_mode = False
-                self.Lcolor_encoding_scalebar.hide()
+                self.Lcolor_encoding_bar.hide()
         self.data_to_layer_itf.update_layers(self)
 
     def _render_options_changed(self):
@@ -313,6 +313,7 @@ class napari_storm(NapariStormGUI):
             self.Esigma_z.setText('700')
             self.Bz_color_coding.hide()
             self.Bz_color_coding.setCheckState(False)
+            self.Lcolor_encoding_bar.hide()
             self.Esigma_min_xy.show()
             if self.zdim:
                 self.Esigma_min_z.show()

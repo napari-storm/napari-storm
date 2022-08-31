@@ -205,10 +205,10 @@ class NapariStormGUI(QWidget):
         self.data_controls_tab_layout.addWidget(self.channel_controls_placeholder, 19, 0, 1, 4)
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
-        self.Lcolor_encoding_scalebar = ZColorCodingScaleBarWidget()
-        self.Lcolor_encoding_scalebar.hide()
+        self.Lcolor_encoding_bar = ZColorCodingColorBarWidget()
+        self.Lcolor_encoding_bar.hide()
 
-        self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_scalebar, 20, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_bar, 20, 0, 1, 4)
 
 
 
@@ -482,7 +482,7 @@ class TestListView(QListWidget):
         print("Dataset removal not implemented yet...", item)
 
 
-class ZColorCodingScaleBarWidget(QWidget):
+class ZColorCodingColorBarWidget(QWidget):
 
     def __init__(self):
         super().__init__()
@@ -497,7 +497,7 @@ class ZColorCodingScaleBarWidget(QWidget):
 
         self.layout = QFormLayout()
         self.layout.addRow(self.titel)
-        self.layout.addRow(self.scalebar)
+        self.layout.addRow(self.colorbar)
         self.layout.addRow(self.label)
 
         self.setLayout(self.layout)
