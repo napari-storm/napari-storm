@@ -37,7 +37,7 @@ class FileToLocalizationDataInterface:
                 return [custom_import_function(file_path)]
 
             else:
-                return [self.open_known_filetype_and_import_dataset(file_path)]
+                return self.open_known_filetype_and_import_dataset(file_path)
 
         except FileImportAbortedError:
             self.n_datasets -= 1
