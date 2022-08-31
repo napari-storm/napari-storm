@@ -119,6 +119,7 @@ class DataAdjustmentInterface:
                     getattr(self.list_of_datasets[idx].locs_all,
                             self.list_of_adjustable_parameters[self.current_parameter_idx]) * self.value)
         if update_layers:
+            self.parent.data_to_layer_itf.set_render_range_and_offset()
             self.parent.data_to_layer_itf.update_layers()
             
     def clear_entries(self):

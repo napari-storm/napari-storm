@@ -33,9 +33,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # self.render_colormap = []
         self.render_anti_alias = 0
 
-        self.render_range_x = [0, -np.inf]
-        self.render_range_y = [0, -np.inf]
-        self.render_range_z = [0, -np.inf]
+        self.render_range_x = [np.inf, -np.inf]
+        self.render_range_y = [np.inf, -np.inf]
+        self.render_range_z = [np.inf, -np.inf]
         self.offset_nm_3d = [0, 0, 0]
         self.offset_nm_2d = [0, 0]
 
@@ -190,20 +190,33 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             self.grid_plane_layer.opacity = opacity / 100
 
     def reset_render_range_and_offset(self):
-        self.render_range_x = [0, -np.inf]
-        self.render_range_y = [0, -np.inf]
-        self.render_range_z = [0, -np.inf]
+        self.render_range_x = [np.inf, -np.inf]
+        self.render_range_y = [np.inf, -np.inf]
+        self.render_range_z = [np.inf, -np.inf]
         self.offset_nm_3d = [0, 0, 0]
         self.offset_nm_2d = [0, 0]
+
+    def set_render_range_and_offset(self):
+        self.reset_render_range_and_offset()
+        for dataset in self.parent.localization_datasets:
+            self.set_offset(dataset=dataset)
+            coords = self.get_coords_from_all_locs(dataset=dataset)
+            self.set_render_range(zdim=dataset.zdim_present, coords=coords)
+        self.parent.move_camera_center_to_render_range_center()
 
     def set_render_range(self, zdim, coords):
         if zdim:
             self.render_range_x[1] = max(np.max(coords[:, 1]), self.render_range_x[1])
             self.render_range_y[1] = max(np.max(coords[:, 2]), self.render_range_y[1])
             self.render_range_z[1] = max(np.max(coords[:, 0]), self.render_range_z[1])
+            self.render_range_x[0] = min(np.min(coords[:, 1]), self.render_range_x[0])
+            self.render_range_y[0] = min(np.min(coords[:, 2]), self.render_range_y[0])
+            self.render_range_z[0] = min(np.min(coords[:, 0]), self.render_range_z[0])
         else:
             self.render_range_x[1] = max(np.max(coords[:, 2]), self.render_range_x[1])
             self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
+            self.render_range_x[0] = min(np.min(coords[:, 2]), self.render_range_x[0])
+            self.render_range_y[0] = min(np.min(coords[:, 1]), self.render_range_y[0])
 
     def set_offset(self, dataset):
         if dataset.zdim_present:
@@ -236,6 +249,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_range(coords=coords, zdim=dataset.zdim_present)
         if merge:
+            self.set_render_range_and_offset()
             dataset.restrict_locs_by_percent(self.parent.render_range_slider_x_percent,
                                              self.parent.render_range_slider_y_percent,
                                              self.parent.render_range_slider_z_percent)
@@ -634,6 +648,23 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             coords = np.zeros([num_of_locs, 3])
             coords[:, 1] = dataset.x_pos_nm + self.offset_nm_2d[0]
             coords[:, 2] = dataset.y_pos_nm + self.offset_nm_2d[1]
+            coords[:, 0] = np.ones(num_of_locs)
+        return coords
+
+    def get_coords_from_all_locs(self, dataset):
+        """Calculating Particle Coordinates from Locs"""
+        if dataset.zdim_present:
+            num_of_locs = len(dataset.x_pos_nm_all)
+            coords = np.zeros([num_of_locs, 3])
+            coords[:, 0] = dataset.z_pos_nm_all + self.offset_nm_3d[0]
+            coords[:, 1] = dataset.x_pos_nm_all + self.offset_nm_3d[1]
+            coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_3d[2]
+
+        else:
+            num_of_locs = len(dataset.x_pos_nm)
+            coords = np.zeros([num_of_locs, 3])
+            coords[:, 1] = dataset.x_pos_nm_all + self.offset_nm_2d[0]
+            coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_2d[1]
             coords[:, 0] = np.ones(num_of_locs)
         return coords
 

@@ -229,6 +229,7 @@ class DataFilterInterface:
 
         self.filter_idx_list[idx] = np.unique(self.filter_idx_list[idx])
         if update_layers:
+            self.parent.data_to_layer_itf.set_render_range_and_offset()
             self.parent.data_to_layer_itf.update_layers()
             self.current_parameter_changed()
 
@@ -269,6 +270,7 @@ class DataFilterInterface:
                 self.filter_idx_list[i] = np.concatenate((self.filter_idx_list[i], tmp_indices[0]), dtype=np.int32)
 
             self.filter_idx_list[i] = np.unique(self.filter_idx_list[i])
+        self.parent.data_to_layer_itf.set_render_range_and_offset()
         self.parent.data_to_layer_itf.update_layers()
         self.current_parameter_changed()
 
