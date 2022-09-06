@@ -1,8 +1,9 @@
-from .localization_dataset_types.storm_class import *
-from .localization_dataset_types.Minflux_class import *
-from .localization_dataset_types.base_class import *
-from .localization_dataset_types.data_formats import *
-from .CustomErrors import *
+from .storm_class import *
+from .Minflux_class import *
+from .base_class import *
+from .data_formats import *
+from ..CustomErrors import *
+import numpy as np
 
 
 def custom_import_function(filepath):
@@ -44,7 +45,7 @@ def custom_import_function(filepath):
     example: 
         file = D:/really_good_measurements/best_example_I_could_think_of.npy
         raw_data = np.load(file) 
-        data_rec_array=numpy.rec.array(raw_data, dtype=lm_base_data_dtype)
+        data_rec_array=np.rec.array(raw_data, dtype=lm_base_data_dtype)
         zdim_present = True 
         name = file.split(/)[-1]
         return LocalizationDataBaseClass(data=data_rec_array, name=name, zdim_present=zdim)

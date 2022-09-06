@@ -1,7 +1,7 @@
 import os.path as _ospath
 from .ns_constants import *
 from .file_and_data_recognition import *
-from .Custom_Import import *
+from .localization_dataset_types.Custom_Import import *
 import napari_storm.localization_dataset_types as dataset_classes
 
 

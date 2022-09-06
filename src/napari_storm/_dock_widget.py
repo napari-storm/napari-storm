@@ -372,7 +372,6 @@ class napari_storm(NapariStormGUI):
         if not only_storm_datasets:
             self.Brenderoptions.removeItem(1)
 
-
     def open_localization_data_file_and_get_dataset(self, merge=False, file_path=None, file_recognition=False,
                                                     custom_import=False):
         self.show_avaiable_widgets()
