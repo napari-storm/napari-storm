@@ -551,9 +551,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
             assert dataset.zdim_present == True
 
-            tmp_coords = self.active_locs_to_choords(dataset)
+            tmp_coords = self.get_coords_from_locs(dataset)
 
-            tmp_values = tmp_coords.z_pos_pixels
+            tmp_values = tmp_coords[0, :]
 
             if not np.max(tmp_values) == np.min(tmp_values):
                 tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
@@ -756,34 +756,5 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 v.layers.remove('scalebar')
                 self.scalebar_exists = False
 
-    def active_locs_to_choords(self, dataset):
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
 
-        tmp_x = dataset.x_pos_nm
-        tmp_y = dataset.y_pos_nm
-        tmp_z = dataset.z_pos_nm
 
-        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
-        tmp_records.x_pos_pixels = tmp_y
-        tmp_records.y_pos_pixels = tmp_x
-        tmp_records.z_pos_pixels = tmp_z
-
-        return tmp_records
-
-    def all_locs_to_choords(self, dataset):
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
-
-        tmp_x = dataset.x_pos_nm_all
-        tmp_y = dataset.y_pos_nm_all
-        tmp_z = dataset.z_pos_nm_all
-
-        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
-        tmp_records.x_pos_pixels = tmp_y
-        tmp_records.y_pos_pixels = tmp_x
-        tmp_records.z_pos_pixels = tmp_z
-
-        return tmp_records

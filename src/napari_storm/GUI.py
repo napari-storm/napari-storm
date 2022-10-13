@@ -492,8 +492,8 @@ class ZColorCodingColorBarWidget(QWidget):
         self.setFixedHeight(128)
         self.titel = QLabel("Z-color-encoding scalebar:")
         self.colorbar = QLabel("")
-
-        self.label = QLabel("min                                                   max")
+        self.correct_spacing_str = "                                         "
+        self.label = QLabel("min" + self.correct_spacing_str + "max")
 
         self.layout = QFormLayout()
         self.layout.addRow(self.titel)

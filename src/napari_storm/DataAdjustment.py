@@ -69,7 +69,7 @@ class DataAdjustmentInterface:
         self.qtimer.setSingleShot(True)
         self.qtimer.timeout.connect(self.value_changed)
 
-        self.connect_dfw_with_functions()
+        self.connect_daw_with_functions()
 
     @property
     def list_of_datasets(self):
@@ -90,7 +90,7 @@ class DataAdjustmentInterface:
         except ValueError:
             self.daw.Evalue.clear()
 
-    def connect_dfw_with_functions(self):
+    def connect_daw_with_functions(self):
         """Connect GUI with functionalities"""
         self.daw.Cparameter.currentIndexChanged.connect(self.current_parameter_changed)
         self.daw.Cdatasets.currentIndexChanged.connect(self.current_dataset_changed)
@@ -98,13 +98,13 @@ class DataAdjustmentInterface:
         self.daw.Cmath_mode.addItems(self.math_modes)
         self.daw.Cmath_mode.currentIndexChanged.connect(self.math_mode_changed)
         self.daw.Cmath_mode.setCurrentIndex(self.math_mode_active_idx)
-        self.daw.Bapply_filter.clicked.connect(self.apply_filtering)
+        self.daw.Bapply_filter.clicked.connect(self.apply_adjustement)
         self.daw.Bsave_as_ns.clicked.connect(self.save_current_dataset_as_ns)
 
     def math_mode_changed(self):
         self.math_mode_active_idx = self.daw.Cmath_mode.currentIndex()
 
-    def apply_filtering(self, idx=None, update_layers=True):
+    def apply_adjustement(self, idx=None, update_layers=True):
         """Apply adjustment to dataset of index idx and possibly update the layers"""
         if isinstance(idx, bool):
             idx = self.current_dataset_idx

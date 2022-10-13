@@ -252,7 +252,7 @@ class MinfluxDataAIClass:
         n_locs = len(raw_locs_m[:, 0, 0])
         if np.all(raw_locs_m[0, :, 2] == 0):
             zdim = False
-            itr_steps = 5
+            itr_steps = 5 
         else:
             zdim = True
             itr_steps = 10

@@ -1,3 +1,6 @@
+import napari
+import numpy as np
+from napari.layers import Shapes
 from napari_plugin_engine import napari_hook_implementation
 
 from .Exp_Controls import *
@@ -283,7 +286,33 @@ class napari_storm(NapariStormGUI):
                 self.channel[i].Label.setText('Contrast ' + self.channel[i].name)
                 self.z_color_encoding_mode = True
                 self.Lcolor_encoding_bar.set_pixmap(self.data_to_layer_itf.colormap_icons[-1])
+                self.Lcolor_encoding_bar.label.setText(f"{np.round(self.data_to_layer_itf.render_range_z[1] * self.render_range_slider_z_percent[0] / 100000,2)} µm" +
+                                                       self.Lcolor_encoding_bar.correct_spacing_str +
+                                                       f"{np.round(self.data_to_layer_itf.render_range_z[1] * self.render_range_slider_z_percent[1] / 100000,2)} µm")
                 self.Lcolor_encoding_bar.show()
+                w = 500
+                h = 200
+                verts = np.array([[0, 0],
+                                  [0, h],
+                                  [w, 0],
+                                  [w, h],
+                                  [2*w, 0],
+                                  [2*w, h],
+                                  [3*w, 0],
+                                  [3*w, h]])
+
+                faces = np.array([[0, 1, 2],
+                                  [1, 2, 3],
+                                  [2, 3, 4],
+                                  [3, 4, 5],
+                                  [4, 5, 6],
+                                  [5, 6, 7]
+                                  ])
+
+                values = np.array([0, 0, .2, .2, .4, .4, .6, .6])
+                surface = (verts, faces, values)
+                napari.current_viewer().add_surface(surface, colormap="hsv_r", shading='none', name="colormap")
+
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()
@@ -293,6 +322,10 @@ class napari_storm(NapariStormGUI):
                 self.channel[i].reset()
                 self.z_color_encoding_mode = False
                 self.Lcolor_encoding_bar.hide()
+            try:
+                napari.current_viewer().layers.remove("colormap")
+            except ValueError:
+                pass
         self.data_to_layer_itf.update_layers(self)
 
     def _render_options_changed(self):
