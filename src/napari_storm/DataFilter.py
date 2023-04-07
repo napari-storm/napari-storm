@@ -63,9 +63,6 @@ class DataFilterWindow(QWidget):
     def reset_render_range_before_filtering(self):
         self.parent.reset_render_range()
 
-    def filter_mode_changed(self):
-        self.filter_mode_active_idx = self.Cfilter_mode.currentIndex()
-
     def clear_entries(self):
         self.Cparameter.clear()
         self.Cdatasets.clear()
@@ -137,7 +134,6 @@ class DataFilterInterface:
 
         self.active_filters = []  # create a dictionary of all active filters including the "normal" render range,
 
-        self.n_datasets = 0
         self.current_dataset_idx = 0
         self.current_parameter_idx = 0
         self.list_of_filterable_parameters = []
@@ -156,7 +152,7 @@ class DataFilterInterface:
 
     @property
     def list_of_datasets(self):
-        return self.parent.localization_datasets
+        return self.parent.list_of_datasets
 
     @property
     def parent(self):
@@ -229,8 +225,7 @@ class DataFilterInterface:
 
         self.filter_idx_list[idx] = np.unique(self.filter_idx_list[idx])
         if update_layers:
-            self.parent.data_to_layer_itf.set_render_range_and_offset()
-            self.parent.data_to_layer_itf.update_layers()
+            self.parent.dataset_itf.hard_refresh(update_data_range=True)
             self.current_parameter_changed()
 
     def apply_filtering_to_all(self):
@@ -270,8 +265,7 @@ class DataFilterInterface:
                 self.filter_idx_list[i] = np.concatenate((self.filter_idx_list[i], tmp_indices[0]), dtype=np.int32)
 
             self.filter_idx_list[i] = np.unique(self.filter_idx_list[i])
-        self.parent.data_to_layer_itf.set_render_range_and_offset()
-        self.parent.data_to_layer_itf.update_layers()
+        self.parent.dataset_itf.hard_refresh(update_data_range=True)
         self.current_parameter_changed()
 
     def reset_all_filtering(self):
@@ -281,11 +275,10 @@ class DataFilterInterface:
         for dataset in self.list_of_datasets:
             dataset.reset_filters()
         self.current_parameter_changed()
-        self.parent.data_to_layer_itf.update_layers()
+        self.parent.dataset_itf.hard_refresh(update_data_range=True)
 
     def clear_entries(self):
         """Reset GUI and filters"""
-        self.n_datasets = 0
         self.current_dataset_idx = 0
         self.current_parameter_idx = 0
         self.list_of_filterable_parameters = []
@@ -293,8 +286,7 @@ class DataFilterInterface:
 
     def add_dataset_entry(self, dataset_name):
         """Tell data filter itf that a new dataset was imported"""
-        self.n_datasets += 1
-        self.current_dataset_idx = self.n_datasets - 1
+        self.current_dataset_idx = len(self.parent.list_of_datasets) - 1
         self.active_filters.append({})
         self.dfw.Cdatasets.addItem(dataset_name)
         self.dfw.Cdatasets.setCurrentIndex(self.current_dataset_idx)

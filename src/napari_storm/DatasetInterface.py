@@ -37,7 +37,6 @@ class DatasetInterface:
         self.dock_widget.color_scale_bar.update_numbers()
         self.data_to_layer_itf.restore_camera()
 
-
     def refresh_dataset_lists(self, datasets=None, clear=False):
         if clear:
             self.list_of_datasets = []

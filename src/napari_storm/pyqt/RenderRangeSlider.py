@@ -78,7 +78,7 @@ class RangeSlider2(QDoubleRangeSlider):
         except:
             print("something went wrong while removing feedback layer")
         self.created_feedback_layer = False
-        DataToLayerInterface.update_layers(self.parent().data_to_layer_itf)
+        self.parent().dataset_itf.hard_refresh(update_data_range=True)
 
     def get_coords_faces(self):
         if self.parent().zdim:

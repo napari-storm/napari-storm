@@ -14,7 +14,6 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # assert isinstance(parent, napari_storm) == True
         self._parent = parent
         self.viewer = viewer
-        self.n_layers = 0
         self.colormap, self.colormap_icons = self.colormaps()
         self.scalebar_layer = surface_layer
         self.scalebar_exists = True
@@ -50,11 +49,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         raise ParentError('Cannot change parent of existing Widget')
 
     @property
-    def localization_datasets(self):
-        return self.parent.localization_datasets
+    def list_of_datasets(self):
+        return self.parent.list_of_datasets
 
-    @localization_datasets.setter
-    def localization_datasets(self, value):
+    @list_of_datasets.setter
+    def list_of_datasets(self, value):
         raise ParentError('Cannot change parent\'s attribute from here')
 
     def create_remove_grid_plane_state(self, enable):
@@ -198,7 +197,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def set_render_range_and_offset(self):
         self.reset_render_range_and_offset()
-        for dataset in self.parent.localization_datasets:
+        for dataset in self.parent.list_of_datasets:
             self.set_offset(dataset=dataset)
             coords = self.get_coords_from_all_locs(dataset=dataset)
             self.set_render_range(zdim=dataset.zdim_present, coords=coords)
@@ -244,7 +243,6 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def create_new_layer(self, dataset, merge=False, layer_name='SMLM Data', idx=-1):
         """Creating a Particle Layer"""
-        self.n_layers += 1
         self.set_offset(dataset)
         coords = self.get_coords_from_locs(dataset=dataset)
         self.set_render_range(coords=coords, zdim=dataset.zdim_present)
@@ -273,44 +271,33 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         self.viewer.camera.angles = (90, 0, -90)
         self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
 
-        # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
-
-    def update_layers(self, aas=0, layer_name="SMLM Data"):
+    def update_layer(self, dataset, dataset_idx):
         """Updating a Particle Layer"""
         v = self.viewer
-        self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
-        i = 0
-        for dataset in self.parent.localization_datasets:
-            self.update_data_range(dataset, dataset_idx=i)
-            if not dataset.x_pos_nm.size == 0:
-                v.layers.remove(dataset.name)
-                coords = self.get_coords_from_locs(dataset)
-                self.set_render_range(dataset.zdim_present, coords)
-                self.set_render_sigmas(dataset=dataset, channel_index=i)
-                self.set_render_values(dataset=dataset, channel_index=i)
-                dataset.napari_layer_ref = Particles(
-                    coords,
-                    size=self.render_size[i],
-                    values=self.render_values[i],
-                    antialias=self.render_anti_alias,
-                    colormap=self.colormap[i],
-                    sigmas=self.render_sigma[i],
-                    filter=None,
-                    name=dataset.name,
-                    visible=True
-                )
-                dataset.napari_layer_ref.add_to_viewer(v)
-                self.parent.channel[i].adjust_colormap_range()
-                self.parent.channel[i].adjust_z_color_encoding_opacity()
-                self.parent.channel[i].change_color_map()
-                dataset.napari_layer_ref.shading = "gaussian"
-                i += 1
-            else:
-                dataset.napari_layer_ref.visible = False
-        v.camera.angles = self.camera[2]
-        v.camera.zoom = self.camera[0]
-        v.camera.center = self.camera[1]
-        v.camera.update({})
+        if not dataset.x_pos_nm.size == 0:
+            v.layers.remove(dataset.name)
+            coords = self.get_coords_from_locs(dataset)
+            self.set_render_range(dataset.zdim_present, coords)
+            self.set_render_sigmas(dataset=dataset, channel_index=dataset_idx)
+            self.set_render_values(dataset=dataset, channel_index=dataset_idx)
+            dataset.napari_layer_ref = Particles(
+                coords,
+                size=self.render_size[dataset_idx],
+                values=self.render_values[dataset_idx],
+                antialias=self.render_anti_alias,
+                colormap=self.colormap[dataset_idx],
+                sigmas=self.render_sigma[dataset_idx],
+                filter=None,
+                name=dataset.name,
+                visible=True
+            )
+            dataset.napari_layer_ref.add_to_viewer(v)
+            self.parent.channel[dataset_idx].adjust_colormap_range()
+            self.parent.channel[dataset_idx].adjust_z_color_encoding_opacity()
+            self.parent.channel[dataset_idx].change_color_map()
+            dataset.napari_layer_ref.shading = "gaussian"
+        else:
+            dataset.napari_layer_ref.visible = False
 
     def update_data_range(self, dataset, dataset_idx=-1):
         if dataset.zdim_present:
@@ -336,11 +323,12 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         to_be_removed_by_index = np.delete(np.arange(len(dataset.x_pos_nm_all)), render_indices)
         if len(self.parent.data_filter_itf.filter_idx_list) > dataset_idx:
             to_be_removed_by_index = np.concatenate((to_be_removed_by_index,
-                                      self.parent.data_filter_itf.filter_idx_list[dataset_idx]), dtype=int)
+                                                    self.parent.data_filter_itf.filter_idx_list[dataset_idx]),
+                                                    dtype=int)
         if to_be_removed_by_index.size > 1:
-            dataset.locs_active = np.delete(dataset.locs_all, to_be_removed_by_index)
+            self.parent.dataset_itf.pipe_indices_to_be_removed(to_be_removed_by_index, dataset=dataset, reset=True)
         else:
-            dataset.reset_filters()
+            self.parent.dataset_itf.reset_filters()
 
     def update_layers2(self):
         """Still doesn't work"""
@@ -369,6 +357,14 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             # print(f"after: {len(vertices), len(faces), len(values)}")
             v.layers[self.list_of_datasets[i].name].data = (vertices, faces, values)
 
+    def save_current_camera(self):
+        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
+
+    def restore_camera(self):
+        self.viewer.camera.angles = self.camera[2]
+        self.viewer.camera.zoom = self.camera[0]
+        self.viewer.camera.center = self.camera[1]
+        self.viewer.camera.update({})
     def colormaps(self):
         """Creating the Custom Colormaps"""
         cmaps = []
@@ -470,7 +466,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         elif self.parent.render_gaussian_mode == 1:
             # Variable gaussian mode
 
-            assert dataset.uncertainty_defined == True
+            assert dataset.uncertainty_defined is True
 
             if dataset.zdim_present:
                 # 3D data
@@ -549,11 +545,11 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             # the value parameter is used in conjunction with the color map to
             # assign a z-dependent color to each localization.
 
-            assert dataset.zdim_present == True
+            assert dataset.zdim_present is True
 
             tmp_coords = self.get_coords_from_locs(dataset)
 
-            tmp_values = tmp_coords[0, :]
+            tmp_values = tmp_coords[:, 0]
 
             if not np.max(tmp_values) == np.min(tmp_values):
                 tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
@@ -673,9 +669,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         v = napari.current_viewer()
         cpos = v.camera.center
         l = int(self.parent.Esbsize.text())
-        if self.parent.Cscalebar.isChecked() and not not all(self.parent.localization_datasets[-1].locs_active):
-            if self.parent.localization_datasets[-1].zdim_present:
-                list = [l, 0.125 * l / 2, 0.125 * l / 2]
+        if self.parent.Cscalebar.isChecked() and not not all(self.parent.list_of_datasets[-1].locs_active):
+            if self.parent.list_of_datasets[-1].zdim_present:
+                displacement_list = [l, 0.125 * l / 2, 0.125 * l / 2]
                 faces = np.asarray(
                     [
                         [0, 1, 2],
@@ -695,30 +691,30 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
                 vertices = np.asarray(
                     [
-                        [-list[1], list[1], list[2]],
-                        [-list[1], -list[1], list[2]],
-                        [-list[1], list[1], -list[2]],
-                        [-list[1], -list[1], -list[2]],
-                        [l - list[1], list[1], list[2]],
-                        [l - list[1], -list[1], list[2]],
-                        [l - list[1], list[1], -list[2]],
-                        [l - list[1], -list[1], -list[2]],
-                        [list[1], -list[1], list[2]],
-                        [-list[1], -list[1], list[2]],
-                        [list[1], -list[1], -list[2]],
-                        [-list[1], -list[1], -list[2]],
-                        [list[1], l - list[1], list[2]],
-                        [-list[1], l - list[1], list[2]],
-                        [list[1], l - list[1], -list[2]],
-                        [-list[1], l - list[1], -list[2]],
-                        [list[1], list[2], -list[1]],
-                        [-list[1], list[2], -list[1]],
-                        [list[1], -list[2], -list[1]],
-                        [-list[1], -list[2], -list[1]],
-                        [list[1], list[2], l - list[1]],
-                        [-list[1], list[2], l - list[1]],
-                        [list[1], -list[2], l - list[1]],
-                        [-list[1], -list[2], l - list[1]],
+                        [-displacement_list[1], displacement_list[1], displacement_list[2]],
+                        [-displacement_list[1], -displacement_list[1], displacement_list[2]],
+                        [-displacement_list[1], displacement_list[1], -displacement_list[2]],
+                        [-displacement_list[1], -displacement_list[1], -displacement_list[2]],
+                        [l - displacement_list[1], displacement_list[1], displacement_list[2]],
+                        [l - displacement_list[1], -displacement_list[1], displacement_list[2]],
+                        [l - displacement_list[1], displacement_list[1], -displacement_list[2]],
+                        [l - displacement_list[1], -displacement_list[1], -displacement_list[2]],
+                        [displacement_list[1], -displacement_list[1], displacement_list[2]],
+                        [-displacement_list[1], -displacement_list[1], displacement_list[2]],
+                        [displacement_list[1], -displacement_list[1], -displacement_list[2]],
+                        [-displacement_list[1], -displacement_list[1], -displacement_list[2]],
+                        [displacement_list[1], l - displacement_list[1], displacement_list[2]],
+                        [-displacement_list[1], l - displacement_list[1], displacement_list[2]],
+                        [displacement_list[1], l - displacement_list[1], -displacement_list[2]],
+                        [-displacement_list[1], l - displacement_list[1], -displacement_list[2]],
+                        [displacement_list[1], displacement_list[2], -displacement_list[1]],
+                        [-displacement_list[1], displacement_list[2], -displacement_list[1]],
+                        [displacement_list[1], -displacement_list[2], -displacement_list[1]],
+                        [-displacement_list[1], -displacement_list[2], -displacement_list[1]],
+                        [displacement_list[1], displacement_list[2], l - displacement_list[1]],
+                        [-displacement_list[1], displacement_list[2], l - displacement_list[1]],
+                        [displacement_list[1], -displacement_list[2], l - displacement_list[1]],
+                        [-displacement_list[1], -displacement_list[2], l - displacement_list[1]],
                     ]
                 )
                 for i in range(len(vertices)):
@@ -727,18 +723,18 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 faces = np.asarray(np.vstack((faces, faces + 8, faces + 16)))
                 # vertices=np.reshape(np.asarray(vertices),(24,3))
             else:
-                list = [l, 0.05 * l]
+                displacement_list = [l, 0.05 * l]
 
                 faces = np.asarray([[0, 1, 3], [1, 2, 3], [4, 5, 7], [5, 6, 7]])
                 verts = [
-                    [cpos[1], cpos[2] - list[1]],
-                    [cpos[1] + list[0], cpos[2] - list[1]],
-                    [cpos[1] + list[0], cpos[2] + list[1]],
-                    [cpos[1], cpos[2] + list[1]],
-                    [cpos[1] - list[1], cpos[2]],
-                    [cpos[1] + list[1], cpos[2]],
-                    [cpos[1] + list[1], cpos[2] + list[0]],
-                    [cpos[1] - list[1], cpos[2] + list[0]],
+                    [cpos[1], cpos[2] - displacement_list[1]],
+                    [cpos[1] + displacement_list[0], cpos[2] - displacement_list[1]],
+                    [cpos[1] + displacement_list[0], cpos[2] + displacement_list[1]],
+                    [cpos[1], cpos[2] + displacement_list[1]],
+                    [cpos[1] - displacement_list[1], cpos[2]],
+                    [cpos[1] + displacement_list[1], cpos[2]],
+                    [cpos[1] + displacement_list[1], cpos[2] + displacement_list[0]],
+                    [cpos[1] - displacement_list[1], cpos[2] + displacement_list[0]],
                 ]
                 vertices = np.reshape(np.asarray(verts), (8, 2))
             if self.scalebar_exists:

@@ -248,11 +248,11 @@ class MinfluxDataAIClass:
         vld = raw_data["vld"]
         raw_data = (raw_data[vld])["itr"]
 
-        raw_locs_m = raw_data["loc"]  # shape is (n_locs, itr, dim)
+        raw_locs_m = raw_data["loc"]
         n_locs = len(raw_locs_m[:, 0, 0])
         if np.all(raw_locs_m[0, :, 2] == 0):
             zdim = False
-            itr_steps = 5 
+            itr_steps = 5
         else:
             zdim = True
             itr_steps = 10

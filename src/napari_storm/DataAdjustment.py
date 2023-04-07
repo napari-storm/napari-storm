@@ -73,7 +73,7 @@ class DataAdjustmentInterface:
 
     @property
     def list_of_datasets(self):
-        return self.parent.localization_datasets
+        return self.parent.list_of_datasets
 
     @property
     def parent(self):
@@ -120,7 +120,7 @@ class DataAdjustmentInterface:
                             self.list_of_adjustable_parameters[self.current_parameter_idx]) * self.value)
         if update_layers:
             self.parent.data_to_layer_itf.set_render_range_and_offset()
-            self.parent.data_to_layer_itf.update_layers()
+            self.parent.dataset_itf.hard_refresh(update_data_range=True)
             
     def clear_entries(self):
         """Reset GUI and adjustments"""

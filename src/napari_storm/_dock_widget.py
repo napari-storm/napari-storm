@@ -8,7 +8,9 @@ from .DataToLayerInterface import DataToLayerInterface
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .DataAdjustment import DataAdjustmentInterface
 from .DataFilter import DataFilterInterface
+from .DatasetInterface import DatasetInterface
 from .ChannelControls import ChannelControls
+from .Color_encoding import *
 from .pyqt.GridPlaneSlider import *
 from .ns_constants import *
 from .GUI import *
@@ -30,8 +32,8 @@ class napari_storm(NapariStormGUI):
         # Attributes
         self.testing_mode_enabled = False
 
-        self.localization_datasets = []
-        self.n_datasets = 0
+        """self.localization_datasets = []
+        self.n_datasets = 0""" #TODO Remove this
         self.viewer = napari_viewer
 
         self._render_gaussian_mode = 0
@@ -73,10 +75,21 @@ class napari_storm(NapariStormGUI):
         self._data_adjustment_itf = DataAdjustmentInterface(parent=self,
                                                             data_adjustment_window=self.data_adjustment_tab)
 
+        self._dataset_itf = DatasetInterface(data_to_layer_itf=self.data_to_layer_itf,
+                                             dock_widget=self,
+                                             file_to_dataset_itf=self.file_to_data_itf,
+                                             data_filter_itf=self.data_filter_itf,
+                                             data_adjustment_itf=self.data_adjustment_itf)
+        self.color_scale_bar = None
+
         # Init Function Calls
         custom_keys_and_scalebar(self)
         self.hide_non_available_widgets()
         self.hide_testing_mode()
+
+    @property
+    def list_of_datasets(self):
+        return self.dataset_itf.list_of_datasets
 
     @property
     def grid_plane_enabled(self):
@@ -97,6 +110,14 @@ class napari_storm(NapariStormGUI):
     @data_to_layer_itf.setter
     def data_to_layer_itf(self, value):
         raise StaticAttributeError('the dataset to layer interface should never be changed')
+
+    @property
+    def dataset_itf(self):
+        return self._dataset_itf
+
+    @dataset_itf.setter
+    def dataset_itf(self, value):
+        raise StaticAttributeError('the dataset interface should never be changed')
 
     @property
     def data_filter_itf(self):
@@ -216,10 +237,9 @@ class napari_storm(NapariStormGUI):
     def clear_datasets(self):
         """Erase the current dataset and reset the viewer"""
         v = self.viewer
-        for i in range(self.n_datasets):
-            v.layers.remove(self.localization_datasets[i].name)
-        self.n_datasets = 0
-        self.localization_datasets = []
+        for i in range(len(self.list_of_datasets)):
+            v.layers.remove(self.list_of_datasets[i].name)
+        self.dataset_itf.refresh_dataset_lists(clear=True)
         if not len(self.channel) == 0:  # Remove Channel of older files
             for i in range(len(self.channel)):
                 self.channel[i].hide()
@@ -231,14 +251,14 @@ class napari_storm(NapariStormGUI):
         self._zdim = None
 
     def reset_render_range(self, full_reset=False):
-        v = napari.current_viewer()
         self.Srender_rangex.reset()
         self.Srender_rangey.reset()
         self.Srender_rangez.reset()
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
         if not full_reset:
-            self.data_to_layer_itf.update_layers(self)
+            #self.data_to_layer_itf.update_layers(self)
+            self.dataset_itf.hard_refresh()
             self.move_camera_center_to_render_range_center()
 
     def update_render_range(self, slider_type, values):
@@ -290,30 +310,10 @@ class napari_storm(NapariStormGUI):
                                                        self.Lcolor_encoding_bar.correct_spacing_str +
                                                        f"{np.round(self.data_to_layer_itf.render_range_z[1] * self.render_range_slider_z_percent[1] / 100000,2)} µm")
                 self.Lcolor_encoding_bar.show()
-                w = 500
-                h = 200
-                verts = np.array([[0, 0],
-                                  [0, h],
-                                  [w, 0],
-                                  [w, h],
-                                  [2*w, 0],
-                                  [2*w, h],
-                                  [3*w, 0],
-                                  [3*w, h]])
-
-                faces = np.array([[0, 1, 2],
-                                  [1, 2, 3],
-                                  [2, 3, 4],
-                                  [3, 4, 5],
-                                  [4, 5, 6],
-                                  [5, 6, 7]
-                                  ])
-
-                values = np.array([0, 0, .2, .2, .4, .4, .6, .6])
-                surface = (verts, faces, values)
-                napari.current_viewer().add_surface(surface, colormap="hsv_r", shading='none', name="colormap")
+                self.color_scale_bar.show()
 
         else:
+            self.color_scale_bar.hide()
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()
                 self.channel[i].Slider_opacity.hide()
@@ -322,16 +322,12 @@ class napari_storm(NapariStormGUI):
                 self.channel[i].reset()
                 self.z_color_encoding_mode = False
                 self.Lcolor_encoding_bar.hide()
-            try:
-                napari.current_viewer().layers.remove("colormap")
-            except ValueError:
-                pass
-        self.data_to_layer_itf.update_layers(self)
+        self.dataset_itf.soft_refresh()
 
     def _render_options_changed(self):
         only_storm_datasets = True
         zdim_present = True
-        for dataset in self.localization_datasets:
+        for dataset in self.list_of_datasets:
             if not isinstance(dataset, StormDataClass):
                 only_storm_datasets = False
             if not dataset.zdim_present:
@@ -366,7 +362,7 @@ class napari_storm(NapariStormGUI):
             self.Lsigma_z_min.hide()
         if not zdim_present:
             self.Bz_color_coding.hide()
-        self.data_to_layer_itf.update_layers(self)
+        self.dataset_itf.soft_refresh()
 
     def _start_typing_timer(self, timer):
         timer.start(500)
@@ -394,11 +390,11 @@ class napari_storm(NapariStormGUI):
             self.render_var_gauss_PSF_sigma_z_nm = float(self.Esigma_z.text()) / 2.354
             self.render_var_gauss_sigma_min_xy_nm = float(self.Esigma_min_xy.text()) / 2.354
             self.render_var_gauss_sigma_min_z_nm = float(self.Esigma_min_z.text()) / 2.354
-        self.data_to_layer_itf.update_layers()
+        self.dataset_itf.soft_refresh()
 
     def allow_variable_gaussian_mode_for_storm_datasets(self):
         only_storm_datasets = True
-        for dataset in self.localization_datasets:
+        for dataset in self.list_of_datasets:
             if not isinstance(dataset, LocalizationDataBaseClass):
                 only_storm_datasets = False
 
@@ -421,18 +417,12 @@ class napari_storm(NapariStormGUI):
             self.zdim = True
         else:
             self.zdim = False
+        self.dataset_itf.refresh_dataset_lists(datasets)
         for i in range(len(datasets)):
-            self.localization_datasets.append(datasets[i])
-            self.add_dataset_entries_for_all_itfs(dataset=datasets[i])
-            self.n_datasets += 1
-            self.create_layer(self.localization_datasets[-1], idx=i, merge=merge)
+            self.create_layer(self.list_of_datasets[i], idx=i, merge=merge)
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(line_distance_nm=self.grid_plane_line_distance_um * 1000)
-
-    def add_dataset_entries_for_all_itfs(self, dataset):
-        self.data_filter_itf.add_dataset_entry(dataset.name)
-        self.data_adjustment_itf.add_dataset_entry(dataset.name)
-
+        self.color_scale_bar = Colorbar(width=1000, height=400, parent=self)
 
     def get_dataset_from_test_mode(self, datasets):
         self.show_avaiable_widgets()
@@ -442,9 +432,8 @@ class napari_storm(NapariStormGUI):
         else:
             self.zdim = False
         for i in range(len(datasets)):
-            self.localization_datasets.append(datasets[i])
-            self.n_datasets += 1
-            self.create_layer(self.localization_datasets[-1], idx=i)
+            self.list_of_datasets.append(datasets[i])
+            self.create_layer(self.list_of_datasets[-1], idx=i)
 
     def create_layer(self, dataset, idx=-1, merge=False):
         self.adjust_available_options_to_data_dimension()

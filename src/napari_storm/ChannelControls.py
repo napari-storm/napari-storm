@@ -44,10 +44,6 @@ class ChannelControls(QWidget):
         self._name = name
         self._channel_index = channel_index
 
-        self.localization_datasets = localization_datasets
-        if not self.localization_datasets:
-            self.localization_datasets=parent.localization_datasets
-
         self.data_to_layer_itf = data_to_layer_itf
         if not self.data_to_layer_itf:
             self.data_to_layer_itf = parent.data_to_layer_itf
@@ -111,6 +107,10 @@ class ChannelControls(QWidget):
         self.setLayout(self.layout)
 
     @property
+    def list_of_datasets(self):
+        return self.parent.list_of_datasets
+
+    @property
     def parent(self):
         return self._parent
 
@@ -157,7 +157,7 @@ class ChannelControls(QWidget):
         self.colormap_range_low = tmp_range[0]
         self.colormap_range_high = tmp_range[1]
 
-        tmp_dset_obj = self.localization_datasets[self.channel_index]
+        tmp_dset_obj = self.list_of_datasets[self.channel_index]
         tmp_layer = tmp_dset_obj.napari_layer_ref
 
         tmp_layer.contrast_limits = tmp_range
@@ -168,7 +168,7 @@ class ChannelControls(QWidget):
 
         self.opacity_slider_setting = tmp_opacity
 
-        tmp_dset_obj = self.localization_datasets[self.channel_index]
+        tmp_dset_obj = self.list_of_datasets[self.channel_index]
         tmp_layer = tmp_dset_obj.napari_layer_ref
 
         tmp_layer.opacity = tmp_opacity / 100.0
@@ -181,7 +181,7 @@ class ChannelControls(QWidget):
         tmp_cmap_index = self.Colormap_selector.currentIndex()
         self.colormap_index = tmp_cmap_index
 
-        tmp_dset_obj = self.localization_datasets[self.channel_index]
+        tmp_dset_obj = self.list_of_datasets[self.channel_index]
         tmp_layer = tmp_dset_obj.napari_layer_ref
 
         if self.z_color_encoding_mode:
@@ -194,7 +194,7 @@ class ChannelControls(QWidget):
 
     def show_channel(self):
 
-        tmp_dset_obj = self.localization_datasets[self.channel_index]
+        tmp_dset_obj = self.list_of_datasets[self.channel_index]
         tmp_layer = tmp_dset_obj.napari_layer_ref
 
         if self.show_channel_state:

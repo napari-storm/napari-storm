@@ -214,7 +214,7 @@ class NapariStormGUI(QWidget):
 
         # infos tab
         self.infos_tab_layout = QGridLayout()
-        self.Lnumberoflocs = TestListView(self.localization_datasets, parent=self)
+        self.Lnumberoflocs = TestListView(parent=self)
         self.Lnumberoflocs.addItem(
             'STATISTICS \nWaiting for Data... \nImport or drag file here'
         )
@@ -412,12 +412,15 @@ class NapariStormGUI(QWidget):
 class TestListView(QListWidget):
     """Custom ListView Widget -> The Log, allows, d&d and displays infos on the files"""
 
-    def __init__(self, datasets, parent=None):
+    def __init__(self, parent):
         super().__init__(parent)
         self._parent = parent
         self.setAcceptDrops(True)
         self.setIconSize(QtCore.QSize(72, 72))
-        self.datasets = datasets
+
+    @property
+    def datasets(self):
+        return self._parent.list_of_datasets
 
     @property
     def parent(self):
@@ -427,11 +430,8 @@ class TestListView(QListWidget):
     def parent(self, value):
         raise ParentError('Cannot change parent of existing Widget')
 
-    def update_dataset_ref(self):
-        self.datasets = self.parent.localization_datasets
 
     def show_infos(self, filename, idx):
-        self.update_dataset_ref()
         """Print Infos about files in Log"""
         if self.datasets[idx].zdim_present:
             self.addItem(
