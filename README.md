@@ -76,6 +76,7 @@ one of the apply buttons.
 ### Tips
 - Double click or drag the tabs anywhere to detach them from the window. This way you have an overview over all of them at the same time
 - For STORM/PALM ... datasets, it is possible to change the rendering options in the data controls tab to "variabel gaussian mode", to include the uncertainty values or photon counts for the rendering
+- hold shift and drag the mouse for panning
 
 ## Issues
 
