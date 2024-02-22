@@ -18,7 +18,7 @@ A plugin for interactive visualization of Single Molecule Localization Microscop
 
 We recommend instaling Napari into a Conda virtual environment, e.g. using the conda prompt with 
 
-    conda create --name napari-storm
+    conda create --name napari-storm python==3.11
     
     activate napari-storm
     
