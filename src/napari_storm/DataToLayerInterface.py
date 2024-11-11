@@ -661,7 +661,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_3d[2]
 
         else:
-            num_of_locs = len(dataset.x_pos_nm)
+            num_of_locs = len(dataset.x_pos_nm_all)
             coords = np.zeros([num_of_locs, 3])
             coords[:, 1] = dataset.x_pos_nm_all + self.offset_nm_2d[0]
             coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_2d[1]

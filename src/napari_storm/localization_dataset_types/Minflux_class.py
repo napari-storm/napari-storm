@@ -242,20 +242,19 @@ class MinfluxDataAIClass:
     def load_ai_npy(self, file_path, specific_itr=None, as_list=False):
         filename = file_path.split("/")[-1]
         raw_data = np.load(file_path)
+        raw_data = raw_data[raw_data["vld"]]
         mes_time_s = raw_data["tim"]
         activation = raw_data["act"]
         tid = raw_data["tid"]
         vld = raw_data["vld"]
         raw_data = (raw_data[vld])["itr"]
-
+        itr_steps = raw_data.shape[1]
         raw_locs_m = raw_data["loc"]  # shape is (n_locs, itr, dim)
         n_locs = len(raw_locs_m[:, 0, 0])
         if np.all(raw_locs_m[0, :, 2] == 0):
             zdim = False
-            itr_steps = 5
         else:
             zdim = True
-            itr_steps = 10
 
         eco = raw_data["eco"]
         ecc = raw_data["ecc"]
