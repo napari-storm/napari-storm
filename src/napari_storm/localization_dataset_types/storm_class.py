@@ -37,9 +37,12 @@ class StormDatasetCollection:
     def load_h5(self, file_path, name):
         with h5py.File(file_path, "r") as locs_file:
             data = locs_file["molecule_set_data"]["datatable"][...]
-            pixelsize = (
-                    locs_file["molecule_set_data"]["xy_pixel_size_um"][...] * 1e3
-            )  # to µm to nm
+            try:
+                pixelsize = (
+                        locs_file["molecule_set_data"]["xy_pixel_size_um"][...] * 1e3
+                )  # to µm to nm
+            except:
+                pixelsize = locs_file["molecule_set_data"]["pixel_size_um"][...] * 1e3
         try:
             frames = data["FRAME_NUMBER"]
         except:
@@ -60,12 +63,13 @@ class StormDatasetCollection:
              np.ones(len(data["X_POS_PIXELS"])),
              data["PHOTONS"],)
             , dtype=storm_data_dtype)
-        num_channel = max(data["CHANNEL"]) + 1
+        unique_channels = np.unique(data["CHANNEL"])
+        num_channel = len(unique_channels)
         list_of_datasets = []
         for i in range(num_channel):
             filename_pluschannel = name + f" Channel {i + 1}"
             self.dataset_names.append(filename_pluschannel)
-            locs_in_ch = locs[data["CHANNEL"] == i]
+            locs_in_ch = locs[data["CHANNEL"] == unique_channels[i]]
             list_of_datasets.append(StormDataClass(locs=locs_in_ch, name=filename_pluschannel, pixelsize_nm=pixelsize,
                                                    zdim_present=zdim,
                                                    sigma_present=False, photon_count_present=True,))
