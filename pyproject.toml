@@ -1,7 +1,16 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_scm"]
+# setuptools_scm was listed here but never configured (no [tool.setuptools_scm]
+# section), so it produced no _version.py and the version came from setup.cfg
+# anyway.  Dropping it removes the ambiguity: setup.cfg is the single source.
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
-
-[tool.setuptools_scm]
-write_to = "src/napari_storm/_version.py"
+[tool.pytest.ini_options]
+testpaths = ["src/napari_storm/_tests"]
+# `slow` was in use before it was declared, so every run raised six
+# PytestUnknownMarkWarnings.  Declaring it also makes `-m "not slow"` a
+# supported way to skip the subprocess GL tests, which are the bulk of the
+# suite's wall time.
+markers = [
+    "slow: spawns a subprocess and builds a GL context; deselect with -m 'not slow'",
+]

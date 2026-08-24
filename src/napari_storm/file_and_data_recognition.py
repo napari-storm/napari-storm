@@ -1,9 +1,21 @@
+import h5py
+import numpy as np
+from qtpy import QtCore
+from qtpy.QtWidgets import QDialog, QFileDialog
 
-from .CustomErrors import *
+from .CustomErrors import FileImportAbortedError
+from .localization_dataset_types.base_class import LocalizationDataBaseClass
+from .localization_dataset_types.data_formats import (
+    get_dtype_of_dataset_class,
+    list_of_dataset_classes,
+)
+from .localization_dataset_types.Minflux_class import (
+    MinfluxDataAIIterationClass,
+    MinfluxDataBaseClass,
+)
+from .localization_dataset_types.storm_class import StormDataClass
+from .pyqt.FiletyperecognitionDialog import MainWindowWrapper
 
-from .localization_dataset_types.storm_class import *
-from .localization_dataset_types.Minflux_class import *
-from .pyqt.FiletyperecognitionDialog import *
 
 def class_string_to_class(class_name):
     if class_name == "LocalizationDataBaseClass":
@@ -38,7 +50,10 @@ def choose_dataset_class():
 
     def abort():
         raise FileImportAbortedError("User aborted import")
-    window = MainWindowWrapper("What type of data are you importing?", list_of_dataset_classes, accept, abort)
+
+    window = MainWindowWrapper(
+        "What type of data are you importing?", list_of_dataset_classes, accept, abort
+    )
     window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
     if window.exec_() == QDialog.Accepted:
         return window.tobereturned
@@ -87,12 +102,18 @@ def user_preparation_for_import(dataset_class, raw_data, keys, filename):
     """Interact with user to find out metadata of dataset"""
     dataset_class_dtype = get_dtype_of_dataset_class(dataset_class)
     dataset_class = class_string_to_class(dataset_class)
-    ordered_data = assign_data_colums_to_datatype(dataset_class_dtype=dataset_class_dtype, raw_data=raw_data,
-                                                  keys=keys)
+    ordered_data = assign_data_colums_to_datatype(
+        dataset_class_dtype=dataset_class_dtype, raw_data=raw_data, keys=keys
+    )
     ordered_data = [i for i in ordered_data if i is not None]
-    metadata = {"dataset_class": dataset_class, "dataset_class_dtype": dataset_class_dtype, "name": filename,
-                "zdim_present": zdim_present()}
+    metadata = {
+        "dataset_class": dataset_class,
+        "dataset_class_dtype": dataset_class_dtype,
+        "name": filename,
+        "zdim_present": zdim_present(),
+    }
     return ordered_data, metadata
+
 
 def allkeys_h5py(obj):
     """Recursively find all keys in an h5py.Group."""
@@ -106,11 +127,16 @@ def allkeys_h5py(obj):
     return keys
 
 
-def file_and_data_recognition(filepath=None):
-    """Find out filetype, extract headers and data, return data and metadata obtained by file or user"""
+def file_and_data_recognition(filepath=None, metadata_provider=None):
+    """Find out filetype, extract headers and data, return data and metadata obtained by file or user
+
+    *metadata_provider* is forwarded to whichever reader ends up being used, so
+    the questions it may need to ask are answered by the caller's chosen
+    mechanism rather than by a dialog the reader constructs itself.
+    """
     if filepath is None or isinstance(filepath, bool):
         filepath = QFileDialog.getOpenFileName()[0]
-    file_ending = filepath.split('.')[-1]
+    file_ending = filepath.split(".")[-1]
     filename = filepath.split("/")[-1]
 
     if file_ending == "npy":
@@ -118,11 +144,17 @@ def file_and_data_recognition(filepath=None):
         if metadata is None:
             keys = raw_data.dtype.names
             dataset_class = choose_dataset_class()
-            ordered_data, metadata = user_preparation_for_import(dataset_class, raw_data, keys, filename)
-            return metadata["dataset_class"].import_recognized_data(None, ordered_data, metadata)
+            ordered_data, metadata = user_preparation_for_import(
+                dataset_class, raw_data, keys, filename
+            )
+            return metadata["dataset_class"].import_recognized_data(
+                None, ordered_data, metadata, metadata_provider=metadata_provider
+            )
         else:
             dataset_class = metadata["dataset_class"]
-            return metadata["dataset_class"].import_recognized_data(None, raw_data, metadata)
+            return metadata["dataset_class"].import_recognized_data(
+                None, raw_data, metadata, metadata_provider=metadata_provider
+            )
 
     elif file_ending == "txt":
         raw_data = load_txt(filepath)
@@ -130,14 +162,22 @@ def file_and_data_recognition(filepath=None):
         for i in range(raw_data.shape[0]):
             colums.append(f"colum {i}")
         dataset_class = choose_dataset_class()
-        ordered_data, metadata = user_preparation_for_import(dataset_class, raw_data, colums, filename)
-        return metadata["dataset_class"].import_recognized_data(None, ordered_data, metadata)
+        ordered_data, metadata = user_preparation_for_import(
+            dataset_class, raw_data, colums, filename
+        )
+        return metadata["dataset_class"].import_recognized_data(
+            None, ordered_data, metadata, metadata_provider=metadata_provider
+        )
 
     elif file_ending == "csv":
         raw_data, header = load_csv(filepath)
         dataset_class = choose_dataset_class()
-        ordered_data, metadata = user_preparation_for_import(dataset_class, raw_data, header, filename)
-        return metadata["dataset_class"].import_recognized_data(None, ordered_data, metadata)
+        ordered_data, metadata = user_preparation_for_import(
+            dataset_class, raw_data, header, filename
+        )
+        return metadata["dataset_class"].import_recognized_data(
+            None, ordered_data, metadata, metadata_provider=metadata_provider
+        )
 
     elif file_ending == "hdf5" or file_ending == "h5" or file_ending == "hdf":
         with h5py.File(filepath, "r") as locs_file:
@@ -146,11 +186,16 @@ def file_and_data_recognition(filepath=None):
 
             raw_data = locs_file[key][...]
             dataset_class = choose_dataset_class()
-            ordered_data, metadata = user_preparation_for_import(dataset_class, raw_data, locs_file[key].dtype.names,
-                                                                 filename)
-        return metadata["dataset_class"].import_recognized_data(None, ordered_data, metadata)
+            ordered_data, metadata = user_preparation_for_import(
+                dataset_class, raw_data, locs_file[key].dtype.names, filename
+            )
+        return metadata["dataset_class"].import_recognized_data(
+            None, ordered_data, metadata, metadata_provider=metadata_provider
+        )
 
-    raise FileImportAbortedError('Unknown data file extension, try file recognition import')
+    raise FileImportAbortedError(
+        "Unknown data file extension, try file recognition import"
+    )
 
 
 def load_txt(filepath):

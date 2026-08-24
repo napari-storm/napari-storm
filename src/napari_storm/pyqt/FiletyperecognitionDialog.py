@@ -1,13 +1,16 @@
-from PyQt5.QtWidgets import QDialog, QFormLayout, QWidget, QLabel, QComboBox, QPushButton
+from qtpy.QtWidgets import (QComboBox, QDialog, QFormLayout, QLabel,
+                            QPushButton, QWidget)
 
 
 class MainWindowWrapper(QDialog):
     """Dialog wrapper for QWidget that should be shown in a dialog,
      also has the option to return a value from said widget"""
+
     def __init__(self, description, options, accept_function, abort_function):
         super().__init__()
-        self.widget = FiletypeRecognitionsChooseDialoge(description, options, accept_function, abort_function,
-                                                        parent=self)
+        self.widget = FiletypeRecognitionsChooseDialoge(
+            description, options, accept_function, abort_function, parent=self
+        )
         self.layout = QFormLayout()
         self.layout.addRow(self.widget)
         self.setLayout(self.layout)
@@ -18,6 +21,7 @@ class MainWindowWrapper(QDialog):
 class FiletypeRecognitionsChooseDialoge(QWidget):
     """Multi Purpose QWidget which gives the user a set of choices and then continues to do what is specified
     in the 'accept' and 'abort' functions"""
+
     def __init__(self, description, options, accept_function, abort_function, parent):
         super().__init__()
 

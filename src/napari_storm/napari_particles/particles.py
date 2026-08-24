@@ -11,8 +11,16 @@ from vispy.gloo import VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
 
-from .filters import ShaderFilter, _shader_functions
+from ._napari_compat import (
+    force_additive_blending,
+    get_layer_visual,
+    release_additive_blending,
+)
+from .filters import ShaderFilter
 from .utils import generate_billboards_2d
+
+
+_DEFAULT_FILTER = object()
 
 
 class BillboardsFilter(Filter):
@@ -176,7 +184,7 @@ class BillboardsFilter(Filter):
         self._update_texcoords_buffer(texcoords)
 
     def _update_texcoords_buffer(self, texcoords):
-        if self._attached or self._visual is not None:
+        if self._attached and self._visual is not None:
             self._texcoords_buffer.set_data(texcoords[:, ::-1], convert=True)
 
     def _attach(self, visual):
@@ -208,7 +216,7 @@ class Particles(Surface):
         size=10,
         sigmas=(1, 1, 1),
         values=1,
-        filter=ShaderFilter("gaussian"),
+        filter=_DEFAULT_FILTER,
         antialias=False,
         **kwargs,
     ):
@@ -216,18 +224,25 @@ class Particles(Surface):
         kwargs.setdefault("shading", "none")
         kwargs.setdefault("blending", "additive")
 
-        coords = np.asarray(coords)
+        # float32 throughout: the GPU consumes float32 regardless, so a float64
+        # source array only doubles the size of every derived buffer.  At the
+        # ~1e5 nm coordinate range used here float32 resolves to <0.01 nm, two
+        # orders of magnitude below single-molecule localization precision.
+        coords = np.asarray(coords, dtype=np.float32)
         sigmas = np.asarray(sigmas, dtype=np.float32)
 
         if np.isscalar(values):
-            values = values * np.ones(len(coords))
+            values = values * np.ones(len(coords), dtype=np.float32)
+        values = np.asarray(values, dtype=np.float32)
 
         values = np.broadcast_to(values, len(coords))
-        size = np.broadcast_to(size, len(coords))
+        size = np.broadcast_to(np.asarray(size, dtype=np.float32), len(coords))
         sigmas = np.broadcast_to(sigmas, (len(coords), 3))
 
         if not coords.ndim == 2:
-            raise ValueError(f"coords should be of shape (M,D)")
+            raise ValueError("coords should be of shape (M,D)")
+        if len(coords) == 0:
+            raise ValueError("Particles requires at least one localization")
 
         if not len(size) == len(coords) == len(sigmas):
             raise ValueError()
@@ -240,19 +255,72 @@ class Particles(Surface):
 
         vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
 
-        # repeat values for each 4 vertices
-        centercoords = np.repeat(coords, 4, axis=0)
-        sigmas = np.repeat(sigmas, 4, axis=0)
-        values = np.repeat(values, 4, axis=0)
+        # The generator expands every centre to six vertices.
+        vpp = 6
+        centercoords = np.repeat(coords, vpp, axis=0)
+        sigmas = np.repeat(sigmas, vpp, axis=0)
+        values = np.repeat(values, vpp, axis=0)
+
         self._coords = coords
         self._centercoords = centercoords
         self._sigmas = sigmas
         self._size = size
         self._texcoords = texcoords
         self._billboard_filter = BillboardsFilter(antialias=antialias)
+        if filter is _DEFAULT_FILTER:
+            filter = ShaderFilter("gaussian")
+            shader_name = "gaussian"
+        else:
+            shader_name = None
         self.filter = filter
         self._viewer = None
-        super().__init__((vertices, faces, values), **kwargs)
+        self._visual = None
+        self._shader_name = shader_name
+        # Names of layer-list events we connected to, so close() can undo them.
+        self._layer_event_connections = []
+        super().__init__((vertices, faces, values), texcoords=texcoords, **kwargs)
+
+    def update_particle_data(self, coords, size, sigmas, values):
+        """Update billboard geometry and attributes without replacing the layer.
+
+        Appearance changes still need fresh quad geometry when their maximum
+        Gaussian size changes, but they do not need a new napari Layer, VisPy
+        visual, shader filter, or set of viewer callbacks.
+        """
+        coords = np.asarray(coords, dtype=np.float32)
+        if coords.ndim != 2:
+            raise ValueError("coords should be of shape (M,D)")
+        if len(coords) == 0:
+            raise ValueError("Particles requires at least one localization")
+        if coords.shape[1] == 2:
+            coords = np.concatenate(
+                [np.zeros((len(coords), 1), dtype=np.float32), coords], axis=-1
+            )
+
+        size = np.broadcast_to(
+            np.asarray(size, dtype=np.float32), len(coords)
+        )
+        sigmas = np.broadcast_to(
+            np.asarray(sigmas, dtype=np.float32), (len(coords), 3)
+        )
+        values = np.broadcast_to(
+            np.asarray(values, dtype=np.float32), len(coords)
+        )
+
+        vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
+        vertices_per_particle = 6
+        self._coords = coords
+        self._size = size
+        self._centercoords = np.repeat(coords, vertices_per_particle, axis=0)
+        self._sigmas = np.repeat(sigmas, vertices_per_particle, axis=0)
+        self._texcoords = texcoords
+        vertex_values = np.repeat(values, vertices_per_particle, axis=0)
+
+        # Surface.data emits napari's normal data event, updating the existing
+        # VisPy visual.  Our attributes are assigned first because the ensuing
+        # slice may immediately ask the billboard filter for matching buffers.
+        self.data = (vertices, faces, vertex_values)
+        self._update_billboard_filter()
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""
@@ -260,11 +328,45 @@ class Particles(Surface):
         self._update_billboard_filter()
 
     def _update_billboard_filter(self):
-        faces = self._view_faces.flatten()
-        if self._billboard_filter._attached and len(faces) > 0:
-            self._billboard_filter.texcoords = self._texcoords[faces]
-            self._billboard_filter.centercoords = self._centercoords[faces][:, -3:]
-            self._billboard_filter.sigmas = self._sigmas[faces][:, -3:]
+        """Upload attributes in the same vertex order as the Surface visual.
+
+        ``Surface._view_faces`` is an index buffer; it does not reorder the
+        visual's vertex buffer.  Indexing these attributes by flattened faces
+        therefore assigned the second triangle's texture coordinates to the
+        wrong vertices after every in-place update, visually splitting each
+        Gaussian along the quad diagonal.
+        """
+        if self._billboard_filter._attached:
+            if self._texcoords is not None:
+                self._billboard_filter.texcoords = self._texcoords
+            if self._centercoords is not None:
+                self._billboard_filter.centercoords = self._centercoords[:, -3:]
+            self._billboard_filter.sigmas = self._sigmas[:, -3:]
+
+    @property
+    def localization_coords(self):
+        """The localization centres being drawn, as an (N, 3) array in (z, x, y).
+
+        One row per localization on both Gaussian backends, which is what makes
+        it the right thing for a caller to ask for. This layer also keeps a
+        six-vertex expansion of these in `data`; this is not that.
+        """
+        return self._coords
+
+    @property
+    def n_localizations(self):
+        """How many localizations this layer is drawing."""
+        return len(self._coords)
+
+    @property
+    def billboard_size_nm(self):
+        """Edge length of the largest splat drawn, in nanometres.
+
+        One value per localization here and one scalar per dataset on the
+        instanced backend, so the screen-space cap -- a statement about the
+        widest splat either way -- can be checked without knowing which.
+        """
+        return float(np.max(self._size))
 
     @property
     def filter(self):
@@ -302,54 +404,121 @@ class Particles(Surface):
 
     @coords.setter  # LR
     def coords(self, coords):
-        print("we're here")
         self._coords = coords
 
     @property
-    def shading(self):
-        return str(self._shading)
+    def shader(self):
+        """Name of the fragment shader used to draw each billboard.
 
-    @shading.setter
-    def shading(self, shading):
-        self._shading = shading
+        Deliberately *not* called ``shading``.  napari's Surface layer owns a
+        property of that name and forwards its value straight to VisPy, which
+        accepts only ``None``, ``'flat'`` and ``'smooth'``::
+
+            _on_shading_change -> self.node.shading = self.layer.shading
+            MeshVisual.shading -> assert shading in (None, 'flat', 'smooth')
+
+        Overriding it meant napari pushed ``'gaussian'`` into VisPy and raised
+        AssertionError as soon as anything re-sliced the layer -- which napari
+        does to every layer whenever the scene extent changes, i.e. as soon as a
+        second dataset covering a different area is loaded.  Our Gaussian
+        shading is implemented by a shader filter, so napari's own ``shading``
+        stays at ``'none'`` and is left alone.
+        """
+        return self._shader_name
+
+    @shader.setter
+    def shader(self, name):
+        self._shader_name = name
         self._detach_filter()
-        self.filter = ShaderFilter(shading)
+        self.filter = ShaderFilter(name)
         self._attach_filter()
 
     def _detach_filter(self):
+        if self._visual is None:
+            return
         for f in self.filter:
             self._visual.detach(f)
 
     def _attach_filter(self):
+        if self._visual is None:
+            return
         for f in self.filter:
             self._visual.attach(f)
 
     def get_visual(self, viewer):
-        import warnings
+        return get_layer_visual(viewer, self)
 
-        warnings.filterwarnings("ignore")
-        # depreciated soon
-        # return viewer.layer_to_visual[self].node
-        return viewer.window.qt_viewer.layer_to_visual[self].node
+    def _apply_blend_state(self, event=None):
+        """Force true additive blending, and keep it forced.
+
+        Until P0-01 additive blending was repaired by accident -- every update
+        destroyed and rebuilt the layer, and `add_to_viewer` set the state again
+        on the way back in.  Updating in place removed the rebuild and with it
+        the repair, so it has to be asserted deliberately.  See
+        `force_additive_blending` for why it is asserted by wrapping the setter
+        rather than from event handlers.
+        """
+        if self._visual is None:
+            return
+        force_additive_blending(self._visual)
 
     def add_to_viewer(self, viewer):
         self._viewer = viewer
         self._viewer.add_layer(self)
-        self._visual = self.get_visual(viewer)
 
+        # Get the vispy visual and attach our billboard filter
+        self._visual = self.get_visual(viewer)
         self._visual.attach(self._billboard_filter)
-        self._update_billboard_filter()
+
+        # Populate filter buffers if we already have texcoords
+        if self._texcoords is not None:
+            self._update_billboard_filter()
+
+        # Attach any other shader filters (e.g. gaussian)
         self._attach_filter()
 
-        # """ Martins Hack into the layer Controlls -> replaced later
-        # update combobox
-        import warnings
+        self._apply_blend_state()
 
-        warnings.filterwarnings("ignore")
-        shading_ctrl = self._viewer.window.qt_viewer.controls.widgets[self]
-        combo = shading_ctrl.shadingComboBox
+        # napari's own shading combo box is deliberately left alone.  We used to
+        # clear it and refill it with the names in _shader_functions, but that
+        # combo is wired to QtSurfaceControls.changeShading, which assigns
+        # straight to napari's `shading` property:
+        #
+        #     self.layer.shading = self.shadingComboBox.currentData()
+        #
+        # so clearing it made the next signal assign None, and selecting one of
+        # our entries assigned 'gaussian' -- both rejected by the Shading enum
+        # with ValueError.  Our shader is selected through Particles.shader; it
+        # is not one of napari's shading modes and does not belong in that
+        # widget.  A selector for it belongs in the plugin's own controls.
 
-        combo.clear()
-        for k in _shader_functions.keys():
-            combo.addItem(k, k)
-        # """
+    def close(self):
+        """Release every resource this layer owns.
+
+        Restores the blend setter, detaches the shader filters from the VisPy
+        visual, and drops the viewer/visual references.  Safe to call more than
+        once, and safe to call on a layer that was never added.
+        """
+        self._layer_event_connections = []
+
+        if self._visual is not None:
+            visual = self._visual
+            release_additive_blending(visual)
+            for shader_filter in self.filter:
+                try:
+                    visual.detach(shader_filter)
+                except (ValueError, AttributeError, RuntimeError):
+                    # It may already have been removed with the canvas.
+                    pass
+            try:
+                visual.detach(self._billboard_filter)
+            except (ValueError, AttributeError, RuntimeError):
+                # The visual may already have been torn down with the canvas.
+                pass
+
+        self._visual = None
+        self._viewer = None
+
+    # Alias: "detach" reads better at renderer call sites, "close" matches the
+    # lifecycle vocabulary used elsewhere in the plan.
+    detach = close

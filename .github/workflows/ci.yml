@@ -1,0 +1,168 @@
+name: CI
+
+# Replaces ci.bak and test_and_deploy.bak, which were disabled and could not
+# have worked if renamed: ci.bak declared an "xvfb" service container, which
+# gives the job no DISPLAY, and both targeted Python 3.7-3.9 on runner actions
+# that GitHub has since retired.  Delete the .bak files once this is trusted.
+#
+# Python 3.10 is the floor because napari 0.6 dropped 3.9: on 3.9 pip resolves
+# napari 0.5.6, so that leg is a second napari generation to support rather
+# than a cheap extra data point.
+#
+# Pull requests run a four-job subset -- both ends of the Python range on
+# Linux, plus one job each on Windows and macOS so that no platform goes
+# ungated, while keeping pull-request feedback fast.  The full grid runs
+# weekly, on release tags, and on demand.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays, 04:00 UTC.  Catches breakage from dependency releases on the
+    # combinations a pull request no longer covers.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      full-matrix:
+        description: Run every supported OS/Python combination
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Choose the matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      # Emitted as a whole `{"include": [...]}` matrix object rather than a
+      # bare array, because that is the form GitHub documents for a matrix
+      # built at run time.  Entries carry every key, so `include` alone
+      # defines the jobs and there is no base matrix to expand against.
+      - name: Pick the subset or the full grid
+        id: pick
+        env:
+          FULL: ${{ github.event_name == 'schedule' || inputs.full-matrix || startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          if [ "$FULL" = "true" ]; then
+            matrix=$(jq -cn '{include: [{
+              platform: ("ubuntu-latest", "windows-latest", "macos-latest"),
+              "python-version": ("3.10", "3.11", "3.12")
+            }]}')
+          else
+            matrix=$(jq -cn '{include: [
+              {platform: "ubuntu-latest",  "python-version": "3.10"},
+              {platform: "ubuntu-latest",  "python-version": "3.12"},
+              {platform: "windows-latest", "python-version": "3.12"},
+              {platform: "macos-latest",   "python-version": "3.12"}
+            ]}')
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix" | jq .
+
+  test:
+    name: ${{ matrix.platform }} py${{ matrix.python-version }}
+    needs: plan
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # Three separate needs, all met by this one action, and the first run
+      # met none of them:
+      #
+      #   * Linux needs Qt's own system libraries.  The action installs them
+      #     only when `qt` is set -- it defaults to false -- so importing
+      #     QtGui died on libEGL.so.1 in pytest_configure, before collection.
+      #   * Linux needs a display, which the action starts as Xvfb.
+      #   * Windows needs a software OpenGL, which the action installs as
+      #     Mesa3D.  Gating the action on Linux left the Windows runners with
+      #     GDI's OpenGL 1.1, so every make_napari_viewer() raised GLError
+      #     1282 and 211 tests failed for one reason.
+      #
+      # macOS needs none of it; every step in the action is gated on the OS
+      # that needs it, so running it everywhere is a no-op there.
+      - uses: pyvista/setup-headless-display-action@v4
+        with:
+          qt: true
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,pyqt6]"
+
+      - name: Run tests
+        run: python -m pytest -v --color=yes
+
+  package:
+    name: Build and inspect the distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # This job imports the widget module too, by way of
+      # check_plugin_manifest.py, so it needs the same Qt system libraries.
+      - uses: pyvista/setup-headless-display-action@v4
+        with:
+          qt: true
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      # A successful build is not evidence the artifact is usable: the previous
+      # configuration built a wheel containing only metadata.
+      - name: Inspect wheel contents
+        run: python scripts/check_wheel_contents.py dist/*.whl
+
+      - name: Install the built wheel into a clean environment
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/python -m pip install --upgrade pip
+          wheel_path=$(find dist -name '*.whl' -print -quit)
+          /tmp/clean/bin/python -m pip install "${wheel_path}[pyqt6]"
+
+      - name: Import and check version identity
+        run: |
+          /tmp/clean/bin/python -c "
+          import napari_storm
+          from importlib.metadata import version
+          assert napari_storm.__version__ == version('napari-storm'), (
+              napari_storm.__version__, version('napari-storm'))
+          print('napari_storm', napari_storm.__version__)
+          "
+
+      # npe2 validate checks the schema, not cross-references: a widget can name
+      # a command that does not exist and still validate.
+      - name: Validate plugin manifest
+        run: |
+          /tmp/clean/bin/python -m pip install npe2
+          /tmp/clean/bin/python -m npe2 validate napari-storm
+
+      - name: Resolve every plugin contribution
+        run: /tmp/clean/bin/python scripts/check_plugin_manifest.py
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: distribution
+          path: dist/

@@ -2,13 +2,6 @@
 
 # napari-storm
 
-[![License](https://img.shields.io/pypi/l/napari-storm.svg?color=green)](https://github.com/napari-storm/napari-storm/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/napari-storm.svg?color=green)](https://pypi.org/project/napari-storm)
-[![Python Version](https://img.shields.io/pypi/pyversions/napari-storm.svg?color=green)](https://python.org)
-[![tests](https://github.com/napari-storm/napari-storm/workflows/tests/badge.svg)](https://github.com/napari-storm/napari-storm/actions)
-[![codecov](https://codecov.io/gh/napari-storm/napari-storm/branch/main/graph/badge.svg)](https://codecov.io/gh/napari-storm/napari-storm)
-[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-storm)](https://napari-hub.org/plugins/napari-storm)
-
 A plugin for interactive visualization of Single Molecule Localization Microscopy (SMLM) datasets with Napari.  This package uses the (currently experimental) Napari Particles layer developed by Martin Weigert (https://github.com/maweigert).
 
 ----------------------------------
@@ -16,7 +9,7 @@ A plugin for interactive visualization of Single Molecule Localization Microscop
 
 ## Installation
 
-We recommend instaling Napari into a Conda virtual environment, e.g. using the conda prompt with 
+It's recommended to install napari-storm into a Conda virtual environment, which can be set up e.g. using the conda prompt with 
 
     conda create --name napari-storm python==3.11
     
@@ -26,6 +19,8 @@ We recommend instaling Napari into a Conda virtual environment, e.g. using the c
 
 You can install `napari-storm` by cloning the repository, using, e.g. the conda prompt with:
 
+    conda instal git  # --> instal git once if not already installed 
+
     git clone https://github.com/napari-storm/napari-storm
     
 Next, switch to the install directory and install the python package using 
@@ -34,8 +29,13 @@ Next, switch to the install directory and install the python package using
 
     pip install -e .
     
+
+
+## Usage
+
+### Starting napari-storm
 To start the program, run the napari_start.py, e.g. by navigating in your anaconda prompt to the location of the 
-napri_start.py and run it with:
+napri_start.py (root) and run it with:
 
     python.exe napari_start.py 
 
@@ -43,18 +43,14 @@ Or simply start the napari version that was just installed into your environment
 
     napari 
 
-## Usage
-
-### Starting napari-storm
-If you started napari via console and not napari_start.py first thing to do is to activate napari-storm, found in 
-the menu bar under plug-ins. 
+and then opening napari-storm in the plugins tab.
 
 ### Importing data into napari-storm
-Standard file formats from picasso, thunderstorm, AI Minflux files,... can be imported by simply dragging them into
-napari or the import file dialog. If that's not the case for the file:
+Drag & drop onto the dock widget supported file types (Picasso, ThunderSTORM, MINFLUX, etc.) directly into napari or use the import file dialog. If that's not the case for your file:
+
 
 - one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
-- try the (rather experimental) file recognition import button, which will try to extract the headers of your file
+- try the (experimental) file recognition import button, which will try to extract the headers of your file
 and lets you assign your data. This should work for any .hdf5, .csv or npy. file. 
 
 ### Basic usage
@@ -77,6 +73,21 @@ one of the apply buttons.
 - Double click or drag the tabs anywhere to detach them from the window. This way you have an overview over all of them at the same time
 - For STORM/PALM ... datasets, it is possible to change the rendering options in the data controls tab to "variabel gaussian mode", to include the uncertainty values or photon counts for the rendering
 - hold shift and drag the mouse for panning
+
+## Documentation
+There is a custom Q&A GPT for this repo specifically, available at 
+https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
+
+To access the documentation install the following packages (once):
+```bash
+pip install mkdocs mkdocs-material mkdocstrings[python] pymdown-extensions
+```
+
+Then build and serve the docs:
+
+```bash
+mkdocs serve
+```
 
 ## Issues
 

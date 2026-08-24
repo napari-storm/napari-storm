@@ -1,0 +1,30 @@
+name: napari-storm
+display_name: Napari STORM Plugin
+contributions:
+  commands:
+    - id: napari-storm.show_dock
+      title: Show STORM Analysis Dock
+      python_name: napari_storm._dock_widget:napari_storm
+    - id: napari-storm.read
+      title: Read localization file
+      python_name: napari_storm._reader:napari_get_reader
+  widgets:
+    - command: napari-storm.show_dock
+      display_name: Napari STORM
+    # A "SMLM Localization" widget used to be declared here against the command
+    # napari-storm.show_localization_controls, which was never defined -- the
+    # entry could not resolve and failed when selected.  The raw-movie fitting
+    # panel it pointed at is not part of this package: napari-storm renders
+    # localization tables rather than fitting raw data.
+  readers:
+    - command: napari-storm.read
+      accepts_directories: false
+      filename_patterns:
+        - "*.h5"
+        - "*.hdf5"
+        - "*.yaml"
+        - "*.csv"
+        - "*.smlm"
+        - "*.npy"
+        - "*.json"
+        - "*.test"

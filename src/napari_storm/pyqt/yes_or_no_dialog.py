@@ -1,9 +1,10 @@
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QDialog, QFormLayout
+from qtpy.QtWidgets import QDialog, QFormLayout, QLabel, QPushButton, QWidget
 
 
 class YesNoWrapper(QDialog):
     """Dialog wrapper for QWidget that should be shown in a dialog,
      also has the option to return a value from said widget"""
+
     def __init__(self, question):
         super().__init__()
         self.widget = YesNoDialogWidget(question, parent=self)
@@ -16,6 +17,7 @@ class YesNoWrapper(QDialog):
 
 class YesNoDialogWidget(QWidget):
     """Dialog which asks a yes-no-question"""
+
     def __init__(self, question, parent):
         super().__init__()
 
@@ -42,5 +44,3 @@ class YesNoDialogWidget(QWidget):
     def no(self):
         self.parent.tobereturned = False
         self.parent.accept()
-
-

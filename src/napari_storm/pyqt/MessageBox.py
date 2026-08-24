@@ -1,8 +1,8 @@
-from PyQt5.QtWidgets import QMessageBox
+from qtpy.QtWidgets import QMessageBox
 
 
 def create_yes_no_dialog(message, additional_info=None):
-    msg=QMessageBox()
+    msg = QMessageBox()
     msg.setIcon(QMessageBox.Information)
     msg.setText(message)
     if additional_info is not None:
@@ -16,4 +16,4 @@ def create_yes_no_dialog(message, additional_info=None):
     elif return_value == QMessageBox.No:
         return False
     else:
-        raise RuntimeError('The Messagebox does not like what you did here...')
+        raise RuntimeError("The Messagebox does not like what you did here...")

@@ -20,4 +20,3 @@ class PixelSizeIsNecessaryError(ValueError):
 
 class FileImportAbortedError(ImportError):
     """Raise this error when the user aborts the import of a file"""
-

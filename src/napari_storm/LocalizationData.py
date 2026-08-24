@@ -1,6 +1,7 @@
 import numpy as np
-from .ns_constants import *
-from .CustomErrors import *
+
+from .CustomErrors import ParentError
+from .ns_constants import LOCS_DTYPE
 
 
 class LocalizationData:
@@ -9,21 +10,21 @@ class LocalizationData:
     particles layer"""
 
     def __init__(
-            self,
-            parent,
-            locs,
-            name=None,
-            pixelsize_nm=None,
-            zdim_present=False,
-            sigma_present=False,
-            photon_count_present=False,
+        self,
+        parent,
+        locs,
+        name=None,
+        pixelsize_nm=None,
+        zdim_present=False,
+        sigma_present=False,
+        photon_count_present=False,
     ):
 
         assert isinstance(locs, np.recarray)
         assert locs.dtype == LOCS_DTYPE
 
         if name is None:
-            name = 'Untitled'
+            name = "Untitled"
 
         if pixelsize_nm is None:
             pixelsize_nm = 100.0
@@ -46,7 +47,7 @@ class LocalizationData:
 
     @parent.setter
     def parent(self, value):
-        raise ParentError('Cannot change parent of existing Widget')
+        raise ParentError("Cannot change parent of existing Widget")
 
     @property
     def locs(self):
@@ -72,17 +73,25 @@ class LocalizationData:
         zmin = render_zrange[0] / 100 * np.max(zcoords)
         zmax = render_zrange[1] / 100 * np.max(zcoords)
 
-        filter_idx = np.where((xcoords > xmax) | (xcoords < xmin) | (ycoords > ymax) |
-                              (ycoords < ymin) | (zcoords > zmax) | (zcoords < zmin))
+        filter_idx = np.where(
+            (xcoords > xmax)
+            | (xcoords < xmin)
+            | (ycoords > ymax)
+            | (ycoords < ymin)
+            | (zcoords > zmax)
+            | (zcoords < zmin)
+        )
         self.locs_active = np.delete(self.locs_active, filter_idx)
 
     def get_all_coords_rec_array(self):
         # Returns the coordinates of the all localizations, with
         # the offset applied.
 
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
+        COORDS_DTYPE = [
+            ("x_pos_pixels", "f4"),
+            ("y_pos_pixels", "f4"),
+            ("z_pos_pixels", "f4"),
+        ]
 
         tmp_x = self.locs_all.x_pos_pixels
         tmp_y = self.locs_all.y_pos_pixels
@@ -99,9 +108,11 @@ class LocalizationData:
         # Returns the coordinates of the all localizations, with
         # the offset applied.
 
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
+        COORDS_DTYPE = [
+            ("x_pos_pixels", "f4"),
+            ("y_pos_pixels", "f4"),
+            ("z_pos_pixels", "f4"),
+        ]
 
         tmp_x = self.locs_active.x_pos_pixels
         tmp_y = self.locs_active.y_pos_pixels
@@ -113,5 +124,3 @@ class LocalizationData:
         tmp_records.z_pos_pixels = tmp_z
 
         return tmp_records
-
-
