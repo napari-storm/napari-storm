@@ -1,0 +1,85 @@
+name: Release
+
+# Publishes to PyPI when a GitHub release is published.
+#
+# The old test_and_deploy.bak uploaded with twine and a TWINE_API_KEY secret,
+# which was never configured -- the package has in fact never reached PyPI.
+# This workflow uses PyPI's Trusted Publishing instead: pypi.org is told to
+# trust *this workflow file in this repository* via GitHub's OIDC identity,
+# so there is no long-lived token to configure, leak, or rot.  The one-time
+# setup lives on pypi.org (Account -> Publishing -> Add a new pending
+# publisher): project "napari-storm", owner "napari-storm", repository
+# "napari-storm", workflow "release.yml", environment "pypi".
+#
+# Publishing is gated on a *published GitHub release* rather than a bare tag
+# push so that a release is always a deliberate, documented act.  CI's full
+# test grid runs on the v* tag independently.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build and check the distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      # The same gate CI applies: a successful build is not evidence the
+      # artifact is usable.
+      - name: Inspect wheel contents
+        run: python scripts/check_wheel_contents.py dist/*.whl
+
+      - name: Check metadata renders on PyPI
+        run: python -m twine check --strict dist/*
+
+      # A release tagged v2.1.0 must ship version 2.1.0.  setup.cfg is the
+      # single source of the version, so the tag has to be checked against
+      # the built artifact rather than trusted.
+      - name: Tag must match the packaged version
+        run: |
+          python - <<'EOF'
+          import os, pathlib, re, sys
+          tag = os.environ["GITHUB_REF_NAME"]
+          wheel = next(pathlib.Path("dist").glob("*.whl")).name
+          version = re.match(r"napari_storm-([^-]+)-", wheel).group(1)
+          if tag != f"v{version}":
+              sys.exit(f"release tag {tag!r} does not match built version {version!r}; "
+                       "bump setup.cfg or retag")
+          print(f"{tag} == {version}")
+          EOF
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment name is part of the trusted-publisher identity on
+    # pypi.org; renaming it there and here must happen together.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/napari-storm
+    permissions:
+      # This is the OIDC grant that replaces the API token.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: release-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

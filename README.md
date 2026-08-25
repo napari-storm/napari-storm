@@ -9,26 +9,27 @@ A plugin for interactive visualization of Single Molecule Localization Microscop
 
 ## Installation
 
-It's recommended to install napari-storm into a Conda virtual environment, which can be set up e.g. using the conda prompt with 
+napari-storm needs Python 3.10–3.12. It's recommended to install it into its
+own environment, e.g. with conda:
 
-    conda create --name napari-storm python==3.11
-    
-    activate napari-storm
-    
-    conda install pip
+    conda create --name napari-storm python=3.11 pip
 
-You can install `napari-storm` by cloning the repository, using, e.g. the conda prompt with:
+    conda activate napari-storm
 
-    conda instal git  # --> instal git once if not already installed 
+Then install from PyPI. The `[pyqt6]` extra brings in napari's Qt backend;
+without an extra, no Qt binding is installed and napari cannot open a window
+(use `[pyside6]` if you prefer PySide):
+
+    pip install "napari-storm[pyqt6]"
+
+To work on napari-storm itself, install from a clone instead:
 
     git clone https://github.com/napari-storm/napari-storm
-    
-Next, switch to the install directory and install the python package using 
 
     cd napari-storm
 
-    pip install -e .
-    
+    pip install -e ".[dev,pyqt6]"
+
 
 
 ## Usage
