@@ -1,12 +1,17 @@
-from .localization_dataset_types import *
+import h5py
+import os
 
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QWidget, QComboBox, QFormLayout, QSpinBox, QPushButton, QLineEdit
-from .CustomErrors import *
+from qtpy.QtCore import QTimer
+from qtpy.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QLineEdit,
+                            QPushButton, QWidget)
+
+from .CustomErrors import ParentError
+from .localization_dataset_types import StormDataClass
 
 
 class DataAdjustmentWindow(QWidget):
     """GUI Elements for the data adjustment widget"""
+
     def __init__(self, parent):
         super().__init__()
 
@@ -52,6 +57,7 @@ class DataAdjustmentWindow(QWidget):
 
 class DataAdjustmentInterface:
     """Core code of the data adjustment functions"""
+
     def __init__(self, parent, data_adjustment_window):
         self._parent = parent
         self.daw = data_adjustment_window
@@ -81,7 +87,7 @@ class DataAdjustmentInterface:
 
     @parent.setter
     def parent(self, value):
-        raise ParentError('Cannot change parent of existing Widget')
+        raise ParentError("Cannot change parent of existing Widget")
 
     def value_changed(self):
         tmp_value = self.daw.Evalue.text()
@@ -94,7 +100,9 @@ class DataAdjustmentInterface:
         """Connect GUI with functionalities"""
         self.daw.Cparameter.currentIndexChanged.connect(self.current_parameter_changed)
         self.daw.Cdatasets.currentIndexChanged.connect(self.current_dataset_changed)
-        self.daw.Evalue.textChanged.connect(lambda: self._start_typing_timer(self.qtimer))
+        self.daw.Evalue.textChanged.connect(
+            lambda: self._start_typing_timer(self.qtimer)
+        )
         self.daw.Cmath_mode.addItems(self.math_modes)
         self.daw.Cmath_mode.currentIndexChanged.connect(self.math_mode_changed)
         self.daw.Cmath_mode.setCurrentIndex(self.math_mode_active_idx)
@@ -108,20 +116,19 @@ class DataAdjustmentInterface:
         """Apply adjustment to dataset of index idx and possibly update the layers"""
         if isinstance(idx, bool):
             idx = self.current_dataset_idx
-        if self.math_modes[self.math_mode_active_idx] == self.math_modes[0]:  # add offset
-            setattr(self.list_of_datasets[idx].locs_all,
-                    self.list_of_adjustable_parameters[self.current_parameter_idx],
-                    getattr(self.list_of_datasets[idx].locs_all,
-                            self.list_of_adjustable_parameters[self.current_parameter_idx]) + self.value)
-        elif self.math_modes[self.math_mode_active_idx] == self.math_modes[1]:  # rescale
-            setattr(self.list_of_datasets[idx].locs_all,
-                    self.list_of_adjustable_parameters[self.current_parameter_idx],
-                    getattr(self.list_of_datasets[idx].locs_all,
-                            self.list_of_adjustable_parameters[self.current_parameter_idx]) * self.value)
+        dataset = self.list_of_datasets[idx]
+        parameter = self.list_of_adjustable_parameters[self.current_parameter_idx]
+        # adjust_column is the sanctioned writer of the canonical table: it
+        # applies the change and drops the cached nanometre columns derived
+        # from it, which a bare setattr on locs_all would leave stale.
+        if self.math_modes[self.math_mode_active_idx] == self.math_modes[0]:
+            dataset.adjust_column(parameter, offset=self.value)
+        elif self.math_modes[self.math_mode_active_idx] == self.math_modes[1]:
+            dataset.adjust_column(parameter, scale=self.value)
         if update_layers:
             self.parent.data_to_layer_itf.set_render_range_and_offset()
             self.parent.data_to_layer_itf.update_layers()
-            
+
     def clear_entries(self):
         """Reset GUI and adjustments"""
         self.n_datasets = 0
@@ -129,6 +136,24 @@ class DataAdjustmentInterface:
         self.current_parameter_idx = 0
         self.list_of_adjustable_parameters = []
         self.daw.clear_entries()
+
+    def remove_dataset_entry(self, dataset_index):
+        """Remove one dataset and select the nearest remaining entry."""
+        combo = self.daw.Cdatasets
+        combo.blockSignals(True)
+        if 0 <= dataset_index < combo.count():
+            combo.removeItem(dataset_index)
+        self.n_datasets = combo.count()
+        self.current_dataset_idx = min(dataset_index, self.n_datasets - 1)
+        if self.n_datasets:
+            combo.setCurrentIndex(self.current_dataset_idx)
+        combo.blockSignals(False)
+
+        if not self.n_datasets:
+            self.clear_entries()
+            return
+        self.adjust_available_parameters_to_dataset_type()
+        self.current_parameter_changed()
 
     def add_dataset_entry(self, dataset_name):
         """Tell data filter itf that a new dataset was imported"""
@@ -159,11 +184,12 @@ class DataAdjustmentInterface:
         tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
         if not filename:
             filename = QFileDialog.getSaveFileName()[0]
-        with h5py.File(filename, 'a') as f:
+        with h5py.File(filename, "a") as f:
             try:
                 dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
             except ValueError:
-                dset["dataset"] = tmp_dataset.locs_all
+                del f["dataset"]
+                dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
             dset.attrs["name"] = tmp_dataset.name
             dset.attrs["zdim_present"] = tmp_dataset.zdim_present
             dset.attrs["dataset_class"] = tmp_dataset.__class__.__name__
@@ -171,8 +197,7 @@ class DataAdjustmentInterface:
                 dset.attrs["pixelsize_nm"] = tmp_dataset.pixelsize_nm
                 dset.attrs["sigma_present"] = tmp_dataset.sigma_present
                 dset.attrs["photon_count_present"] = tmp_dataset.photon_count_present
-        os.rename(filename, filename.split('.')[0]+".ns")
-
+        os.rename(filename, filename.split(".")[0] + ".ns")
 
     def _start_typing_timer(self, timer):
         timer.start(500)

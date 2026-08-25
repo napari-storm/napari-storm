@@ -1,6 +1,5 @@
-
 import numpy as np
-from PyQt5.QtCore import Qt
+from qtpy.QtCore import Qt
 from superqt import QDoubleRangeSlider
 
 

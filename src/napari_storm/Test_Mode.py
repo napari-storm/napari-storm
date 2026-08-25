@@ -1,7 +1,9 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QLineEdit, QComboBox, QPushButton, QDialog, QFormLayout
 import numpy as np
-from .ns_constants import *
+from qtpy.QtWidgets import (QComboBox, QDialog, QFormLayout, QGridLayout,
+                            QLabel, QLineEdit, QPushButton, QWidget)
+
 from .LocalizationData import LocalizationData
+from .ns_constants import LOCS_DTYPE
 
 
 class TestModeWindow(QWidget):
@@ -38,7 +40,9 @@ class TestModeWindow(QWidget):
 
         self.Carrangement_mode = QComboBox()
         self.Carrangement_mode.addItems(self.available_arrangement_modes)
-        self.Carrangement_mode.currentIndexChanged.connect(self.arrangement_mode_changed)
+        self.Carrangement_mode.currentIndexChanged.connect(
+            self.arrangement_mode_changed
+        )
 
         self.Edist_of_locs_nm = QLineEdit()
         self.Edist_of_locs_nm.setText(str(self.dist_of_locs_nm))
@@ -81,12 +85,18 @@ class TestModeWindow(QWidget):
         self.Baccept.clicked.connect(self.accept_evaluate_return_dataset)
 
         self.layout.addRow("Number of locs", self.Enum_locs)
-        self.Warrangemet_widget = self.form_layout_workaround([self.Carrangement_mode, self.Edist_of_locs_nm])
+        self.Warrangemet_widget = self.form_layout_workaround(
+            [self.Carrangement_mode, self.Edist_of_locs_nm]
+        )
         self.layout.addRow("loc arrangement and distance [nm]", self.Warrangemet_widget)
         self.layout.addRow("Size mode", self.Csize_mode)
-        self.Wsigma_labels = self.form_layout_workaround([self.Lsigma_x_nm, self.Lsigma_y_nm, self.Lsigma_z_nm])
+        self.Wsigma_labels = self.form_layout_workaround(
+            [self.Lsigma_x_nm, self.Lsigma_y_nm, self.Lsigma_z_nm]
+        )
         self.layout.addRow(self.Wsigma_labels)
-        self.Wsigma_line_edits = self.form_layout_workaround([self.Esigma_x_nm, self.Esigma_y_nm, self.Esigma_z_nm])
+        self.Wsigma_line_edits = self.form_layout_workaround(
+            [self.Esigma_x_nm, self.Esigma_y_nm, self.Esigma_z_nm]
+        )
         self.layout.addRow(self.Wsigma_line_edits)
         self.layout.addRow(self.Baccept)
         self.setLayout(self.layout)
@@ -144,9 +154,13 @@ class TestModeWindow(QWidget):
     def arrangement_mode_changed(self):
         if self.Carrangement_mode.currentText() == self.available_arrangement_modes[0]:
             self.current_arrangement_mode = 0
-        elif self.Carrangement_mode.currentText() == self.available_arrangement_modes[1]:
+        elif (
+            self.Carrangement_mode.currentText() == self.available_arrangement_modes[1]
+        ):
             self.current_arrangement_mode = 1
-        elif self.Carrangement_mode.currentText() == self.available_arrangement_modes[2]:
+        elif (
+            self.Carrangement_mode.currentText() == self.available_arrangement_modes[2]
+        ):
             self.current_arrangement_mode = 2
         else:
             self.current_arrangement_mode = 3
@@ -180,23 +194,34 @@ class TestModeWindow(QWidget):
             sigmas[2, :] *= float(self.Esigma_z_nm.text())
 
         locs = np.rec.array(
-            (np.arange(self.num_of_locs),
-             locs_pos_nm[0, :],
-             locs_pos_nm[1, :],
-             locs_pos_nm[2, :],
-             sigmas[0, :],
-             sigmas[1, :],
-             sigmas[2, :],
-             np.ones(self.num_of_locs),)
-            , dtype=LOCS_DTYPE)
+            (
+                np.arange(self.num_of_locs),
+                locs_pos_nm[0, :],
+                locs_pos_nm[1, :],
+                locs_pos_nm[2, :],
+                sigmas[0, :],
+                sigmas[1, :],
+                sigmas[2, :],
+                np.ones(self.num_of_locs),
+            ),
+            dtype=LOCS_DTYPE,
+        )
 
         self.parent.get_dataset_from_test_mode(
-            datasets=[LocalizationData(locs=locs, name="Generated in Testmode", pixelsize_nm=1,
-                                       zdim_present=True,
-                                       sigma_present=True, photon_count_present=False,
-                                       parent=self.parent)])
+            datasets=[
+                LocalizationData(
+                    locs=locs,
+                    name="Generated in Testmode",
+                    pixelsize_nm=1,
+                    zdim_present=True,
+                    sigma_present=True,
+                    photon_count_present=False,
+                    parent=self.parent,
+                )
+            ]
+        )
         self.Baccept.setText("Recreate")
-        self.recreate=True
+        self.recreate = True
 
     def create_line_dataset(self):
         locs = np.ones((3, self.num_of_locs))
@@ -226,12 +251,18 @@ class TestModeWindow(QWidget):
         return locs
 
     def create_random_dataset(self):
-        locs = np.random.rand(3, self.num_of_locs) * self.dist_of_locs_nm * np.cbrt(self.num_of_locs) * 2
+        locs = (
+            np.random.rand(3, self.num_of_locs)
+            * self.dist_of_locs_nm
+            * np.cbrt(self.num_of_locs)
+            * 2
+        )
         return locs
 
 
 import sys
-from PyQt5.QtWidgets import QApplication
+
+from qtpy.QtWidgets import QApplication
 
 """if __name__ == '__main__':
     app = QApplication(sys.argv)

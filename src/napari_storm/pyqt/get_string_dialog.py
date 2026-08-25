@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QDialog, QFormLayout, QLineEdit
+from qtpy.QtWidgets import (QDialog, QFormLayout, QLabel, QLineEdit,
+                            QPushButton, QWidget)
 
 
 class GetStringWrapper(QDialog):
@@ -39,6 +40,3 @@ class GetStringDialogWidget(QWidget):
     def yes(self):
         self.parent.tobereturned = self.Eanswer.text()
         self.parent.accept()
-
-
-

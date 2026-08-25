@@ -1,22 +1,19 @@
+import io
 import json
 import logging
+import os
 import struct
 import zipfile
-import io
 
 import h5py
-import yaml
-from PyQt5.QtWidgets import QFileDialog, QInputDialog
-from qtpy import QtCore
-
-from .base_class import LocalizationDataBaseClass
-from .data_formats import *
-import os
 import numpy as np
-from ..pyqt.yes_or_no_dialog import *
-from ..pyqt.get_string_dialog import *
+import yaml
 
+from ..core import (DATA_IN_NM, PHOTON_COUNT_PRESENT, PIXEL_SIZE_NM,
+                    SIGMA_PRESENT, ZDIM_PRESENT, MetadataProvider)
 from ..CustomErrors import PixelSizeIsNecessaryError
+from .base_class import LocalizationDataBaseClass
+from .data_formats import storm_data_dtype
 
 
 class StormDatasetCollection:
@@ -39,30 +36,33 @@ class StormDatasetCollection:
             data = locs_file["molecule_set_data"]["datatable"][...]
             try:
                 pixelsize = (
-                        locs_file["molecule_set_data"]["xy_pixel_size_um"][...] * 1e3
+                    locs_file["molecule_set_data"]["xy_pixel_size_um"][...] * 1e3
                 )  # to µm to nm
-            except:
+            except KeyError:
                 pixelsize = locs_file["molecule_set_data"]["pixel_size_um"][...] * 1e3
         try:
             frames = data["FRAME_NUMBER"]
-        except:
+        except (KeyError, ValueError):
             frames = np.ones(len(data["X_POS_PIXELS"]))
         try:
             z_pos_px = data["Z_POS_PIXELS"]
             zdim = True
-        except:
+        except (KeyError, ValueError):
             z_pos_px = np.ones(len(data["X_POS_PIXELS"]))
             zdim = False
         locs = np.rec.array(
-            (frames,
-             data["X_POS_PIXELS"],
-             data["Y_POS_PIXELS"],
-             z_pos_px,
-             np.ones(len(data["X_POS_PIXELS"])),
-             np.ones(len(data["X_POS_PIXELS"])),
-             np.ones(len(data["X_POS_PIXELS"])),
-             data["PHOTONS"],)
-            , dtype=storm_data_dtype)
+            (
+                frames,
+                data["X_POS_PIXELS"],
+                data["Y_POS_PIXELS"],
+                z_pos_px,
+                np.ones(len(data["X_POS_PIXELS"])),
+                np.ones(len(data["X_POS_PIXELS"])),
+                np.ones(len(data["X_POS_PIXELS"])),
+                data["PHOTONS"],
+            ),
+            dtype=storm_data_dtype,
+        )
         unique_channels = np.unique(data["CHANNEL"])
         num_channel = len(unique_channels)
         list_of_datasets = []
@@ -70,9 +70,16 @@ class StormDatasetCollection:
             filename_pluschannel = name + f" Channel {i + 1}"
             self.dataset_names.append(filename_pluschannel)
             locs_in_ch = locs[data["CHANNEL"] == unique_channels[i]]
-            list_of_datasets.append(StormDataClass(locs=locs_in_ch, name=filename_pluschannel, pixelsize_nm=pixelsize,
-                                                   zdim_present=zdim,
-                                                   sigma_present=False, photon_count_present=True,))
+            list_of_datasets.append(
+                StormDataClass(
+                    locs=locs_in_ch,
+                    name=filename_pluschannel,
+                    pixelsize_nm=pixelsize,
+                    zdim_present=zdim,
+                    sigma_present=False,
+                    photon_count_present=True,
+                )
+            )
         self.list_of_datasets = list_of_datasets
         return self
 
@@ -81,14 +88,27 @@ class StormDataClass(LocalizationDataBaseClass):
     """An Object which contains STORM/PALM localization data,
     Subclass of LocalizationDataBaseClass"""
 
-    def __init__(self,
-                 locs=None,
-                 name=None,
-                 pixelsize_nm=None,
-                 zdim_present=False,
-                 sigma_present=False,
-                 photon_count_present=False, ):
+    #: STORM records hold camera pixels, not nanometres.  Declaring that here is
+    #: the whole of what this subclass has to say about coordinates; the
+    #: conversion, caching and filtering are the table's job.
+    POSITION_COLUMNS = {
+        "x": "x_pos_pixels",
+        "y": "y_pos_pixels",
+        "z": "z_pos_pixels",
+    }
 
+    def __init__(
+        self,
+        locs=None,
+        name=None,
+        pixelsize_nm=None,
+        zdim_present=False,
+        sigma_present=False,
+        photon_count_present=False,
+    ):
+        # Set before super().__init__, which assigns locs_all and therefore
+        # builds the table with this scale.
+        self._pixelsize_nm = pixelsize_nm
         super().__init__(locs, name, zdim_present)
         self.dataset_type = "StormDataClass(LocalizationDataBaseClass)"
         self.add_storm_dtype()
@@ -99,7 +119,9 @@ class StormDataClass(LocalizationDataBaseClass):
             self.uncertainty_defined = None
 
         else:
-            assert locs.dtype == self.locs_dtype, f"locs should be numpy rec array of format: {self.locs_dtype}"
+            assert (
+                locs.dtype == self.locs_dtype
+            ), f"locs should be numpy rec array of format: {self.locs_dtype}"
             if pixelsize_nm is None:
                 self.pixelsize_nm = 100.0
             else:
@@ -108,39 +130,30 @@ class StormDataClass(LocalizationDataBaseClass):
             self.sigma_present = sigma_present
             self.photon_count_present = photon_count_present
             self.uncertainty_defined = sigma_present or photon_count_present
-            self.locs_active = locs
-            self.locs_all = locs
 
+    def position_scale_nm(self):
+        """STORM stores camera pixels; the pixel size converts them.
 
-    @property
-    def x_pos_nm(self):
-        return self.locs_active.x_pos_pixels * self.pixelsize_nm
-
-    @property
-    def y_pos_nm(self):
-        return self.locs_active.y_pos_pixels * self.pixelsize_nm
-
-    @property
-    def z_pos_nm(self):
-        return self.locs_active.z_pos_pixels * self.pixelsize_nm
+        ``.item()`` rather than ``float()``: some importers read the pixel size
+        straight out of an HDF5 attribute, which arrives as a 0-d or 1-element
+        array.  It raises, rather than silently picking one, if a file ever
+        supplies more than one value.
+        """
+        if self._pixelsize_nm is None:
+            return 1.0
+        return float(np.asarray(self._pixelsize_nm).item())
 
     @property
-    def x_pos_nm_all(self):
-        return self.locs_all.x_pos_pixels * self.pixelsize_nm
+    def pixelsize_nm(self):
+        return self._pixelsize_nm
 
-    @property
-    def y_pos_nm_all(self):
-        return self.locs_all.y_pos_pixels * self.pixelsize_nm
-
-    @property
-    def z_pos_nm_all(self):
-        return self.locs_all.z_pos_pixels * self.pixelsize_nm
-
-    def number_of_active_entries(self):
-        return len(self.locs_active.x_pos_pixels)
-
-    def number_of_entries(self):
-        return len(self.locs_all.x_pos_pixels)
+    @pixelsize_nm.setter
+    def pixelsize_nm(self, value):
+        self._pixelsize_nm = value
+        # The nanometre columns are derived from it, so the table has to be told
+        # rather than left holding coordinates computed with the old value.
+        if self.table is not None:
+            self.table.position_scale_nm = self.position_scale_nm()
 
     def add_storm_dtype(self):
         self.locs_dtype = storm_data_dtype
@@ -152,103 +165,103 @@ class StormDataClass(LocalizationDataBaseClass):
         tmp_pixelsize_nm = dataset.attrs["pixelsize_nm"]
         tmp_sigma_present = dataset.attrs["sigma_present"]
 
-        return StormDataClass(locs=np.rec.array(dataset[...]), name=tmp_name, zdim_present=tmp_zdim_present,
-                              photon_count_present=tmp_photon_count_present, pixelsize_nm=tmp_pixelsize_nm,
-                              sigma_present=tmp_sigma_present)
+        return StormDataClass(
+            locs=np.rec.array(dataset[...]),
+            name=tmp_name,
+            zdim_present=tmp_zdim_present,
+            photon_count_present=tmp_photon_count_present,
+            pixelsize_nm=tmp_pixelsize_nm,
+            sigma_present=tmp_sigma_present,
+        )
 
-    def check_if_imported_data_isnm_or_px(self):
-        window = YesNoWrapper("Is data saved in nm?")
-        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        if window.exec_() == QDialog.Accepted:
-            data_in_nm = window.tobereturned
+    def check_if_imported_data_isnm_or_px(self, metadata_provider=None):
+        provider = metadata_provider or MetadataProvider()
+        data_in_nm = provider.ask_yes_no(DATA_IN_NM, "Is data saved in nm?")
+        if data_in_nm is not None:
             assert isinstance(data_in_nm, bool)
-            return data_in_nm
+        return data_in_nm
 
-    def check_if_metadata_is_complete(self, metadata):
+    def check_if_metadata_is_complete(self, metadata, metadata_provider=None):
+        provider = metadata_provider or MetadataProvider()
         if "name" not in metadata:
             metadata["name"] = "Untitled"
         if "zdim_present" not in metadata:
-            window = YesNoWrapper("Is zdim present?")
-            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            if window.exec_() == QDialog.Accepted:
-                zdim_present = window.tobereturned
+            zdim_present = provider.ask_yes_no(ZDIM_PRESENT, "Is zdim present?")
+            if zdim_present is not None:
                 assert isinstance(zdim_present, bool)
                 metadata["zdim_present"] = zdim_present
         if "pixelsize_nm" not in metadata:
-            window = GetStringWrapper("Pixelsize in nm as integer:")
-            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            if window.exec_() == QDialog.Accepted:
-                pixelsize_nm = window.tobereturned
+            pixelsize_nm = provider.ask_text(
+                PIXEL_SIZE_NM, "Pixelsize in nm as integer:"
+            )
+            if pixelsize_nm is not None:
                 metadata["pixelsize_nm"] = int(pixelsize_nm)
         if "sigma_present" not in metadata:
-            window = YesNoWrapper("Are uncertainty values present?")
-            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            if window.exec_() == QDialog.Accepted:
-                sigma_present = window.tobereturned
+            sigma_present = provider.ask_yes_no(
+                SIGMA_PRESENT, "Are uncertainty values present?"
+            )
+            if sigma_present is not None:
                 assert isinstance(sigma_present, bool)
                 metadata["sigma_present"] = sigma_present
         if "photon_count_present" not in metadata:
-            window = YesNoWrapper("Are photon count values present?")
-            window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            if window.exec_() == QDialog.Accepted:
-                photon_count_present = window.tobereturned
+            photon_count_present = provider.ask_yes_no(
+                PHOTON_COUNT_PRESENT, "Are photon count values present?"
+            )
+            if photon_count_present is not None:
                 assert isinstance(photon_count_present, bool)
                 metadata["photon_count_present"] = photon_count_present
         return metadata
 
-    def import_recognized_data(self, data, metadata=None):
+    def import_recognized_data(self, data, metadata=None, metadata_provider=None):
         data = np.rec.array(data, metadata["dataset_class_dtype"])
-        metadata = StormDataClass().check_if_metadata_is_complete(metadata)
-        if StormDataClass().check_if_imported_data_isnm_or_px():
+        metadata = StormDataClass().check_if_metadata_is_complete(
+            metadata, metadata_provider
+        )
+        if StormDataClass().check_if_imported_data_isnm_or_px(metadata_provider):
             data.x_pos_pixels /= metadata["pixelsize_nm"]
             data.y_pos_pixels /= metadata["pixelsize_nm"]
             data.z_pos_pixels /= metadata["pixelsize_nm"]
 
-        return StormDataClass(locs=data, name=metadata["name"], zdim_present=metadata["zdim_present"],
-                              pixelsize_nm=metadata["pixelsize_nm"], sigma_present=metadata["sigma_present"],
-                              photon_count_present=metadata["photon_count_present"])
+        return StormDataClass(
+            locs=data,
+            name=metadata["name"],
+            zdim_present=metadata["zdim_present"],
+            pixelsize_nm=metadata["pixelsize_nm"],
+            sigma_present=metadata["sigma_present"],
+            photon_count_present=metadata["photon_count_present"],
+        )
 
-    def save_as_npy(self, filename=None):
-        if filename is None:
-            filename = QFileDialog.getSaveFileName(caption="Save File", filter=".np")
-            filename = filename[0]
-        metadata = {'dataset_class': StormDataClass, 'name': self.name, 'zdim_present': self.zdim_present,
-                    'pixelsize_nm': self.pixelsize_nm,
-                    'sigma_present': self.sigma_present, 'photoncount_present': self.photon_count_present}
+    def save_as_npy(self, filename):
+        """Write to *filename*.  Choosing it is the caller's job, not a reader's."""
+        if not filename:
+            raise ValueError("save_as_npy needs a filename")
+        metadata = {
+            "dataset_class": StormDataClass,
+            "name": self.name,
+            "zdim_present": self.zdim_present,
+            "pixelsize_nm": self.pixelsize_nm,
+            "sigma_present": self.sigma_present,
+            "photoncount_present": self.photon_count_present,
+        }
         np.save(filename + ".npy", [self.locs, metadata])
 
-    def bandpass_locs_filter_by_property(self, prop, l_val=-np.inf, u_val=np.inf):
-        if "_nm" in prop:
-            prop = prop.replace("_nm", "_pixels")
-            l_val = l_val / self.pixelsize_nm
-            u_val = u_val / self.pixelsize_nm
-        if l_val == -np.inf and u_val == np.inf:
-            raise ValueError('Nothing to filter here')
-        else:
-            filter_idx = np.where((getattr(self.locs_active, prop) < l_val) | (getattr(self.locs_active, prop) > u_val))
-            self.locs_active = np.delete(self.locs_active, filter_idx)
-
-    def load_npy(self, filename=None):
-        if filename is None:
-            filename = QFileDialog.getOpenFileName(caption="Open File", filter=".npy")
-            filename = filename[0]
+    def load_npy(self, filename):
+        if not filename:
+            raise ValueError("load_npy needs a filename")
         data = np.load(filename + ".npy")
-        self.locs_all = data[0]
-        self.locs_active = self.locs_all
-        return data[1]['dataset_class'](locs=data[0], name=data[1]['name'], zdim_present=data[1]['zdim_present'],
-                                        pixelsize_nm=data[1]['pixelsize_nm'],
-                                        sigma_present=data[1]['sigma_present'],
-                                        photon_count_present=data[1]['photon_count_present'])
+        self.locs_all = data[0].copy()
+        return data[1]["dataset_class"](
+            locs=data[0],
+            name=data[1]["name"],
+            zdim_present=data[1]["zdim_present"],
+            pixelsize_nm=data[1]["pixelsize_nm"],
+            sigma_present=data[1]["sigma_present"],
+            photon_count_present=data[1]["photon_count_present"],
+        )
 
-    def get_idx_of_specified_prop_all(self, prop, l_val, u_val):
-        if "_nm" in prop:
-            prop = prop.replace("_nm", "_pixels")
-            l_val = l_val / self.pixelsize_nm
-            u_val = u_val / self.pixelsize_nm
-        values = getattr(self.locs_all, prop)
-        return np.where(np.invert((values < l_val) | (values > u_val)))[0]
-
-    def restrict_locs_by_sigma_threshold(self, sigma_min_pixels=-np.inf, sigma_max_pixels=np.inf):
+    def restrict_locs_by_sigma_threshold(
+        self, sigma_min_pixels=-np.inf, sigma_max_pixels=np.inf
+    ):
         assert self.sigma_present
         try:
             tmp = len(sigma_max_pixels)
@@ -261,14 +274,22 @@ class StormDataClass(LocalizationDataBaseClass):
 
         if tmp == 1:
             for i in range(len(properties)):
-                self.bandpass_locs_filter_by_property(properties[i], sigma_min_pixels, sigma_max_pixels)
+                self.bandpass_locs_filter_by_property(
+                    properties[i], sigma_min_pixels, sigma_max_pixels
+                )
         else:
             for i in range(len(properties)):
-                self.bandpass_locs_filter_by_property(properties[i], sigma_min_pixels[i], sigma_max_pixels[i])
+                self.bandpass_locs_filter_by_property(
+                    properties[i], sigma_min_pixels[i], sigma_max_pixels[i]
+                )
 
     def restrict_locs_by_photon_count(self, min_photon_count):
-        filter_idx = np.where(self.locs_all.photon_count < min_photon_count)
-        self.locs_active = np.delete(self.locs_active, filter_idx)
+        # The indices used to be looked up in locs_all and then deleted from
+        # locs_active, which only agreed while nothing else was filtered.
+        # Intersecting masks over the canonical table cannot disagree.
+        self.set_filter_mask(
+            self.filter_mask & (self.locs_all.photon_count >= min_photon_count)
+        )
 
     def load_info(self, path):
         """Loads Infos from Picassos .yaml"""
@@ -277,8 +298,9 @@ class StormDataClass(LocalizationDataBaseClass):
         try:
             with open(filename) as info_file:
                 info = list(yaml.load_all(info_file, Loader=yaml.FullLoader))
-        except FileNotFoundError as e:
-            print(f"\nAn error occured. Could not find metadata file:\n{filename}")
+        except FileNotFoundError:
+            logging.warning("Could not find metadata file: %s", filename)
+            info = []
         return info
 
     def load_locs(self, path):
@@ -291,16 +313,18 @@ class StormDataClass(LocalizationDataBaseClass):
         info = self.load_info(path)
         return locs, info
 
-    def load_hdf5(self, file_path, name):
+    def load_hdf5(self, file_path, name, metadata_provider=None):
         """Wrapper for load_locs and load_infos -> picassos hdf5"""
-        filename = file_path.split("/")[-1]
+        provider = metadata_provider or MetadataProvider()
         locs, info = self.load_locs(file_path)
         if hasattr(locs, "pixelsize"):
             pixelsize = locs.pixelsize_nm
         else:
-            pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
-            if not ok:
-                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
+            pixelsize = provider.ask_text(
+                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
+            )
+            if pixelsize is None:
+                raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)
         if hasattr(locs, "z"):
             locs.z = locs.z / pixelsize
@@ -330,17 +354,19 @@ class StormDataClass(LocalizationDataBaseClass):
         else:
             intensity_photons = np.ones(len(locs.x))
         locs = np.rec.array(
-            (locs.frame,
-             locs.x,
-             locs.y,
-             locs.z,
-             uncertainty_x_pixels,
-             uncertainty_y_pixels,
-             uncertainty_z_pixels,
-             intensity_photons,)
-            , dtype=storm_data_dtype)
-        self.locs_all = locs
-        self.locs_active = locs
+            (
+                locs.frame,
+                locs.x,
+                locs.y,
+                locs.z,
+                uncertainty_x_pixels,
+                uncertainty_y_pixels,
+                uncertainty_z_pixels,
+                intensity_photons,
+            ),
+            dtype=storm_data_dtype,
+        )
+        self.locs_all = locs.copy()
         self.name = name
         self.pixelsize_nm = pixelsize
         self.zdim_present = zdim
@@ -362,28 +388,22 @@ class StormDataClass(LocalizationDataBaseClass):
             data_list = np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
         for i in range(len(header)):
             data[header[i]] = data_list[:, i]
-        if 'pixelsize' in header:
-            pixelsize = data['"pixelsize"']
-        else:
-            pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
-            if not ok:
-                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
-        pixelsize = float(pixelsize)
+        pixelsize = 1
 
         if '"x [nm]"' in header:
             locs_pos_x_nm = data['"x [nm]"']
             locs_pos_y_nm = data['"y [nm]"']
-        elif 'x [nm]' in header:
-            locs_pos_x_nm = data['x [nm]']
-            locs_pos_y_nm = data['y [nm]']
+        elif "x [nm]" in header:
+            locs_pos_x_nm = data["x [nm]"]
+            locs_pos_y_nm = data["y [nm]"]
         else:
-            raise ImportError('Localisation Position in X or Y not found in header')
+            raise ImportError("Localisation Position in X or Y not found in header")
 
         if '"z [nm]"' in header:
             locs_pos_z_nm = data['"z [nm]"']
             zdim = True
-        elif 'z [nm]' in header:
-            locs_pos_z_nm = data['z [nm]']
+        elif "z [nm]" in header:
+            locs_pos_z_nm = data["z [nm]"]
             zdim = True
         else:
             locs_pos_z_nm = np.ones(len(locs_pos_x_nm))
@@ -392,39 +412,41 @@ class StormDataClass(LocalizationDataBaseClass):
         # Check if frame number info is present in file
         if '"frame"' in header:
             frame_numbers = data['"frame"']
-        elif 'frame' in header:
-            frame_numbers = data['frame']
+        elif "frame" in header:
+            frame_numbers = data["frame"]
         else:
             frame_numbers = np.ones(len(locs_pos_x_nm))
 
         # Check if uncertainty info is present in file
-        if 'uncertainty_xy [nm]' in header:
-            uncertainty_x_nm = data['uncertainty_xy [nm]']
-            uncertainty_y_nm = data['uncertainty_xy [nm]']
+        if "uncertainty_xy [nm]" in header:
+            uncertainty_x_nm = data["uncertainty_xy [nm]"]
+            uncertainty_y_nm = data["uncertainty_xy [nm]"]
             intensity_photons = np.ones(len(locs_pos_x_nm))
             sigma_present = True
             if zdim:
-                uncertainty_z_nm = data['uncertainty_z [nm]']
+                uncertainty_z_nm = data["uncertainty_z [nm]"]
             else:
                 uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif 'uncertainty_x [nm]' in header:
-            uncertainty_x_nm = data['uncertainty_x [nm]']
-            uncertainty_y_nm = data['uncertainty_y [nm]']
+        elif "uncertainty_x [nm]" in header:
+            uncertainty_x_nm = data["uncertainty_x [nm]"]
+            uncertainty_y_nm = data["uncertainty_y [nm]"]
             intensity_photons = np.ones(len(locs_pos_x_nm))
             sigma_present = True
             if zdim and "uncertainty_z [nm]" in header:
-                uncertainty_z_nm = data['uncertainty_z [nm]']
+                uncertainty_z_nm = data["uncertainty_z [nm]"]
             else:
-                uncertainty_z_nm = 2 * np.sqrt(uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2)
+                uncertainty_z_nm = 2 * np.sqrt(
+                    uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2
+                )
         elif '"intensity [photon]"' in header:
             photon_count_present = True
             intensity_photons = data['"intensity [photon]"']
             uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif 'intensity [photon]' in header:
+        elif "intensity [photon]" in header:
             photon_count_present = True
-            intensity_photons = data['intensity [photon]']
+            intensity_photons = data["intensity [photon]"]
             uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
             uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
@@ -450,13 +472,13 @@ class StormDataClass(LocalizationDataBaseClass):
         self.sigma_present = sigma_present
         self.photon_count_present = photon_count_present
         self.uncertainty_defined = sigma_present or photon_count_present
-        self.locs_all = locs
-        self.locs_active = locs
+        self.locs_all = locs.copy()
         self.pixelsize_nm = pixelsize
         self.zdim_present = zdim
         return [self]
 
-    def load_smlm(self, file_path, name):
+    def load_smlm(self, file_path, name, metadata_provider=None):
+        provider = metadata_provider or MetadataProvider()
         photon_count_present = True
         sigma_present = False
 
@@ -526,11 +548,12 @@ class StormDataClass(LocalizationDataBaseClass):
                                 unpack = struct.Struct(st).unpack
                                 tableDict = {h: [] for h in headers}
                                 for i in range(0, len(table_file), rowLen):
-                                    unpacked_data = unpack(table_file[i: i + rowLen])
+                                    unpacked_data = unpack(table_file[i : i + rowLen])
                                     for j, h in enumerate(headers):
                                         tableDict[h].append(unpacked_data[j])
                                 tableDict = {
-                                    h: np.array(tableDict[h]) for i, h in enumerate(headers)
+                                    h: np.array(tableDict[h])
+                                    for i, h in enumerate(headers)
                                 }
                             data = {}
                             data["min"] = [tableDict[h].min() for h in headers]
@@ -541,7 +564,9 @@ class StormDataClass(LocalizationDataBaseClass):
                             logger.info("table file loaded: %s", file_info["name"])
                     else:
                         raise Exception(
-                            "format mode {} not supported yet".format(file_format["mode"])
+                            "format mode {} not supported yet".format(
+                                file_format["mode"]
+                            )
                         )
                 elif file_info["type"] == "image":
                     if file_format["mode"] == "binary":
@@ -569,20 +594,19 @@ class StormDataClass(LocalizationDataBaseClass):
         prop = manifest["files"][-1]["data"]["tableDict"]
         try:
             pixelsize = prop["pixelsize"]
-        except:
-            pixelsize, ok = QInputDialog.getText(None, 'Pixelsize', f"Enter the pixelsize [nm]")
-            if not ok:
-                raise PixelSizeIsNecessaryError('Pixelsize is mandatory')
+        except KeyError:
+            pixelsize = provider.ask_text(
+                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
+            )
+            if pixelsize is None:
+                raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)
-        if (
-                not "intensity_photon_" in prop.keys()
-        ):  # If the photons are not given, set them to 1k
+        if "intensity_photon_" not in prop:  # Default missing photons to 1k
             photon_count_present = False
             prop["intensity_photon_"] = 1000 * np.ones(len(prop["x"]))
-        try:
-            prop["z"]
+        if "z" in prop:
             zdim = True
-        except:
+        else:
             prop["z"] = np.ones(len(prop["x"]))
             zdim = False
 
@@ -597,13 +621,13 @@ class StormDataClass(LocalizationDataBaseClass):
                 np.ones(len(prop["x"])),
                 prop["intensity_photon_"],
             ),
-            dtype=storm_data_dtype, )
+            dtype=storm_data_dtype,
+        )
         self.name = name
         self.sigma_present = sigma_present
         self.photon_count_present = photon_count_present
         self.uncertainty_defined = sigma_present or photon_count_present
-        self.locs_all = locs
-        self.locs_active = locs
+        self.locs_all = locs.copy()
         self.pixelsize_nm = pixelsize
         self.zdim_present = zdim
         return [self]

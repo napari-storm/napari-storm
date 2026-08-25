@@ -1,45 +1,99 @@
-import napari
-from PIL import ImageQt, Image
-from PyQt5.QtGui import QIcon, QPixmap
+from dataclasses import dataclass
 
-from .napari_particles.particles import Particles
 import numpy as np
-from .napari_particles.utils import generate_billboards_2d
-from .CustomErrors import *
+
+from .colormap_factory import make_colormaps
+from .CustomErrors import ParentError
+from .grid_plane_renderer import GridPlaneRenderer
+from .core import (ACTIVE, IDENTITY, AppearanceChanged, DatasetClosed,
+                   DatasetTraits, GaussianSettings, MaskChanged,
+                   RenderPlanner, StoreCleared, TransformChanged)
+from .memory_budget import max_localizations_for_budget, render_bytes_for
+from .ns_constants import FLAT_DATA_Z_NM
+from .core.renderer import Changed, LayerAppearance
+from .napari_particles.renderer import NapariParticlesRenderer
+from .napari_particles.selection import select_renderer
+from .scalebar_renderer import ScalebarRenderer
+
+
+@dataclass
+class RenderArrays:
+    """The per-localization inputs the billboard renderer consumes.
+
+    Derived from a dataset and the current render settings, and held per dataset
+    id rather than in three lists indexed alongside the dataset list.
+    """
+
+    sigmas: np.ndarray
+    size: float
+    values: np.ndarray
 
 
 class DataToLayerInterface:  # localization always with z # switch info with channel controls #
-    def __init__(self, parent, viewer, surface_layer=None, grid_plane_layer=None):
+    def __init__(
+        self,
+        parent,
+        viewer,
+        render_config=None,
+        surface_layer=None,
+        renderer=None,
+    ):
 
         # assert isinstance(parent, napari_storm) == True
         self._parent = parent
         self.viewer = viewer
-        self.n_layers = 0
-        self.colormap, self.colormap_icons = self.colormaps()
-        self.scalebar_layer = surface_layer
-        self.scalebar_exists = True
-        if not self.scalebar_layer:
-            self.scalebar_exists = False
-        self.grid_plane_layer = grid_plane_layer
-        self.default_line_thickness_nm = None
-        self.grid_plane_layer_opacity = .75
-        self.current_grid_plane_color = "white"
-        self.current_grid_plane_z_pos = None
+        self.render_config = render_config
+        # Callbacks for communicating back to the GUI without direct widget access
+        self._on_grid_line_distance_clamped = None  # set via property
+        self.on_layer_updated = None  # callable(channel_index: int)
+        # callable(message: str) -- resource limits that changed what is drawn
+        self.on_resource_limit_applied = None
+        # Ids of datasets currently thinned/clamped, so a limit is reported when
+        # it starts applying rather than on every slider tick.
+        self._budgeted_datasets = set()
+        self._clamped_splats = set()
+        # (dataset_id, column) pairs already reported as repaired, so a bad
+        # column is mentioned once rather than on every slider tick.
+        self._repaired_columns = set()
+        self.colormap, self.colormap_icons = make_colormaps()
+        self._sbr = ScalebarRenderer(viewer, render_config)
+        if surface_layer:
+            self._sbr.scalebar_layer = surface_layer
+            self._sbr.scalebar_exists = True
+        self._gpr = GridPlaneRenderer(viewer, render_config)
+        # The localization backend.  Everything on this side of it decides
+        # *what* to draw; everything behind it owns GPU resources and host layer
+        # objects.  Still injectable -- that seam is what let Level 3 measure
+        # three implementations on the same fixtures -- but the default is now
+        # the one that won that comparison, falling back when the GL backend
+        # this session got cannot instance.  See `selection.py`.
+        self.renderer = renderer or select_renderer(viewer)
+        # A user deleting our layer in napari's own layer list means they want
+        # that dataset gone.  Honour it rather than keeping half a session.
+        if hasattr(self.renderer, "on_layer_removed_by_host"):
+            self.renderer.on_layer_removed_by_host = self._on_layer_removed_by_host
 
-        # Render properties for every dataset, stored in lists
-        self.render_sigma = []
-        self.render_size = []
-        self.render_values = []
-        # self.render_colormap = []
+        # Renderer inputs, keyed by stable dataset id rather than by position.
+        # These were three parallel lists indexed alongside the dataset list, so
+        # unloading a dataset meant popping the right index out of each of them
+        # from code that had no way to know they existed (§4.2: "renderer
+        # resources are keyed by stable dataset IDs, not layer names or
+        # positions in parallel lists").
+        self.render_state = {}
         self.render_anti_alias = 0
+        # Planning -- what to draw -- is host-free and lives in core.  This
+        # class is now the adapter between the Qt-configured settings and that.
+        self.planner = RenderPlanner(on_repaired=self._report_repaired_column)
+        self._planning_for = None
 
         self.render_range_x = [np.inf, -np.inf]
         self.render_range_y = [np.inf, -np.inf]
         self.render_range_z = [np.inf, -np.inf]
-        self.offset_nm_3d = [0, 0, 0]
-        self.offset_nm_2d = [0, 0]
-
-        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
+        self.camera = [
+            self.viewer.camera.zoom,
+            self.viewer.camera.center,
+            self.viewer.camera.angles,
+        ]
 
     @property
     def parent(self):
@@ -47,7 +101,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     @parent.setter
     def parent(self, value):
-        raise ParentError('Cannot change parent of existing Widget')
+        raise ParentError("Cannot change parent of existing Widget")
 
     @property
     def localization_datasets(self):
@@ -55,735 +109,625 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     @localization_datasets.setter
     def localization_datasets(self, value):
-        raise ParentError('Cannot change parent\'s attribute from here')
+        raise ParentError("Cannot change parent's attribute from here")
+
+    @property
+    def on_grid_line_distance_clamped(self):
+        return self._gpr.on_clamped
+
+    @on_grid_line_distance_clamped.setter
+    def on_grid_line_distance_clamped(self, value):
+        self._on_grid_line_distance_clamped = value
+        self._gpr.on_clamped = value
+
+    @property
+    def current_grid_plane_color(self):
+        return self._gpr.current_grid_plane_color
+
+    @current_grid_plane_color.setter
+    def current_grid_plane_color(self, value):
+        self._gpr.current_grid_plane_color = value
 
     def create_remove_grid_plane_state(self, enable):
-        if enable:
-            if not self.current_grid_plane_z_pos:
-                if self.parent.zdim:
-                    self.current_grid_plane_z_pos = np.mean(self.render_range_z)
-                else:
-                    self.current_grid_plane_z_pos = 1
-            default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
-            num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
-                                          (self.parent.render_range_slider_y_percent[1] -
-                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
-            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
-                                          (self.parent.render_range_slider_x_percent[1] -
-                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
-            if not self.default_line_thickness_nm:
-                self.default_line_thickness_nm = 0.05 / np.mean((num_of_lines_x, num_of_lines_y)) * np.mean((
-                    self.render_range_y[1] - self.render_range_y[0],
-                    self.render_range_x[1] - self.render_range_x[0]))
+        self._gpr.create_remove(
+            enable, self.render_range_x, self.render_range_y, self.render_range_z
+        )
 
-            vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
-            # length of vectors
-            vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] -
-                                  self.parent.render_range_slider_x_percent[0]) / 100
-            # x and y start position of vectors
-            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
-                                 (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0]) / 100
-            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
-                                                                (self.render_range_x[1] - self.render_range_x[0])
-                                                                * (self.parent.render_range_slider_x_percent[
-                        0]) / 100)
-            vectors_x[:, 0, 0] = self.current_grid_plane_z_pos
-
-            vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
-            vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
-                                 (self.parent.render_range_slider_y_percent[1] -
-                                  self.parent.render_range_slider_y_percent[0]) / 100
-            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
-                                 (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0]) / 100
-            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
-                                                                (self.render_range_y[1] - self.render_range_y[0])
-                                                                * (self.parent.render_range_slider_y_percent[
-                        0]) / 100)
-            vectors_y[:, 0, 0] = self.current_grid_plane_z_pos
-
-            vectors = np.concatenate((vectors_x, vectors_y))
-            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=self.default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color=self.current_grid_plane_color,
-                                                            ndim=3,
-                                                            opacity=self.grid_plane_layer_opacity)
-        else:
-            self.default_line_thickness_nm = self.grid_plane_layer.edge_width
-            self.grid_plane_layer_opacity = self.grid_plane_layer.opacity
-            self.viewer.layers.remove('Grid_Plane')
-
-    def update_grid_plane(self, z_pos=None, line_thickness=None, line_distance_nm=None, color=None, opacity=None):
-        if line_distance_nm:
-            self.grid_plane_layer_opacity = self.grid_plane_layer.opacity
-            default_line_thickness_nm = self.grid_plane_layer.edge_width
-            default_line_dist_nm = self.parent.grid_plane_line_distance_um * 1000
-            num_of_lines_x = int(np.floor((self.render_range_y[1] - self.render_range_y[0]) *
-                                          (self.parent.render_range_slider_y_percent[1] -
-                                           self.parent.render_range_slider_y_percent[0]) / 100 / default_line_dist_nm))
-            num_of_lines_y = int(np.floor((self.render_range_x[1] - self.render_range_x[0]) *
-                                          (self.parent.render_range_slider_x_percent[1] -
-                                           self.parent.render_range_slider_x_percent[0]) / 100 / default_line_dist_nm))
-            if num_of_lines_x < 1 or num_of_lines_y < 1:
-                tmp_max_line_dist = np.round(np.floor(min((self.render_range_y[1] - self.render_range_y[0]) *
-                                                          (self.parent.render_range_slider_x_percent[1] -
-                                                           self.parent.render_range_slider_x_percent[0]) / 100,
-                                                          (self.render_range_x[1] - self.render_range_x[0]) *
-                                                          (self.parent.render_range_slider_y_percent[1] -
-                                                           self.parent.render_range_slider_y_percent[0]) / 100)) * .001,
-                                             3)
-                self.parent.Egrid_line_distance.setText(str(tmp_max_line_dist))
-                return
-            self.viewer.layers.remove('Grid_Plane')
-            vectors_x = np.zeros((num_of_lines_x + 1, 2, 3))
-            # length of vectors
-            vectors_x[:, 1, 1] = (self.render_range_x[1] * 1.01 - self.render_range_x[0]) * \
-                                 (self.parent.render_range_slider_x_percent[1] -
-                                  self.parent.render_range_slider_x_percent[0]) / 100
-            # x and y start position of vectors
-            vectors_x[:, 0, 2] = np.arange(num_of_lines_x + 1) * default_line_dist_nm + self.render_range_x[0] + \
-                                 (self.render_range_y[1] - self.render_range_y[0]) \
-                                 * (self.parent.render_range_slider_y_percent[0]) / 100
-            vectors_x[:, 0, 1] = np.ones(num_of_lines_x + 1) * (self.render_range_x[0] +
-                                                                (self.render_range_x[1] - self.render_range_x[0])
-                                                                * (self.parent.render_range_slider_x_percent[
-                        0]) / 100)
-            vectors_x[:, 0, 0] = self.current_grid_plane_z_pos
-
-            vectors_y = np.zeros((num_of_lines_y + 1, 2, 3))
-            vectors_y[:, 1, 2] = (self.render_range_y[1] * 1.01 - self.render_range_y[0]) * \
-                                 (self.parent.render_range_slider_y_percent[1] -
-                                  self.parent.render_range_slider_y_percent[0]) / 100
-            vectors_y[:, 0, 1] = np.arange(num_of_lines_y + 1) * default_line_dist_nm + self.render_range_x[0] + \
-                                 (self.render_range_x[1] - self.render_range_x[0]) \
-                                 * (self.parent.render_range_slider_x_percent[0]) / 100
-            vectors_y[:, 0, 2] = np.ones(num_of_lines_y + 1) * (self.render_range_y[0] +
-                                                                (self.render_range_y[1] - self.render_range_y[0])
-                                                                * (self.parent.render_range_slider_y_percent[
-                        0]) / 100)
-            vectors_y[:, 0, 0] = self.current_grid_plane_z_pos
-            vectors = np.concatenate((vectors_x, vectors_y))
-            self.grid_plane_layer = self.viewer.add_vectors(vectors, edge_width=default_line_thickness_nm,
-                                                            name="Grid_Plane", edge_color=self.current_grid_plane_color,
-                                                            ndim=3,
-                                                            opacity=self.grid_plane_layer_opacity)
-            self.parent.update_grid_plane_color()
-
-        if z_pos:
-            vectors = self.grid_plane_layer.data
-            if self.parent.zdim:
-                self.current_grid_plane_z_pos = z_pos / 100 * (self.render_range_z[1] - self.render_range_z[0])
-                vectors[:, 0, 0] = self.current_grid_plane_z_pos
-            else:
-                vectors[:, 0, 0] = 1
-            self.grid_plane_layer.data = vectors
-        if line_thickness:
-            self.grid_plane_layer.edge_width = 0.05 * np.exp(line_thickness / 10 - 5) / len(
-                self.grid_plane_layer.data[:, 0, 0]) / 2 \
-                                               * np.mean((self.render_range_x[1] - self.render_range_x[0],
-                                                          self.render_range_y[1] - self.render_range_y[0]))
-        if color:
-            self.current_grid_plane_color = color
-            self.grid_plane_layer.edge_color = color
-        if opacity:
-            self.grid_plane_layer.opacity = opacity / 100
+    def update_grid_plane(
+        self,
+        z_pos=None,
+        line_thickness=None,
+        line_distance_nm=None,
+        color=None,
+        opacity=None,
+    ):
+        self._gpr.update(
+            self.render_range_x,
+            self.render_range_y,
+            self.render_range_z,
+            z_pos=z_pos,
+            line_thickness=line_thickness,
+            line_distance_nm=line_distance_nm,
+            color=color,
+            opacity=opacity,
+        )
 
     def reset_render_range_and_offset(self):
         self.render_range_x = [np.inf, -np.inf]
         self.render_range_y = [np.inf, -np.inf]
         self.render_range_z = [np.inf, -np.inf]
-        self.offset_nm_3d = [0, 0, 0]
-        self.offset_nm_2d = [0, 0]
+
+    def on_store_event(self, event):
+        """React to what the store says happened.
+
+        Subscribed rather than called: unloading a dataset, recolouring one or
+        moving one in world space no longer requires whoever did it to know
+        that a renderer exists.
+        """
+        if isinstance(event, DatasetClosed):
+            self.renderer.close(event.dataset_id)
+            self.remove_dataset_state(event.dataset_id)
+        elif isinstance(event, StoreCleared):
+            self.renderer.close_all()
+            self.clear_dataset_state()
+        elif isinstance(event, AppearanceChanged):
+            if self.renderer.is_open(event.dataset_id):
+                self.renderer.set_appearance(event.dataset_id, event.appearance)
+        elif isinstance(event, (MaskChanged, TransformChanged)):
+            dataset = self._dataset_for(event.dataset_id)
+            if dataset is not None:
+                self.refresh_dataset(dataset)
+
+    def _dataset_for(self, dataset_id):
+        store = getattr(self.parent, "dataset_store", None)
+        return None if store is None else store.get(dataset_id)
+
+    def _channel_index_of(self, dataset):
+        datasets = self.parent.localization_datasets
+        return next(
+            (i for i, other in enumerate(datasets) if other is dataset), -1
+        )
+
+    def _report_repaired_column(self, column, n_repaired, n_total):
+        """The planner found unusable uncertainty or photon values."""
+        key = (self._planning_for, column)
+        if key in self._repaired_columns:
+            return
+        self._repaired_columns.add(key)
+        self._report_resource_limit(
+            f"{column}: {n_repaired:,} of {n_total:,} values were zero, "
+            f"negative or non-finite and were substituted with the smallest "
+            f"usable value. Those localizations are drawn at the smallest "
+            f"usable size, not omitted."
+        )
+
+    def _on_layer_removed_by_host(self, dataset_id):
+        """The user deleted a localization layer through napari."""
+        if getattr(self.parent, "_closed", False):
+            # The dock is already tearing down; the viewer is emptying its own
+            # layer list and there is no session left to keep consistent.
+            self.remove_dataset_state(dataset_id)
+            return
+        store = getattr(self.parent, "dataset_store", None)
+        dataset = None if store is None else store.get(dataset_id)
+        if dataset is None:
+            self.remove_dataset_state(dataset_id)
+            return
+        # Route it through the widget's own unload so the channel controls,
+        # filter entries and info card go with it, exactly as if the Unload
+        # button had been pressed.
+        self.parent.unload_dataset(dataset)
+
+    def close(self):
+        """Release every renderer resource this interface owns."""
+        self.renderer.close_all()
+        detach = getattr(self.renderer, "detach", None)
+        if detach is not None:
+            detach()
+        self.clear_dataset_state()
+
+    def clear_dataset_state(self):
+        """Release all renderer bookkeeping associated with localization data."""
+        self.render_state.clear()
+        self._forget_resource_limits()
+        self.reset_render_range_and_offset()
+
+    def remove_dataset_state(self, dataset_id):
+        """Release the renderer inputs owned by one unloaded dataset."""
+        self.render_state.pop(dataset_id, None)
+        self._budgeted_datasets.discard(dataset_id)
+        self._clamped_splats.discard(dataset_id)
+
+    def _forget_resource_limits(self):
+        """Allow limits to be reported again once the dataset set changes.
+
+        The budget is shared, so unloading a dataset changes every remaining
+        share; a warning that fired under the old split is worth repeating
+        under the new one.
+        """
+        self._budgeted_datasets.clear()
+        self._clamped_splats.clear()
+        self._repaired_columns.clear()
+
+    @property
+    def n_layers(self):
+        """How many datasets the renderer holds state for."""
+        return len(self.render_state)
 
     def set_render_range_and_offset(self):
         self.reset_render_range_and_offset()
         for dataset in self.parent.localization_datasets:
-            self.set_offset(dataset=dataset)
             coords = self.get_coords_from_all_locs(dataset=dataset)
             self.set_render_range(zdim=dataset.zdim_present, coords=coords)
         self.parent.move_camera_center_to_render_range_center()
 
+    @staticmethod
+    def percent_to_absolute(axis_range, percent_pair):
+        """Map a [low%, high%] slider pair onto an axis extent, in nanometres.
+
+        Localizations are rendered in true physical coordinates, so an axis does
+        not necessarily start at zero.  The general form is
+
+            absolute = minimum + percent / 100 * (maximum - minimum)
+
+        This previously read ``percent / 100 * maximum - offset``, which is the
+        same expression specialised to a data set whose minimum has been
+        translated to zero -- the job the auto-offset used to do.  Written this
+        way no translation of the data is required.
+        """
+        low, high = axis_range[0], axis_range[1]
+        if not np.isfinite(low) or not np.isfinite(high):
+            return np.asarray(percent_pair, dtype=float)
+        span = high - low
+        return low + np.asarray(percent_pair, dtype=float) / 100.0 * span
+
+    # ------------------------------------------------------------------
+    # Resource limits (P0-04)
+    # ------------------------------------------------------------------
+
+    def _report_resource_limit(self, message):
+        if self.on_resource_limit_applied is not None:
+            self.on_resource_limit_applied(message)
+
+    def _budget_share_mb(self):
+        """Megabytes this dataset may spend on host-side render arrays.
+
+        The configured budget is shared equally between the loaded datasets.
+        A dataset's share is applied when that dataset is created or updated;
+        loading another one deliberately does *not* re-thin the datasets that
+        are already on screen, because rebuilding a settled layer is the
+        broad-reconstruction behaviour P0-01 exists to remove.
+        """
+        budget_mb = getattr(self.render_config, "render_budget_mb", 0)
+        if not budget_mb:
+            return 0
+        n_datasets = max(1, len(self.parent.localization_datasets))
+        return float(budget_mb) / n_datasets
+
+    def apply_memory_budget(self, dataset):
+        """Thin *dataset*'s active set until it fits the render budget.
+
+        Returns the number of localizations dropped.  Over-budget datasets are
+        rendered as a uniform subsample rather than being allowed to allocate
+        past the limit, which is the "warn and select a lower-cost
+        representation" behaviour Level 1 asks for in place of a crash.
+        """
+        max_active = max_localizations_for_budget(self._budget_share_mb())
+        hidden = dataset.limit_active_to(max_active)
+        if hidden:
+            drawn = dataset.number_of_active_entries()
+            selected = dataset.number_of_filtered_entries()
+            if dataset.dataset_id not in self._budgeted_datasets:
+                self._budgeted_datasets.add(dataset.dataset_id)
+                self._report_resource_limit(
+                    f"{dataset.name}: drawing {drawn:,} of {selected:,} "
+                    f"localizations to stay within the "
+                    f"{self._budget_share_mb():.0f} MB render budget "
+                    f"({render_bytes_for(selected) / 1e6:.0f} MB required). "
+                    f"The dataset itself is untouched -- filtering and export "
+                    f"still see all {selected:,}. "
+                    f"Raise the budget with $NAPARI_STORM_RENDER_BUDGET_MB."
+                )
+        else:
+            self._budgeted_datasets.discard(dataset.dataset_id)
+        return hidden
+
+    def _field_of_view_nm(self):
+        """Largest finite world-space span across the current render ranges."""
+        spans = []
+        for axis_range in (
+            self.render_range_x,
+            self.render_range_y,
+            self.render_range_z,
+        ):
+            low, high = axis_range[0], axis_range[1]
+            if np.isfinite(low) and np.isfinite(high):
+                spans.append(high - low)
+        spans = [span for span in spans if span > 0]
+        return max(spans) if spans else None
+
+    def _splat_size_limit(self):
+        """The largest billboard edge the screen-space budget allows, or None."""
+        fraction = getattr(self.render_config, "max_splat_fraction_of_fov", 0)
+        field_of_view = self._field_of_view_nm()
+        if not fraction or field_of_view is None or not field_of_view > 0:
+            return None
+        return float(field_of_view) * float(fraction)
+
+    def _note_clamped_splat(self, dataset, size_nm):
+        """Say once when the screen-space cap started binding for a dataset."""
+        limit = self._splat_size_limit()
+        clamped = limit is not None and size_nm >= limit
+        if clamped:
+            if dataset.dataset_id not in self._clamped_splats:
+                self._clamped_splats.add(dataset.dataset_id)
+                fraction = self.render_config.max_splat_fraction_of_fov
+                self._report_resource_limit(
+                    f"{dataset.name}: Gaussian size clamped to {size_nm:,.0f} nm, "
+                    f"{fraction:.0%} of the field of view. Larger splats cost "
+                    "fragment throughput without adding visible detail."
+                )
+        else:
+            self._clamped_splats.discard(dataset.dataset_id)
+
     def set_render_range(self, zdim, coords):
+        """Accumulate the world-space extent of *coords* into the render ranges.
+
+        ``coords`` columns are ordered (z, y, x), napari's own.  render_range_x
+        always holds the x extent and render_range_y the y extent, for both 2-D
+        and 3-D data.
+
+        The 2-D branch used to store these swapped -- render_range_x took the
+        column holding y.  Consumers then disagreed about which convention
+        applied: the camera centring compensated for the swap and so was wrong
+        in 3-D, while the range filtering and the preview box did not
+        compensate and so were wrong in 2-D.  Both were masked while the
+        auto-offset started every axis at zero and fields of view were roughly
+        square.
+        """
+        coords = np.asarray(coords)
+        if coords.size == 0:
+            return
+        if coords.ndim != 2 or coords.shape[1] != 3:
+            raise ValueError("coords must have shape (N, 3) in (z, y, x) order")
+
+        self.render_range_x[1] = max(np.max(coords[:, 2]), self.render_range_x[1])
+        self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
+        self.render_range_x[0] = min(np.min(coords[:, 2]), self.render_range_x[0])
+        self.render_range_y[0] = min(np.min(coords[:, 1]), self.render_range_y[0])
         if zdim:
-            self.render_range_x[1] = max(np.max(coords[:, 1]), self.render_range_x[1])
-            self.render_range_y[1] = max(np.max(coords[:, 2]), self.render_range_y[1])
             self.render_range_z[1] = max(np.max(coords[:, 0]), self.render_range_z[1])
-            self.render_range_x[0] = min(np.min(coords[:, 1]), self.render_range_x[0])
-            self.render_range_y[0] = min(np.min(coords[:, 2]), self.render_range_y[0])
             self.render_range_z[0] = min(np.min(coords[:, 0]), self.render_range_z[0])
-        else:
-            self.render_range_x[1] = max(np.max(coords[:, 2]), self.render_range_x[1])
-            self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
-            self.render_range_x[0] = min(np.min(coords[:, 2]), self.render_range_x[0])
-            self.render_range_y[0] = min(np.min(coords[:, 1]), self.render_range_y[0])
 
-    def set_offset(self, dataset):
-        if dataset.zdim_present:
-            if self.offset_nm_3d == [0, 0, 0]:
-                self.offset_nm_3d = [-np.min(dataset.z_pos_nm),
-                                     -np.min(dataset.x_pos_nm),
-                                     -np.min(dataset.y_pos_nm)]
-            else:
-                self.offset_nm_3d[2] = np.max([self.offset_nm_3d[2],
-                                               -np.min(dataset.y_pos_nm)])
-                self.offset_nm_3d[1] = np.max([self.offset_nm_3d[1],
-                                               -np.min(dataset.x_pos_nm)])
-                self.offset_nm_3d[0] = np.max([self.offset_nm_3d[0],
-                                               -np.min(dataset.z_pos_nm)])
-
-        else:
-            if self.offset_nm_2d == [0, 0]:
-                self.offset_nm_2d = [-np.min(dataset.x_pos_nm),
-                                     -np.min(dataset.y_pos_nm)]
-            else:
-                self.offset_nm_2d[0] = np.max([self.offset_nm_2d[0],
-                                               -np.min(dataset.x_pos_nm)])
-                self.offset_nm_2d[1] = np.max([self.offset_nm_2d[1],
-                                               -np.min(dataset.y_pos_nm)])
-
-    def create_new_layer(self, dataset, merge=False, layer_name='SMLM Data', idx=-1):
+    def create_new_layer(self, dataset, merge=False, layer_name="SMLM Data", idx=-1):
         """Creating a Particle Layer"""
-        self.n_layers += 1
-        self.set_offset(dataset)
-        coords = self.get_coords_from_locs(dataset=dataset)
-        self.set_render_range(coords=coords, zdim=dataset.zdim_present)
+        # The extent has to be known before the budget is applied, because
+        # thinning changes which localizations exist but not where they are.
+        self.set_render_range(
+            coords=self.get_coords_from_all_locs(dataset=dataset),
+            zdim=dataset.zdim_present,
+        )
         if merge:
             self.set_render_range_and_offset()
-            dataset.restrict_locs_by_percent(self.parent.render_range_slider_x_percent,
-                                             self.parent.render_range_slider_y_percent,
-                                             self.parent.render_range_slider_z_percent)
-            coords = self.get_coords_from_locs(dataset=dataset)
-        self.set_render_sigmas(dataset=dataset, create=True)
-        self.set_render_values(dataset=dataset, create=True)
-        dataset.napari_layer_ref = Particles(
-            coords,
-            size=self.render_size[-1],
-            values=self.render_values[-1],
-            antialias=self.render_anti_alias,
-            colormap=self.colormap[-1],
-            sigmas=self.render_sigma[-1],
-            filter=None,
-            name=layer_name,
-        )
+            dataset.restrict_locs_by_percent(
+                self.render_config.range_x_percent,
+                self.render_config.range_y_percent,
+                self.render_config.range_z_percent,
+            )
+        n_non_finite = dataset.exclude_non_finite_positions()
+        if n_non_finite:
+            self._report_resource_limit(
+                f"{dataset.name}: {n_non_finite:,} localizations have a "
+                f"non-finite position and are not drawn. A NaN coordinate is "
+                f"not a measurement, and one left in the mesh would corrupt "
+                f"the extent and camera framing of every other layer."
+            )
+        self.apply_memory_budget(dataset)
+        # _render_request computes the sigma and value arrays.  Computing them
+        # here as well allocated a second (N, 3) float32 sigma array and a
+        # second (N,) value array per load -- 60 MB of avoidable peak on the 5M
+        # fixture, on exactly the datasets most likely to run out of memory.
         dataset.name = layer_name
-        dataset.napari_layer_ref.add_to_viewer(self.viewer)
-        self.viewer.camera.perspective = 50
-        dataset.napari_layer_ref.shading = 'gaussian'
-        self.viewer.camera.angles = (90, 0, -90)
-        self.camera = [self.viewer.camera.zoom, self.viewer.camera.center, self.viewer.camera.angles]
+        # colormap[-1] is a placeholder: the channel control applies the user's
+        # actual choice immediately after the layer is created.
+        self.renderer.open(
+            dataset.dataset_id,
+            self._render_request(
+                dataset, name=layer_name, colormap=self.colormap[-1]
+            ),
+        )
 
-        # print(len(self.list_of_datasets[-1].index),'idx,locs',len(self.list_of_datasets[-1].locs.x))
+        # add_layer already frames a newly inserted layer.  Camera recentering
+        # after range/filter changes is handled explicitly by the widget using
+        # normalized (x, y, z) render ranges.
+        self.viewer.camera.perspective = 50
+        self.viewer.camera.angles = (90, 0, -90)
+        self.camera = [
+            self.viewer.camera.zoom,
+            self.viewer.camera.center,
+            self.viewer.camera.angles,
+        ]
+
+    def _refresh_layer(self, dataset, channel_index, extend_range=False):
+        """Push the current selection and settings into an existing layer.
+
+        The single path by which a loaded dataset's rendered content changes.
+        It updates the buffers of the layer that is already there; it does not
+        remove or recreate one.
+        """
+        if not self.renderer.is_open(dataset.dataset_id):
+            return
+        if dataset.number_of_active_entries() == 0:
+            # Nothing left to draw.  Hide it rather than handing the renderer an
+            # empty mesh, and leave the layer in place so it can come back.
+            self.renderer.set_visible(dataset.dataset_id, False)
+            return
+
+        if extend_range:
+            self.set_render_range(
+                dataset.zdim_present, self.get_coords_from_locs(dataset)
+            )
+        # A filter or range change alters the selection and therefore every
+        # per-localization array; an appearance-only refresh does not move any
+        # localization, so the positions are unchanged.
+        changed = (
+            Changed.EVERYTHING
+            if extend_range
+            else (Changed.SIGMAS | Changed.VALUES)
+        )
+        self.renderer.update(
+            dataset.dataset_id, self._render_request(dataset, changed=changed)
+        )
+        if self.on_layer_updated:
+            self.on_layer_updated(channel_index)
+
+    def refresh_dataset(self, dataset):
+        """Re-apply this dataset's filters and redraw it, and only it.
+
+        The targeted update of §4.1: a change to one dataset's selection has no
+        bearing on any other, and rebuilding every layer to honour it was the
+        broad signalling the plan set out to remove.
+        """
+        self.update_data_range(dataset)
+        self._refresh_layer(
+            dataset, self._channel_index_of(dataset), extend_range=True
+        )
 
     def update_layers(self, aas=0, layer_name="SMLM Data"):
-        """Updating a Particle Layer"""
+        """Re-apply the render range and parameter filters to every layer.
+
+        P0-01: this used to close each layer, remove it from the viewer, build a
+        fresh ``Particles`` and add it back -- for a filter change, a slider
+        drag, or a reset. Every rebuild tore down and re-registered the layer's
+        VisPy visual, shader filters and three layer-list callbacks, and on the
+        5M fixture that teardown dominated the update.
+
+        ``Particles.update_particle_data`` rebuilds the billboard geometry from
+        whatever coordinates it is given, including a different number of them,
+        so a filter change needs new *buffers* but not a new *layer*.
+        """
         v = self.viewer
         self.camera = [v.camera.zoom, v.camera.center, v.camera.angles]
-        i = 0
-        for dataset in self.parent.localization_datasets:
-            self.update_data_range(dataset, dataset_idx=i)
-            if not dataset.x_pos_nm.size == 0:
-                v.layers.remove(dataset.name)
-                coords = self.get_coords_from_locs(dataset)
-                self.set_render_range(dataset.zdim_present, coords)
-                self.set_render_sigmas(dataset=dataset, channel_index=i)
-                self.set_render_values(dataset=dataset, channel_index=i)
-                dataset.napari_layer_ref = Particles(
-                    coords,
-                    size=self.render_size[i],
-                    values=self.render_values[i],
-                    antialias=self.render_anti_alias,
-                    colormap=self.colormap[i],
-                    sigmas=self.render_sigma[i],
-                    filter=None,
-                    name=dataset.name,
-                    visible=True
-                )
-                dataset.napari_layer_ref.add_to_viewer(v)
-                self.parent.channel[i].adjust_colormap_range()
-                self.parent.channel[i].adjust_z_color_encoding_opacity()
-                self.parent.channel[i].change_color_map()
-                dataset.napari_layer_ref.shading = "gaussian"
-                i += 1
-            else:
-                dataset.napari_layer_ref.visible = False
+        for channel_index, dataset in enumerate(self.parent.localization_datasets):
+            self.update_data_range(dataset)
+            self._refresh_layer(dataset, channel_index, extend_range=True)
         v.camera.angles = self.camera[2]
         v.camera.zoom = self.camera[0]
         v.camera.center = self.camera[1]
         v.camera.update({})
 
-    def update_data_range(self, dataset, dataset_idx=-1):
-        if dataset.zdim_present:
-            x_range = np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) * (
-                self.render_range_x[1]) - self.offset_nm_3d[1]
-            y_range = np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) * (
-                self.render_range_y[1]) - self.offset_nm_3d[2]
-            z_range = np.asarray(self.parent.render_range_slider_z_percent) / 100 * np.ones(2) * (
-                self.render_range_z[1]) - self.offset_nm_3d[0]
-            x_indices = dataset.get_idx_of_specified_prop_all(prop="x_pos_nm", l_val=x_range[0], u_val=x_range[1])
-            y_indices = dataset.get_idx_of_specified_prop_all(prop="y_pos_nm", l_val=y_range[0], u_val=y_range[1])
-            z_indices = dataset.get_idx_of_specified_prop_all(prop="z_pos_nm", l_val=z_range[0], u_val=z_range[1])
-            render_indices = np.intersect1d(x_indices, y_indices)
-            render_indices = np.intersect1d(render_indices, z_indices)
-        else:
-            x_range = np.asarray(self.parent.render_range_slider_x_percent) / 100 * np.ones(2) * (
-                self.render_range_x[1]) - self.offset_nm_2d[0]
-            y_range = np.asarray(self.parent.render_range_slider_y_percent) / 100 * np.ones(2) * (
-                self.render_range_y[1]) - self.offset_nm_2d[1]
-            x_indices = dataset.get_idx_of_specified_prop_all(prop="x_pos_nm", l_val=x_range[0], u_val=x_range[1])
-            y_indices = dataset.get_idx_of_specified_prop_all(prop="y_pos_nm", l_val=y_range[0], u_val=y_range[1])
-            render_indices = np.intersect1d(x_indices, y_indices)
-        to_be_removed_by_index = np.delete(np.arange(len(dataset.x_pos_nm_all)), render_indices)
-        if len(self.parent.data_filter_itf.filter_idx_list) > dataset_idx:
-            to_be_removed_by_index = np.concatenate((to_be_removed_by_index,
-                                      self.parent.data_filter_itf.filter_idx_list[dataset_idx]), dtype=int)
-        if to_be_removed_by_index.size > 1:
-            dataset.locs_active = np.delete(dataset.locs_all, to_be_removed_by_index)
-        else:
-            dataset.reset_filters()
+    def update_layer_appearance(self):
+        """Apply Gaussian/value changes while preserving each layer identity.
 
-    def update_layers2(self):
-        """Still doesn't work"""
-        v = napari.current_viewer()
-        for i in range(len(self.list_of_datasets)):
-            self.list_of_datasets[i].update_locs()
-            coords = self.get_coords_from_locs(self.list_of_datasets[i].pixelsize_nm, i)
-            values = self.list_of_datasets[i].values
-            size = self.list_of_datasets[i].size
+        Same mechanism as :meth:`update_layers`, minus the re-filtering: an
+        appearance change does not move any localization, so the render range
+        it contributes to is unchanged.
+        """
+        for channel_index, dataset in enumerate(self.parent.localization_datasets):
+            self._refresh_layer(dataset, channel_index)
 
-            coords = np.asarray(coords)
-            if np.isscalar(values):
-                values = values * np.ones(len(coords))
-            values = np.broadcast_to(values, len(coords))
-            size = np.broadcast_to(size, len(coords))
-            if coords.shape[1] == 2:
-                coords = np.concatenate([np.zeros((len(coords), 1)), coords], axis=-1)
+    def _render_request(
+        self, dataset, name=None, colormap=None, changed=Changed.EVERYTHING
+    ):
+        """Ask the planner what this dataset should look like right now."""
+        self._planning_for = dataset.dataset_id
+        request = self.planner.plan(
+            dataset.table,
+            self.gaussian_settings(),
+            self.traits_of(dataset),
+            name=name if name is not None else dataset.name,
+            transform=self.transform_of(dataset),
+            colormap=colormap,
+            antialias=self.render_anti_alias,
+            changed=changed,
+            size_limit=self._splat_size_limit(),
+        )
+        # Kept for the resource-limit reporting and for tests that inspect what
+        # the renderer was handed.
+        state = self._state_for(dataset)
+        state.sigmas, state.size, state.values = (
+            request.sigmas,
+            request.size,
+            request.values,
+        )
+        self._note_clamped_splat(dataset, request.size)
+        return request
 
-            vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
+    def set_appearance(self, dataset, **fields):
+        """Change how *dataset* is drawn, without touching what is drawn.
 
-            values = np.repeat(values, 4, axis=0)
-            vertices_old, faces_old, values_old = v.layers[
-                self.list_of_datasets[i].name
-            ].data
-            # print(f"before: {len(vertices_old), len(faces_old), len(values_old)}")
-            # print(f"after: {len(vertices), len(faces), len(values)}")
-            v.layers[self.list_of_datasets[i].name].data = (vertices, faces, values)
-
-    def colormaps(self):
-        """Creating the Custom Colormaps"""
-        cmaps = []
-        cmap_icons = []
-        names = ["red", "green", "blue"]
-        for i in range(3):
-            colors = np.zeros((2, 4))
-            colors[-1][i] = 1
-            colors[-1][-1] = 1
-            cmaps.append(
-                napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
+        Routed through the store, which records it on the dataset's state and
+        emits AppearanceChanged; this class hears that like any other listener
+        and passes it to the backend. The appearance therefore outlives the
+        control that set it, which Qt widget state did not.
+        """
+        store = getattr(self.parent, "dataset_store", None)
+        if store is not None and store.state_of(dataset) is not None:
+            store.set_appearance(dataset.dataset_id, **fields)
+        elif self.renderer.is_open(dataset.dataset_id):
+            self.renderer.set_appearance(
+                dataset.dataset_id, LayerAppearance(**fields)
             )
-            icon = np.zeros((128, 128, 4))
-            icon[:, :, -1] = 1
-            icon[:, :, i] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
-            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
-            cmap_icons.append(icon)
-        names = ["yellow", "cyan", "pink"]
-        for i in range(3):
-            colors = np.zeros((2, 4))
-            colors[-1][i] = 1
-            colors[-1][(i + 1) % 3] = 1
-            colors[-1][-1] = 1
-            cmaps.append(
-                napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
+
+    def appearance_of(self, dataset):
+        """The appearance recorded for *dataset*, or None."""
+        store = getattr(self.parent, "dataset_store", None)
+        state = None if store is None else store.state_of(dataset)
+        if state is not None:
+            return state.appearance
+        return self.renderer.appearance(dataset.dataset_id)
+
+    def value_range_of(self, dataset):
+        """The value range a contrast control should scale against."""
+        value_range = self.renderer.value_range(dataset.dataset_id)
+        # A backend with nothing drawn yet still has to give the control
+        # something to build its slider from.
+        return (0.0, 1.0) if value_range is None else value_range
+
+    def layer_for(self, dataset):
+        """The host layer drawing *dataset*, or None.
+
+        Backend-specific and deliberately *not* part of the protocol -- a host
+        layer object is exactly what the protocol exists to keep out of the
+        application. Nothing in the application uses this; it is here for tests
+        and inspection of the napari backend.
+        """
+        layer = getattr(self.renderer, "layer", None)
+        return None if layer is None else layer(getattr(dataset, "dataset_id", None))
+
+    def update_data_range(self, dataset):
+        # The render ranges and the localization coordinates are both in true
+        # nanometres, so the slider percentages map straight onto the axis
+        # extents with no offset to undo.
+        #
+        # Combining per-axis boolean masks with `&` replaces the previous
+        # np.where + np.intersect1d chain.  intersect1d sorts both inputs and
+        # allocates several temporaries per axis; the masks are one pass and one
+        # allocation of 1 B/localization each.
+        axes = ("x", "y", "z") if dataset.zdim_present else ("x", "y")
+        ranges = {
+            "x": (self.render_range_x, self.render_config.range_x_percent),
+            "y": (self.render_range_y, self.render_config.range_y_percent),
+            "z": (self.render_range_z, self.render_config.range_z_percent),
+        }
+        render_mask = None
+        for axis in axes:
+            axis_range, percent = ranges[axis]
+            low, high = self.percent_to_absolute(axis_range, percent)
+            axis_mask = dataset.get_mask_of_specified_prop_all(
+                prop=f"{axis}_pos_nm", l_val=low, u_val=high
             )
-            icon = np.zeros((128, 128, 4))
-            icon[:, :, -1] = 1
-            icon[:, :, i] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
-            icon[:, :, (i + 1) % 3] = np.interp((np.arange(128)+1)/128, [0, 1], [0, 1])
-            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
-            cmap_icons.append(icon)
-        names = ["orange", "mint", "purple"]
-        for i in range(3):
-            colors = np.zeros((2, 4))
-            colors[-1][i] = 1
-            colors[-1][(i + 1) % 3] = 0.5
-            colors[-1][-1] = 1
-            cmaps.append(
-                napari.utils.colormaps.colormap.Colormap(colors=colors, name=names[i])
-            )
-            icon = np.zeros((128, 128, 4))
-            icon[:, :, -1] = 1
-            icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
-            icon[:, :, (i + 1) % 3] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
-            icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
-            cmap_icons.append(icon)
-        colors = np.zeros((2, 4))
-        colors[-1][:] = 1
-        colors[:][-1] = 1
-        cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray"))
-        icon = np.zeros((128, 128, 4))
-        icon[:, :, -1] = 1
-        for i in range(4):
-            icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
-        icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
-        cmap_icons.append(icon)
-        colors = np.zeros((4, 4))
-        colors[1:, -1] = 1
-        colors[1:, 0] = 1
-        colors[2:, 1] = 1
-        colors[3, 2] = 1
-        cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="red hot"))
-        icon = np.zeros((128, 128, 4))
-        icon[:, :, -1] = 1
-        icon[:, 16:48, 0] = np.ones((128, 32)) * np.arange(32) / 32
-        icon[:, 48:, 0] = 1
-        icon[:, 48:112, 1] = np.ones((128, 64)) * np.arange(64) / 64
-        icon[:, 96:, 1] = 1
-        icon[:, 96:, 2] = np.ones((128, 32)) * np.arange(32) / 32
-        icon = QIcon(QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon*255)))))
-        cmap_icons.append(icon)
-        icon = np.zeros((128, 600, 4))
-        icon[:, :100, 0] = 1
-        icon[:, :100, 1] = np.ones((128, 100)) * np.arange(100)/100
-        icon[:, 100:200, 0] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
-        icon[:, 100:200, 1] = 1
-        icon[:, 200:300, 2] = np.ones((128, 100)) * np.arange(100) / 100
-        icon[:, 200:300, 1] = 1
-        icon[:, 300:400, 2] = 1
-        icon[:, 300:400, 1] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
-        icon[:, 400:500, 0] = np.ones((128, 100)) * np.arange(100) / 100
-        icon[:, 400:500, 2] = 1
-        icon[:, 500:, 0] = 1
-        icon[:, 500:, 2] = np.ones((128, 100)) * np.arange(100)[::-1] / 100
-        icon[:, :, 3] = 1
-        qpm = QPixmap.fromImage(ImageQt.ImageQt(Image.fromarray(np.uint8(icon * 255))))
-        cmap_icons.append(qpm)
-        return cmaps, cmap_icons
+            render_mask = axis_mask if render_mask is None else (render_mask & axis_mask)
 
-    def set_render_values(self, dataset, channel_index=-1, create=False):
-        """Update values, which are used to determine the rendered
-        color and intensity of each localization"""
-        if self.parent.render_gaussian_mode == 0:
-            # Fixed gaussian mode
+        param_indices = self.parent.data_filter_itf.indices_for(dataset)
+        dataset.apply_filters(render_mask, param_indices)
+        self.apply_memory_budget(dataset)
 
-            tmp_values = np.ones(dataset.locs_active.size)
+    def _state_for(self, dataset):
+        """The render record for *dataset*, created on first use."""
+        state = self.render_state.get(dataset.dataset_id)
+        if state is None:
+            state = RenderArrays(sigmas=None, size=0.0, values=None)
+            self.render_state[dataset.dataset_id] = state
+        return state
 
-        elif self.parent.render_gaussian_mode == 1:
-            # Variable gaussian mode
+    # ------------------------------------------------------------------
+    # Planning
+    # ------------------------------------------------------------------
 
-            assert dataset.uncertainty_defined == True
+    def gaussian_settings(self):
+        """The render configuration as the host-free planner wants it."""
+        config = self.render_config
+        return GaussianSettings(
+            mode=config.gaussian_mode,
+            fixed_sigma_xy_nm=config.fixed_sigma_xy_nm,
+            fixed_sigma_z_nm=config.fixed_sigma_z_nm,
+            var_psf_sigma_xy_nm=config.var_psf_sigma_xy_nm,
+            var_psf_sigma_z_nm=config.var_psf_sigma_z_nm,
+            var_sigma_min_xy_nm=config.var_sigma_min_xy_nm,
+            var_sigma_min_z_nm=config.var_sigma_min_z_nm,
+            z_color_encoding=bool(config.z_color_encoding),
+        )
 
-            if dataset.zdim_present:
-                # 3D data
+    @staticmethod
+    def traits_of(dataset):
+        """What this dataset's format actually recorded."""
+        return DatasetTraits(
+            zdim_present=bool(dataset.zdim_present),
+            sigma_present=bool(getattr(dataset, "sigma_present", False)),
+            photon_count_present=bool(
+                getattr(dataset, "photon_count_present", False)
+            ),
+            pixel_size_nm=float(getattr(dataset, "pixelsize_nm", None) or 1.0),
+        )
 
-                if dataset.sigma_present:
-                    # Sigma values present
+    def reference_plane_z_nm(self):
+        """Where a *newly imported* reference image should sit, in nanometres.
 
-                    sigma_x_pixels = dataset.locs_active.sigma_x_pixels
-                    sigma_y_pixels = dataset.locs_active.sigma_y_pixels
-                    sigma_z_pixels = dataset.locs_active.sigma_z_pixels
+        The centre of the localizations' depth range: for a 3-D dataset that
+        puts the image in the middle of the stack, and for a flat one it lands
+        on the localizations' own plane -- which is what makes napari's 2-D
+        display, a single slice, able to show both at once.
 
-                    tmp_product = sigma_x_pixels * sigma_y_pixels * sigma_z_pixels
+        With nothing loaded it falls back to the flat-data plane, so an image
+        imported first still meets a 2-D dataset imported second.
 
-                    tmp_values = 1.0 / tmp_product
+        Read once, at import.  It is deliberately **not** re-applied when a
+        dataset is later loaded or closed: §3.5 removed exactly that behaviour,
+        and §7.4 makes "loading a dataset does not move any other layer" an
+        acceptance gate.  Re-centring after the fact is a button the user
+        presses, not a rule that fires behind them.
+        """
+        low, high = self.render_range_z
+        if not np.isfinite(low) or not np.isfinite(high) or high < low:
+            return FLAT_DATA_Z_NM
+        return 0.5 * (float(low) + float(high))
 
-                    if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
-
-                else:
-                    # Calculate sigma according to photon count
-
-                    psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
-                    psf_sigma_z_nm = self.parent.render_var_gauss_PSF_sigma_z_nm
-
-                    psf_sigma_xy_pixels = psf_sigma_xy_nm / dataset.pixelsize_nm
-                    psf_sigma_z_pixels = psf_sigma_z_nm / dataset.pixelsize_nm
-
-                    sigma_xy_pixels = psf_sigma_xy_pixels / np.sqrt(dataset.locs_active.photon_count)
-                    sigma_z_pixels = psf_sigma_z_pixels / np.sqrt(dataset.locs_active.photon_count)
-
-                    tmp_product = sigma_xy_pixels ** 2 * sigma_z_pixels
-
-                    tmp_values = 1.0 / tmp_product
-                    if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
-
-            else:
-                # 2D data
-
-                if dataset.sigma_present:
-                    # Sigma values present
-
-                    sigma_x_pixels = dataset.locs_active.sigma_x_pixels
-                    sigma_y_pixels = dataset.locs_active.sigma_y_pixels
-
-                    tmp_product = sigma_x_pixels * sigma_y_pixels
-
-                    tmp_values = 1.0 / tmp_product
-
-                    if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
-
-                else:
-                    # Calculate sigma according to photon count
-
-                    psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
-
-                    psf_sigma_xy_pixels = psf_sigma_xy_nm / dataset.pixelsize_nm
-
-                    sigma_xy_pixels = psf_sigma_xy_pixels / np.sqrt(dataset.locs_active.photon_count)
-
-                    tmp_product = sigma_xy_pixels ** 2
-
-                    tmp_values = 1.0 / tmp_product
-
-                    if not np.max(tmp_values) == np.min(tmp_values):
-                        tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
-            # if not all the same values map 99th percentile to 1
-            tmp_values /= np.percentile(tmp_values, 99)
-
-        if self.parent.z_color_encoding_mode == 1:
-            # Color the localizations according to their Z-coordinate
-            #
-            # In this case, it is not possible to render unit volume gaussians
-            # by adjusting their "intensity" via the value parameter.  Rather,
-            # the value parameter is used in conjunction with the color map to
-            # assign a z-dependent color to each localization.
-
-            assert dataset.zdim_present == True
-
-            tmp_coords = self.active_locs_to_choords(dataset)
-
-            tmp_values = tmp_coords.z_pos_pixels
-
-            if not np.max(tmp_values) == np.min(tmp_values):
-                tmp_values = (tmp_values - np.min(tmp_values)) / (np.max(tmp_values) - np.min(tmp_values))
-
-        assert np.max(tmp_values) > 0
-
-        # Store values
-        if create:
-            self.render_values.append(tmp_values)
-        else:
-            self.render_values[channel_index] = tmp_values
-
-    def set_render_sigmas(self, dataset, channel_index=-1, create=False):
-        """Update rendered sigma values"""
-        if self.parent.render_gaussian_mode == 0:
-            # Fixed gaussian mode
-
-            sigma_xy_nm = self.parent.render_fixed_gauss_sigma_xy_nm
-            sigma_z_nm = self.parent.render_fixed_gauss_sigma_z_nm
-
-            tmp_sigma_xy = sigma_xy_nm * np.ones_like(dataset.x_pos_nm)
-            tmp_sigma_z = sigma_z_nm * np.ones_like(dataset.x_pos_nm)
-
-            tmp_render_sigma_nm = np.swapaxes([tmp_sigma_z, tmp_sigma_xy, tmp_sigma_xy], 0, 1)
-
-        elif self.parent.render_gaussian_mode == 1:
-            # Variable gaussian mode
-
-            if dataset.sigma_present:
-                # Sigma values present
-
-                sigma_x_nm = dataset.locs_active.sigma_x_pixels * dataset.pixelsize_nm
-                sigma_y_nm = dataset.locs_active.sigma_y_pixels * dataset.pixelsize_nm
-                sigma_z_nm = dataset.locs_active.sigma_z_pixels * dataset.pixelsize_nm
-
-                sigma_x_nm[sigma_x_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
-                    self.parent.render_var_gauss_sigma_min_xy_nm
-                sigma_y_nm[sigma_y_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
-                    self.parent.render_var_gauss_sigma_min_xy_nm
-                sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
-                    self.parent.render_var_gauss_sigma_min_z_nm
-
-                # leave out biggest 1 percent
-                sigma_x_nm[sigma_x_nm > np.percentile(sigma_x_nm, 99)] = np.percentile(sigma_x_nm, 99)
-                sigma_y_nm[sigma_y_nm > np.percentile(sigma_y_nm, 99)] = np.percentile(sigma_y_nm, 99)
-                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
-
-                tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_y_nm, sigma_x_nm], 0, 1)
-
-            else:
-                # Calculate sigma values based on photon counts
-
-                psf_sigma_xy_nm = self.parent.render_var_gauss_PSF_sigma_xy_nm
-                psf_sigma_z_nm = self.parent.render_var_gauss_PSF_sigma_z_nm
-
-                sigma_xy_nm = psf_sigma_xy_nm / np.sqrt(dataset.locs_active.photon_count)
-                sigma_z_nm = psf_sigma_z_nm / np.sqrt(dataset.locs_active.photon_count)
-
-                sigma_xy_nm[sigma_xy_nm < self.parent.render_var_gauss_sigma_min_xy_nm] = \
-                    self.parent.render_var_gauss_sigma_min_xy_nm
-                sigma_z_nm[sigma_z_nm < self.parent.render_var_gauss_sigma_min_z_nm] = \
-                    self.parent.render_var_gauss_sigma_min_z_nm
-
-                # leave out biggest 1 percent
-                sigma_xy_nm[sigma_xy_nm > np.percentile(sigma_xy_nm, 99)] = np.percentile(sigma_xy_nm, 99)
-                sigma_z_nm[sigma_z_nm > np.percentile(sigma_z_nm, 99)] = np.percentile(sigma_z_nm, 99)
-
-                tmp_render_sigma_nm = np.swapaxes([sigma_z_nm, sigma_xy_nm, sigma_xy_nm], 0, 1)
-        else:
-            raise RuntimeError('Render Gaussian Mode undefined')
-        tmp_render_sigma_norm = tmp_render_sigma_nm / np.max(tmp_render_sigma_nm)
-
-        # Store sigma values and set render size
-        if create:
-            self.render_sigma.append(tmp_render_sigma_norm)
-            self.render_size.append(5 * np.max(tmp_render_sigma_nm))
-        else:
-            self.render_sigma[channel_index] = tmp_render_sigma_norm
-            self.render_size[channel_index] = 5 * np.max(tmp_render_sigma_nm)
+    def transform_of(self, dataset):
+        """Where this dataset sits in world space."""
+        store = getattr(self.parent, "dataset_store", None)
+        state = None if store is None else store.state_of(dataset)
+        return IDENTITY if state is None else state.transform
 
     def get_coords_from_locs(self, dataset):
-        """Calculating Particle Coordinates from Locs"""
-        if dataset.zdim_present:
-            num_of_locs = len(dataset.x_pos_nm)
-            coords = np.zeros([num_of_locs, 3])
-            coords[:, 0] = dataset.z_pos_nm + self.offset_nm_3d[0]
-            coords[:, 1] = dataset.x_pos_nm + self.offset_nm_3d[1]
-            coords[:, 2] = dataset.y_pos_nm + self.offset_nm_3d[2]
-
-        else:
-            num_of_locs = len(dataset.x_pos_nm)
-            coords = np.zeros([num_of_locs, 3])
-            coords[:, 1] = dataset.x_pos_nm + self.offset_nm_2d[0]
-            coords[:, 2] = dataset.y_pos_nm + self.offset_nm_2d[1]
-            coords[:, 0] = np.ones(num_of_locs)
-        return coords
+        """The drawn coordinates, in the renderer's (z, y, x) order."""
+        return self.planner.coordinates(
+            dataset.table.selection(ACTIVE),
+            self.traits_of(dataset),
+            self.transform_of(dataset),
+        )
 
     def get_coords_from_all_locs(self, dataset):
-        """Calculating Particle Coordinates from Locs"""
+        """Every localization's coordinates, in the renderer's (z, y, x) order."""
         if dataset.zdim_present:
             num_of_locs = len(dataset.x_pos_nm_all)
-            coords = np.zeros([num_of_locs, 3])
-            coords[:, 0] = dataset.z_pos_nm_all + self.offset_nm_3d[0]
-            coords[:, 1] = dataset.x_pos_nm_all + self.offset_nm_3d[1]
-            coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_3d[2]
+            coords = np.zeros([num_of_locs, 3], dtype=np.float32)
+            coords[:, 0] = dataset.z_pos_nm_all
+            coords[:, 1] = dataset.y_pos_nm_all
+            coords[:, 2] = dataset.x_pos_nm_all
 
         else:
             num_of_locs = len(dataset.x_pos_nm_all)
-            coords = np.zeros([num_of_locs, 3])
-            coords[:, 1] = dataset.x_pos_nm_all + self.offset_nm_2d[0]
-            coords[:, 2] = dataset.y_pos_nm_all + self.offset_nm_2d[1]
-            coords[:, 0] = np.ones(num_of_locs)
+            coords = np.zeros([num_of_locs, 3], dtype=np.float32)
+            coords[:, 1] = dataset.y_pos_nm_all
+            coords[:, 2] = dataset.x_pos_nm_all
+            coords[:, 0] = np.ones(num_of_locs, dtype=np.float32)
         return coords
 
     def scalebar(self):
-        """Creating/Removing/Updating the custom Scalebar in 2 and 3D"""
-        v = napari.current_viewer()
-        cpos = v.camera.center
-        l = int(self.parent.Esbsize.text())
-        if self.parent.Cscalebar.isChecked() and not not all(self.parent.localization_datasets[-1].locs_active):
-            if self.parent.localization_datasets[-1].zdim_present:
-                list = [l, 0.125 * l / 2, 0.125 * l / 2]
-                faces = np.asarray(
-                    [
-                        [0, 1, 2],
-                        [1, 2, 3],
-                        [4, 5, 6],
-                        [5, 6, 7],
-                        [0, 2, 4],
-                        [4, 6, 2],
-                        [1, 3, 7],
-                        [1, 5, 7],
-                        [2, 3, 6],
-                        [3, 6, 7],
-                        [4, 5, 0],
-                        [0, 1, 5],
-                    ]
-                )
+        """Delegate to ScalebarRenderer."""
+        datasets = self.parent.localization_datasets
+        if not datasets:
+            # The scalebar is sized from a dataset's extent, so there is
+            # nothing to update before one is loaded.  Reached from the
+            # scalebar-size field's typing timer, which fires whether or not
+            # anything is open.
+            return
+        self._sbr.update(datasets[-1])
 
-                vertices = np.asarray(
-                    [
-                        [-list[1], list[1], list[2]],
-                        [-list[1], -list[1], list[2]],
-                        [-list[1], list[1], -list[2]],
-                        [-list[1], -list[1], -list[2]],
-                        [l - list[1], list[1], list[2]],
-                        [l - list[1], -list[1], list[2]],
-                        [l - list[1], list[1], -list[2]],
-                        [l - list[1], -list[1], -list[2]],
-                        [list[1], -list[1], list[2]],
-                        [-list[1], -list[1], list[2]],
-                        [list[1], -list[1], -list[2]],
-                        [-list[1], -list[1], -list[2]],
-                        [list[1], l - list[1], list[2]],
-                        [-list[1], l - list[1], list[2]],
-                        [list[1], l - list[1], -list[2]],
-                        [-list[1], l - list[1], -list[2]],
-                        [list[1], list[2], -list[1]],
-                        [-list[1], list[2], -list[1]],
-                        [list[1], -list[2], -list[1]],
-                        [-list[1], -list[2], -list[1]],
-                        [list[1], list[2], l - list[1]],
-                        [-list[1], list[2], l - list[1]],
-                        [list[1], -list[2], l - list[1]],
-                        [-list[1], -list[2], l - list[1]],
-                    ]
-                )
-                for i in range(len(vertices)):
-                    vertices[i] = vertices[i] + cpos - (l / 2, 0, 0)
-
-                faces = np.asarray(np.vstack((faces, faces + 8, faces + 16)))
-                # vertices=np.reshape(np.asarray(vertices),(24,3))
-            else:
-                list = [l, 0.05 * l]
-
-                faces = np.asarray([[0, 1, 3], [1, 2, 3], [4, 5, 7], [5, 6, 7]])
-                verts = [
-                    [cpos[1], cpos[2] - list[1]],
-                    [cpos[1] + list[0], cpos[2] - list[1]],
-                    [cpos[1] + list[0], cpos[2] + list[1]],
-                    [cpos[1], cpos[2] + list[1]],
-                    [cpos[1] - list[1], cpos[2]],
-                    [cpos[1] + list[1], cpos[2]],
-                    [cpos[1] + list[1], cpos[2] + list[0]],
-                    [cpos[1] - list[1], cpos[2] + list[0]],
-                ]
-                vertices = np.reshape(np.asarray(verts), (8, 2))
-            if self.scalebar_exists:
-                v.layers.remove('scalebar')
-                self.scalebar_layer = v.add_surface(
-                    (vertices, faces), name='scalebar', shading='none'
-                )
-            else:
-                self.scalebar_layer = v.add_surface(
-                    (vertices, faces), name='scalebar', shading='none'
-                )
-                self.scalebar_exists = True
-        else:
-            if self.scalebar_exists:
-                v.layers.remove('scalebar')
-                self.scalebar_exists = False
-
-    def active_locs_to_choords(self, dataset):
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
-
-        tmp_x = dataset.x_pos_nm
-        tmp_y = dataset.y_pos_nm
-        tmp_z = dataset.z_pos_nm
-
-        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
-        tmp_records.x_pos_pixels = tmp_y
-        tmp_records.y_pos_pixels = tmp_x
-        tmp_records.z_pos_pixels = tmp_z
-
-        return tmp_records
-
-    def all_locs_to_choords(self, dataset):
-        COORDS_DTYPE = [('x_pos_pixels', 'f4'),
-                        ('y_pos_pixels', 'f4'),
-                        ('z_pos_pixels', 'f4')]
-
-        tmp_x = dataset.x_pos_nm_all
-        tmp_y = dataset.y_pos_nm_all
-        tmp_z = dataset.z_pos_nm_all
-
-        tmp_records = np.recarray((tmp_x.size,), dtype=COORDS_DTYPE)
-        tmp_records.x_pos_pixels = tmp_y
-        tmp_records.y_pos_pixels = tmp_x
-        tmp_records.z_pos_pixels = tmp_z
-
-        return tmp_records
+    # active_locs_to_choords / all_locs_to_choords were removed here.  Both built
+    # a three-field record array whose fields were named "_pixels" but held
+    # nanometres, with x and y transposed on the way in.  The only remaining
+    # caller was the Z-colour path in set_render_values, which allocated the
+    # whole thing per update to read one column; it now reads the cached z
+    # column directly.

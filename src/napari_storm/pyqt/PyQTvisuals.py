@@ -1,8 +1,7 @@
-from PyQt5.QtWidgets import QFrame, QSizePolicy
+from qtpy.QtWidgets import QFrame, QSizePolicy
 
 
 class QHSeperationLine(QFrame):
-
     def __init__(self):
         super().__init__()
         self.setMinimumWidth(1)

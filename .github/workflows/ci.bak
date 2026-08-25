@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"  # or a matrix if you like
+      - name: Install dev tools
+        run: pip install .[dev]
+      - name: isort check
+        run: isort --check-only .
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      xvfb:
+        image: "selenium/standalone-chrome"  # provides Xvfb for GUI tests
+        options: >-
+          --entrypoint /usr/bin/Xvfb
+          selenium/standalone-chrome :99 -screen 0 1024x768x24
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install .[dev]
+      - name: Run pytest
+        env:
+          DISPLAY: :99
+        run: pytest --maxfail=1 --disable-warnings -q

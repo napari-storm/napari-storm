@@ -1,14 +1,18 @@
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QComboBox, QFormLayout,  QSpinBox, QPushButton
-from PyQt5 import QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as Canvas
 from matplotlib.figure import Figure
-from .CustomErrors import *
+from qtpy import QtCore
+from qtpy.QtWidgets import (QComboBox, QFormLayout, QPushButton, QSpinBox,
+                            QWidget)
+
+from .core import DatasetClosed, StoreCleared
+from .CustomErrors import ParentError
 from .pyqt.filter_slider import RangeSlider3, RangeSlider4
 
 
 class DataFilterWindow(QWidget):
     """GUI Elements for the data filter widget"""
+
     def __init__(self, parent):
         super().__init__()
 
@@ -73,6 +77,7 @@ class DataFilterWindow(QWidget):
 
 class ParameterHistogrammCanvas(QWidget):
     """Multipurpose canvas that is used in data filter widget"""
+
     def __init__(self, parent):
         super().__init__()
         # Attributes
@@ -88,11 +93,21 @@ class ParameterHistogrammCanvas(QWidget):
 
     def draw(self, dataset, parameter, bins, slider_values_decimal=(0, 1)):
         self.Canvas.reinitialise()
-        data = getattr(dataset.locs_active, parameter)
-        data[~ np.isfinite(data)] = 0
-        self.Canvas.ax.hist(data, bins=bins, facecolor='white')
+        # locs_active is a read-only view of the canonical table, so replace the
+        # non-finite entries in a throwaway copy rather than in place.  The old
+        # in-place write silently edited the dataset just by drawing a histogram.
+        data = np.asarray(getattr(dataset.locs_active, parameter))
+        data = np.where(np.isfinite(data), data, 0)
+        if data.size == 0:
+            # Every localization is filtered out.  There is no distribution to
+            # draw, and np.min/np.max on an empty array raises.
+            self.Canvas.ax.set_xlabel(parameter)
+            self.Canvas.ax.set_ylabel("#")
+            self.Canvas.draw()
+            return
+        self.Canvas.ax.hist(data, bins=bins, facecolor="white")
         self.Canvas.ax.set_xlabel(parameter)
-        self.Canvas.ax.set_ylabel('#')
+        self.Canvas.ax.set_ylabel("#")
         ylim = self.Canvas.ax.get_ylim()
         self.Canvas.ax.set_ylim(ylim)
         self.set_xrange(data=data, slider_values_decimal=slider_values_decimal)
@@ -101,22 +116,25 @@ class ParameterHistogrammCanvas(QWidget):
     def set_xrange(self, data, slider_values_decimal):
         tmp_xrange_data = [np.min(data), np.max(data)]
         tmp_absolute_xrange = tmp_xrange_data[1] - tmp_xrange_data[0]
-        xrange = [slider_values_decimal[0] * tmp_absolute_xrange + tmp_xrange_data[0],
-                  slider_values_decimal[1] * tmp_absolute_xrange + tmp_xrange_data[0]]
+        xrange = [
+            slider_values_decimal[0] * tmp_absolute_xrange + tmp_xrange_data[0],
+            slider_values_decimal[1] * tmp_absolute_xrange + tmp_xrange_data[0],
+        ]
         self.Canvas.ax.set_xlim(xrange)
 
 
 class MplCanvas(Canvas):
     """Multipurpose canvas"""
+
     def __init__(self):
         self.fig = Figure()
-        self.fig.set_facecolor('#262930')
+        self.fig.set_facecolor("#262930")
         self.ax = self.fig.subplots()
-        self.ax.set_facecolor('#262930')
+        self.ax.set_facecolor("#262930")
         Canvas.__init__(self, self.fig)
         # Canvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
         # Canvas.updateGeometry(self)
-        self.fig.subplots_adjust(0.2, 0.2, .9, .9)
+        self.fig.subplots_adjust(0.2, 0.2, 0.9, 0.9)
         # self.fig.tight_layout()
 
     def reinitialise(self):
@@ -124,18 +142,21 @@ class MplCanvas(Canvas):
             for ax in self.fig.axes:
                 ax.cla()
             self.ax = self.fig.gca()
-            self.fig.set_facecolor('#262930')
-            self.ax.set_facecolor('#262930')
+            self.fig.set_facecolor("#262930")
+            self.ax.set_facecolor("#262930")
             self.draw()
 
 
 class DataFilterInterface:
     """Core code of the data filtering functions"""
+
     def __init__(self, parent, data_filter_window):
         self._parent = parent
         self.dfw = data_filter_window
 
-        self.active_filters = []  # create a dictionary of all active filters including the "normal" render range,
+        self.active_filters = (
+            []
+        )  # create a dictionary of all active filters including the "normal" render range,
 
         self.n_datasets = 0
         self.current_dataset_idx = 0
@@ -145,7 +166,11 @@ class DataFilterInterface:
         self.filter_slider_values_decimal = [0, 1]
         self.filter_modes = ["Bandpass", "Bandstop"]
         self.filter_mode_active_idx = 0
-        self.filter_idx_list = []
+        # Removal indices per dataset, keyed by stable dataset id.  This was a
+        # list indexed alongside the dataset list, grown with a
+        # `while len - 1 <= idx: append` loop and popped by position on unload:
+        # one misordered call and a dataset inherited its neighbour's filter.
+        self.filter_indices = {}
         self.xrange_slider_values_decimal = (0, 1)
 
         self.typing_timer_nbins = QtCore.QTimer()
@@ -158,27 +183,59 @@ class DataFilterInterface:
     def list_of_datasets(self):
         return self.parent.localization_datasets
 
+    def on_store_event(self, event):
+        """Release filter state when its dataset goes away.
+
+        The combo box is still updated positionally by remove_dataset_entry --
+        a QComboBox has no notion of identity -- but the *data* is released by
+        id, here, without anyone having to remember to ask.
+        """
+        if isinstance(event, DatasetClosed):
+            self.filter_indices.pop(event.dataset_id, None)
+        elif isinstance(event, StoreCleared):
+            self.filter_indices.clear()
+
+    def indices_for(self, dataset):
+        """Removal indices recorded for *dataset*, or an empty array."""
+        return self.filter_indices.get(
+            dataset.dataset_id, np.asarray([], dtype=np.int32)
+        )
+
+    def _record_indices(self, dataset, indices):
+        """Add *indices* to whatever is already filtered out of *dataset*."""
+        existing = self.indices_for(dataset)
+        indices = np.asarray(indices, dtype=np.int32).ravel()
+        if existing.size:
+            indices = np.concatenate((existing, indices), dtype=np.int32)
+        self.filter_indices[dataset.dataset_id] = np.unique(indices)
+
     @property
     def parent(self):
         return self._parent
 
     @parent.setter
     def parent(self, value):
-        raise ParentError('Cannot change parent of existing Widget')
+        raise ParentError("Cannot change parent of existing Widget")
 
     def update_nbins(self):
         self.n_bins = self.dfw.SB_nbins.value()
         if self.list_of_datasets:
-            self.dfw.CanvasWidget.draw(dataset=self.list_of_datasets[self.current_dataset_idx],
-                                       parameter=self.list_of_filterable_parameters[self.current_parameter_idx],
-                                       bins=self.n_bins)
+            self.dfw.CanvasWidget.draw(
+                dataset=self.list_of_datasets[self.current_dataset_idx],
+                parameter=self.list_of_filterable_parameters[
+                    self.current_parameter_idx
+                ],
+                bins=self.n_bins,
+            )
 
     def connect_dfw_with_functions(self):
         """Connect GUI with functionalities"""
         self.dfw.Cparameter.currentIndexChanged.connect(self.current_parameter_changed)
         self.dfw.Cdatasets.currentIndexChanged.connect(self.current_dataset_changed)
         self.dfw.Sfilter_slider.add_data_filter_itf(self)
-        self.dfw.SB_nbins.valueChanged.connect(lambda: self._start_typing_timer(self.typing_timer_nbins))
+        self.dfw.SB_nbins.valueChanged.connect(
+            lambda: self._start_typing_timer(self.typing_timer_nbins)
+        )
         self.dfw.Cfilter_mode.addItems(self.filter_modes)
         self.dfw.Cfilter_mode.currentIndexChanged.connect(self.filter_mode_changed)
         self.dfw.Cfilter_mode.setCurrentIndex(self.filter_mode_active_idx)
@@ -190,94 +247,59 @@ class DataFilterInterface:
     def filter_mode_changed(self):
         self.filter_mode_active_idx = self.dfw.Cfilter_mode.currentIndex()
 
+    def _band_indices(self, dataset, reference_dataset):
+        """Canonical-row indices of *dataset* excluded by the current band.
+
+        The band is read off *reference_dataset* -- the one whose histogram the
+        user is looking at -- because "apply to all" means applying *this* band
+        everywhere, not recomputing a different band per dataset.  The two
+        near-identical 40-line blocks this replaces differed only in that.
+        """
+        parameter = self.list_of_filterable_parameters[self.current_parameter_idx]
+        reference = getattr(reference_dataset.locs_active, parameter)
+        span = np.max(reference) - np.min(reference)
+        low = self.filter_slider_values_decimal[0] * span + np.min(reference)
+        high = self.filter_slider_values_decimal[1] * span + np.min(reference)
+
+        values = getattr(dataset.locs_all, parameter)
+        mode = self.filter_modes[self.filter_mode_active_idx]
+        if mode == "Bandpass":
+            return np.where((values > high) | (values < low))[0]
+        if mode == "Bandstop":
+            return np.where((values < high) & (values > low))[0]
+        return None
+
     def apply_filtering(self, idx=None, update_layers=True):
-        """Find indices of datapoints which are meant to be filtered out"""
-        if isinstance(idx, bool):
+        """Record which datapoints the current band filters out."""
+        if isinstance(idx, bool) or idx is None:
             idx = self.current_dataset_idx
-        while len(self.filter_idx_list) - 1 <= idx:
-            self.filter_idx_list.append(np.asarray([], dtype=np.int32))
-        tmp_dataset = self.list_of_datasets[idx]
-        tmp_parameter_values_all = getattr(tmp_dataset.locs_all,
-                                           self.list_of_filterable_parameters[self.current_parameter_idx])
-        tmp_parameter_values_active = getattr(tmp_dataset.locs_active,
-                                              self.list_of_filterable_parameters[self.current_parameter_idx])
-        tmp_parameter_values_range_active = np.max(tmp_parameter_values_active) - np.min(tmp_parameter_values_active)
-        if self.filter_modes[self.filter_mode_active_idx] == "Bandpass":
-            tmp_indices = np.where(
-                (tmp_parameter_values_all >
-                 (self.filter_slider_values_decimal[1] * tmp_parameter_values_range_active +
-                  np.min(tmp_parameter_values_active))) |
-                (tmp_parameter_values_all <
-                 ((tmp_parameter_values_range_active * self.filter_slider_values_decimal[0])
-                  + np.min(tmp_parameter_values_active))))
-
-        elif self.filter_modes[self.filter_mode_active_idx] == "Bandstop":
-            tmp_indices = np.where(
-                (tmp_parameter_values_all <
-                 (self.filter_slider_values_decimal[1] * tmp_parameter_values_range_active
-                  + np.min(tmp_parameter_values_active))) &
-                (tmp_parameter_values_all >
-                 ((tmp_parameter_values_range_active * self.filter_slider_values_decimal[0])
-                  + np.min(tmp_parameter_values_active))))
-        else:
+        dataset = self.list_of_datasets[idx]
+        indices = self._band_indices(dataset, dataset)
+        if indices is None:
             return
-
-        if self.filter_idx_list[idx].size == 0:
-            self.filter_idx_list[idx] = np.asarray(tmp_indices, dtype=np.int32)
-        else:
-            self.filter_idx_list[idx] = np.concatenate((self.filter_idx_list[idx], tmp_indices[0]), dtype=np.int32)
-
-        self.filter_idx_list[idx] = np.unique(self.filter_idx_list[idx])
+        self._record_indices(dataset, indices)
         if update_layers:
             self.parent.data_to_layer_itf.set_render_range_and_offset()
-            self.parent.data_to_layer_itf.update_layers()
+            # Only this dataset's selection changed.  Announcing it redraws
+            # this dataset; it used to rebuild every layer in the viewer.
+            self.parent.dataset_store.notify_mask_changed(dataset.dataset_id)
             self.current_parameter_changed()
 
     def apply_filtering_to_all(self):
-        """like apply_filtering but apply filter to all open datasets"""
-        while len(self.filter_idx_list) - 1 <= len(self.list_of_datasets):
-            self.filter_idx_list.append(np.asarray([], dtype=np.int32))
-        tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
-        tmp_parameter_values_active = getattr(tmp_dataset.locs_active,
-                                              self.list_of_filterable_parameters[self.current_parameter_idx])
-        tmp_parameter_values_range_active = np.max(tmp_parameter_values_active) - np.min(tmp_parameter_values_active)
-        for i in range(len(self.list_of_datasets)):
-            tmp_dataset = self.list_of_datasets[i]
-            tmp_parameter_values_all = getattr(tmp_dataset.locs_all,
-                                               self.list_of_filterable_parameters[self.current_parameter_idx])
-            if self.filter_modes[self.filter_mode_active_idx] == "Bandpass":
-                tmp_indices = np.where(
-                    (tmp_parameter_values_all >
-                     (self.filter_slider_values_decimal[1] * tmp_parameter_values_range_active +
-                      np.min(tmp_parameter_values_active))) |
-                    (tmp_parameter_values_all <
-                     ((tmp_parameter_values_range_active * self.filter_slider_values_decimal[0])
-                      + np.min(tmp_parameter_values_active))))
-
-            elif self.filter_modes[self.filter_mode_active_idx] == "Bandstop":
-                tmp_indices = np.where(
-                    (tmp_parameter_values_all <
-                     (self.filter_slider_values_decimal[1] * tmp_parameter_values_range_active
-                      + np.min(tmp_parameter_values_active))) &
-                    (tmp_parameter_values_all >
-                     ((tmp_parameter_values_range_active * self.filter_slider_values_decimal[0])
-                      + np.min(tmp_parameter_values_active))))
-            else:
+        """like apply_filtering but apply the same band to all open datasets"""
+        reference = self.list_of_datasets[self.current_dataset_idx]
+        for dataset in self.list_of_datasets:
+            indices = self._band_indices(dataset, reference)
+            if indices is None:
                 return
-            if self.filter_idx_list[i].size == 0:
-                self.filter_idx_list[i] = np.asarray(tmp_indices, dtype=np.int32)
-            else:
-                self.filter_idx_list[i] = np.concatenate((self.filter_idx_list[i], tmp_indices[0]), dtype=np.int32)
-
-            self.filter_idx_list[i] = np.unique(self.filter_idx_list[i])
+            self._record_indices(dataset, indices)
         self.parent.data_to_layer_itf.set_render_range_and_offset()
         self.parent.data_to_layer_itf.update_layers()
         self.current_parameter_changed()
 
     def reset_all_filtering(self):
-        """Reset all filtering that has been done, by simply removing all indices saved in filtering list"""
-        for idx in range(len(self.filter_idx_list)):
-            self.filter_idx_list[idx] = np.asarray([], dtype=np.int32)
+        """Drop every recorded filter and restore each dataset's full selection."""
+        self.filter_indices.clear()
         for dataset in self.list_of_datasets:
             dataset.reset_filters()
         self.current_parameter_changed()
@@ -289,7 +311,33 @@ class DataFilterInterface:
         self.current_dataset_idx = 0
         self.current_parameter_idx = 0
         self.list_of_filterable_parameters = []
+        self.active_filters = []
+        self.filter_indices.clear()
         self.dfw.clear_entries()
+
+    def remove_dataset_entry(self, dataset_index):
+        """Remove one dataset while keeping the remaining filter state aligned."""
+        # filter_indices is released by id from on_store_event; only the
+        # positional widget state is this method's business.
+        if 0 <= dataset_index < len(self.active_filters):
+            self.active_filters.pop(dataset_index)
+
+        combo = self.dfw.Cdatasets
+        combo.blockSignals(True)
+        if 0 <= dataset_index < combo.count():
+            combo.removeItem(dataset_index)
+        self.n_datasets = combo.count()
+        self.current_dataset_idx = min(dataset_index, self.n_datasets - 1)
+        if self.n_datasets:
+            combo.setCurrentIndex(self.current_dataset_idx)
+        combo.blockSignals(False)
+
+        if not self.n_datasets:
+            self.clear_entries()
+            return
+        self.adjust_available_parameters_to_dataset_type()
+        self.current_parameter_changed()
+        self.reset_slider_positions()
 
     def add_dataset_entry(self, dataset_name):
         """Tell data filter itf that a new dataset was imported"""
@@ -313,9 +361,14 @@ class DataFilterInterface:
     def current_parameter_changed(self, reset=True):
         self.current_parameter_idx = self.dfw.Cparameter.currentIndex()
         if self.list_of_datasets:
-            self.dfw.CanvasWidget.draw(dataset=self.list_of_datasets[self.current_dataset_idx],
-                                       parameter=self.list_of_filterable_parameters[self.current_parameter_idx],
-                                       bins=self.n_bins, slider_values_decimal=self.xrange_slider_values_decimal)
+            self.dfw.CanvasWidget.draw(
+                dataset=self.list_of_datasets[self.current_dataset_idx],
+                parameter=self.list_of_filterable_parameters[
+                    self.current_parameter_idx
+                ],
+                bins=self.n_bins,
+                slider_values_decimal=self.xrange_slider_values_decimal,
+            )
         if reset:
             self.reset_slider_positions()
 
