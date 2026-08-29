@@ -8,6 +8,7 @@ Unlike voxel-based approaches, napari-storm renders each localization as a **bil
 
 ## Features
 - Import localizations from **Picasso HDF5, ThunderSTORM CSV, MINFLUX JSON/NPY/MFX**, or your own **custom format**.  
+- Read MINFLUX datasets from **Imspector 24.10 and later** as well, in every container it and [pyMINFLUX](https://pyminflux.ethz.ch/) write: `.npy`, `.json`, `.mat`, `.zarr` and `.pmx`. Which layout a file uses is worked out from the file itself, so nothing has to be selected.  
 - GPU-accelerated rendering of millions of points via **napari-particles**.  
 - Adjustable point spread functions (fixed / variable Gaussian).  
 - Multi-channel colormaps with per-channel contrast/opacity controls.  

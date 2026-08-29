@@ -10,6 +10,9 @@ from .CustomErrors import FileImportAbortedError, ParentError
 from .file_and_data_recognition import file_and_data_recognition
 from .localization_dataset_types.Custom_Import import custom_import_function
 from .localization_dataset_types.Minflux_class import MinfluxDataAIIterationClass
+from .localization_dataset_types.minflux_v2 import (MinfluxDataV2Class,
+                                                    is_v2_file,
+                                                    zarr_store_root)
 from .localization_dataset_types.storm_class import StormDataClass, StormDatasetCollection
 from .ns_constants import LOCS_DTYPE
 from .pyqt.prompts import QtMetadataProvider
@@ -107,6 +110,11 @@ class FileToLocalizationDataInterface:
 
     def open_known_filetype_and_import_dataset(self, file_path):
         """Find out dataset type by ending or other clues and try to import the known dataset type directly"""
+        # A Zarr MINFLUX dataset is a directory, not a file, so it has no
+        # extension to dispatch on -- and a plain file dialog cannot select a
+        # folder, so anything *inside* the store routes there too.
+        if zarr_store_root(file_path) is not None:
+            return self.load_mfx_v2(file_path)
         filetype = file_path.split(".")[-1]
         if filetype == "hdf5":
             if _ospath.isfile(file_path[: -(len(filetype))] + "yaml"):
@@ -136,6 +144,11 @@ class FileToLocalizationDataInterface:
             return self.load_mfx_npy(file_path)
         elif filetype == "mfx":
             return self.load_mfx(file_path)
+        # Imspector >= 24.10 also writes MINFLUX data as Matlab and as
+        # pyMINFLUX's own .pmx; neither has an older-layout counterpart, so
+        # they route straight to the new reader.
+        elif filetype in ("mat", "pmx"):
+            return self.load_mfx_v2(file_path)
         elif filetype == "ns":
             return self.load_ns(file_path)
         elif filetype in ["tif", "tiff", "dat", "raw"]:
@@ -222,8 +235,23 @@ class FileToLocalizationDataInterface:
         )
         return dataset_collection.list_of_datasets
 
+    def load_mfx_v2(self, file_path, itr=-1):
+        """loads localizations from the Imspector >= 24.10 MINFLUX layout"""
+        # Name a Zarr dataset after its store, not after whichever file inside
+        # it the user had to click to select the thing.
+        root = zarr_store_root(file_path)
+        source = str(root) if root is not None else file_path
+        filename = _ospath.basename(source.rstrip("/\\").replace("\\", "/"))
+        filename = self.check_namespace(filename)
+        self.dataset_names.append(filename)
+        return [
+            MinfluxDataV2Class().load(file_path=file_path, name=filename, itr=itr)
+        ]
+
     def load_mfx_json(self, file_path, itr=-1):
-        """loads localizations from AIs json format"""
+        """loads localizations from AIs json format, in either layout"""
+        if is_v2_file(file_path):
+            return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
@@ -233,7 +261,13 @@ class FileToLocalizationDataInterface:
         return [dataset]
 
     def load_mfx_npy(self, file_path, itr=-1):
-        """loads localizations from AIs npy format"""
+        """loads localizations from AIs npy format, in either layout
+
+        Which layout is decided from the file's header alone, so routing a
+        multi-gigabyte export costs no more than opening it.
+        """
+        if is_v2_file(file_path):
+            return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)

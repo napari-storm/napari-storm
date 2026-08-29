@@ -47,7 +47,16 @@ Or simply start the napari version that was just installed into your environment
 and then opening napari-storm in the plugins tab.
 
 ### Importing data into napari-storm
-Drag & drop onto the dock widget supported file types (Picasso, ThunderSTORM, MINFLUX, etc.) directly into napari or use the import file dialog. If that's not the case for your file:
+Drag & drop onto the dock widget supported file types (Picasso, ThunderSTORM, MINFLUX, etc.) directly into napari or use the import file dialog.
+
+MINFLUX data is read in both Abberior layouts: the original one, and the flat
+layout Imspector writes from **24.10** onwards. The newer one is accepted as
+`.npy`, `.json`, `.mat`, `.zarr`, and as pyMINFLUX's own `.pmx`. Which layout a
+file uses is determined from the file, so there is nothing to choose. A `.zarr`
+dataset is a folder rather than a file; since a file dialog cannot select one,
+pick any file inside it and the whole dataset opens.
+
+If your file is not covered:
 
 
 - one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
@@ -89,6 +98,23 @@ Then build and serve the docs:
 ```bash
 mkdocs serve
 ```
+
+## Acknowledgements
+
+napari-storm builds on work by others, with thanks:
+
+- **[napari-particles](https://github.com/maweigert/napari-particles)** by Martin
+  Weigert (BSD-3-Clause), the experimental Particles layer this plugin renders
+  through. The modules derived from it live in
+  `src/napari_storm/napari_particles/` and carry their own `NOTICE`.
+- **[pyMINFLUX](https://pyminflux.ethz.ch/)** by the Single Cell Facility of the
+  D-BSSE, ETH Zurich ([source](https://github.com/bsse-scf/pyMINFLUX),
+  Apache-2.0). Its `MinFluxReaderV2` is the reference for the MINFLUX layout
+  Imspector writes from 24.10 onwards: the version markers that tell the two
+  layouts apart, the per-container quirks, and the `.pmx` structure were all
+  read from it. napari-storm's reader is an independent implementation and
+  contains no pyMINFLUX code, but it would not exist without theirs having
+  documented the format first.
 
 ## Issues
 
