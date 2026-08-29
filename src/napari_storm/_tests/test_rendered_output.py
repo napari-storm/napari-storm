@@ -182,6 +182,12 @@ def _split_along_the_diagonal(image, shift):
     return split
 
 
+#: How much more asymmetric a split splat has to measure than a clean one.
+#: Well under the 6.8x a one-pixel split actually reaches, so the assertion
+#: fails on a defect getting harder to see rather than on rasterizer noise.
+MIN_SPLIT_RATIO = 3.0
+
+
 @pytest.mark.parametrize("shift", [1, 2])
 def test_the_symmetry_check_would_catch_a_split_splat(make_napari_viewer, shift):
     """Proof the tolerance above is load-bearing rather than merely satisfied.
@@ -189,12 +195,25 @@ def test_the_symmetry_check_would_catch_a_split_splat(make_napari_viewer, shift)
     Without this, 0.03 is a number that happens to pass today and nothing
     says how much room is left before it stops meaning anything.  Its
     predecessor, 0.08, passed both of these.
+
+    Stated as a ratio against the clean control rather than against 0.03,
+    because the absolute figure is the rasterizer's, not the renderer's.  A
+    one-pixel split measures 0.037 on CI's software rasterizer and 0.0256 on
+    an Apple GPU -- the same defect either side of the constant, so the
+    absolute form failed on this machine while passing in CI.  Against its own
+    control the split is 6.8x, and *that* is the property being claimed: the
+    check separates a split splat from a clean one.
     """
     clean = _render(make_napari_viewer, NapariParticlesRenderer)
-    assert max(_asymmetry(clean).values()) < 0.03, "the control is not clean"
+    clean_asymmetry = max(_asymmetry(clean).values())
+    assert clean_asymmetry < 0.03, "the control is not clean"
 
     split = _split_along_the_diagonal(clean, shift)
-    assert max(_asymmetry(split).values()) > 0.03
+    split_asymmetry = max(_asymmetry(split).values())
+    assert split_asymmetry > MIN_SPLIT_RATIO * clean_asymmetry, (
+        f"a {shift}px split measured {split_asymmetry:.4f} against a clean "
+        f"{clean_asymmetry:.4f}: too close to tell apart"
+    )
 
 
 def test_the_two_gaussian_backends_render_the_same_image(make_napari_viewer):
