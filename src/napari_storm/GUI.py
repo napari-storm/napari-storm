@@ -4,9 +4,9 @@ from qtpy import QtCore
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QDoubleValidator, QFont
 from qtpy.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout,
-                            QLabel, QLineEdit, QListWidget, QPushButton,
-                            QScrollArea, QSizePolicy, QSlider, QVBoxLayout,
-                            QWidget)
+                            QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+                            QListWidget, QPushButton, QScrollArea, QSizePolicy,
+                            QSlider, QVBoxLayout, QWidget)
 
 from napari_storm.CustomErrors import ParentError
 from napari_storm.ns_constants import (FWHM_TO_SIGMA, MAX_FWHM_NM,
@@ -206,31 +206,42 @@ class NapariStormGUI(QWidget):
         self.HL1 = QHSeperationLine()
         self.data_controls_tab_layout.addWidget(self.HL1, 10, 0, 1, 4)
 
+        # Issue #2: the three sliders and the button that resets them are one
+        # control, so they are framed as one.  Placing them in a box of their
+        # own layout also stops their spacing from being set by whatever else
+        # happens to share a row of the surrounding grid.
+        self.render_range_group = QGroupBox("Render range")
+        self.render_range_group_layout = QGridLayout(self.render_range_group)
+
         self.Lrangex = QLabel()
         self.Lrangex.setText("X-range")
-        self.data_controls_tab_layout.addWidget(self.Lrangex, 11, 0)
+        self.render_range_group_layout.addWidget(self.Lrangex, 0, 0)
 
         self.Lrangey = QLabel()
         self.Lrangey.setText("Y-range")
-        self.data_controls_tab_layout.addWidget(self.Lrangey, 12, 0)
+        self.render_range_group_layout.addWidget(self.Lrangey, 1, 0)
 
         self.Lrangez = QLabel()
         self.Lrangez.setText("Z-range")
-        self.data_controls_tab_layout.addWidget(self.Lrangez, 13, 0)
+        self.render_range_group_layout.addWidget(self.Lrangez, 2, 0)
 
         self.Srender_rangex = RangeSlider2(parent=self, type="x")
-        self.data_controls_tab_layout.addWidget(self.Srender_rangex, 11, 1, 1, 3)
+        self.render_range_group_layout.addWidget(self.Srender_rangex, 0, 1, 1, 3)
 
         self.Srender_rangey = RangeSlider2(parent=self, type="y")
-        self.data_controls_tab_layout.addWidget(self.Srender_rangey, 12, 1, 1, 3)
+        self.render_range_group_layout.addWidget(self.Srender_rangey, 1, 1, 1, 3)
 
         self.Srender_rangez = RangeSlider2(parent=self, type="z")
-        self.data_controls_tab_layout.addWidget(self.Srender_rangez, 13, 1, 1, 3)
+        self.render_range_group_layout.addWidget(self.Srender_rangez, 2, 1, 1, 3)
 
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText("Reset Render Range")
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.data_controls_tab_layout.addWidget(self.Breset_render_range, 14, 0, 1, 2)
+        self.render_range_group_layout.addWidget(
+            self.Breset_render_range, 3, 0, 1, 2
+        )
+
+        self.data_controls_tab_layout.addWidget(self.render_range_group, 11, 0, 1, 4)
 
         self.Bsave_scene = QPushButton("Save Scene…")
         self.Bsave_scene.setToolTip(
@@ -257,7 +268,7 @@ class NapariStormGUI(QWidget):
             "filters left active."
         )
         self.Bexport_image.clicked.connect(self.export_image)
-        self.data_controls_tab_layout.addWidget(self.Bexport_image, 14, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bexport_image, 12, 0, 1, 4)
 
         self.HL2 = QHSeperationLine()
         self.data_controls_tab_layout.addWidget(self.HL2, 15, 0, 1, 4)
@@ -328,9 +339,27 @@ class NapariStormGUI(QWidget):
             "Grid line distance [µm]:", self.Egrid_line_distance
         )
 
+        # Issue #38: the grid used to stop exactly at the data, which leaves
+        # nothing to read the edge of the data against.
+        self.Egrid_margin = QLineEdit()
+        self.Egrid_margin.setValidator(QDoubleValidator(0.0, 500.0, 1, self))
+        self.Egrid_margin.setText(str(self.grid_plane_margin_percent))
+        self.Egrid_margin.setToolTip(
+            "Extend the grid past the data by this share of each axis' span, "
+            "at both ends.  0 stops it at the render range."
+        )
+        self.Egrid_margin.textChanged.connect(
+            lambda: self._start_typing_timer(self.typing_timer_grid_margin)
+        )
+        self.decorator_tab_layout.addRow("Grid beyond data [%]:", self.Egrid_margin)
+
         self.typing_timer_grid = QtCore.QTimer()
         self.typing_timer_grid.setSingleShot(True)
         self.typing_timer_grid.timeout.connect(self.update_grid_plane_line_distance)
+
+        self.typing_timer_grid_margin = QtCore.QTimer()
+        self.typing_timer_grid_margin.setSingleShot(True)
+        self.typing_timer_grid_margin.timeout.connect(self.update_grid_plane_margin)
 
         self.Sgrid_line_thickness = GridPlaneSlider(
             parent=self,
@@ -495,7 +524,9 @@ class NapariStormGUI(QWidget):
         self.Breset_render_range.hide()
         self.Bexport_image.hide()
         self.Bsave_scene.hide()
+        self.render_range_group.hide()
         self.Egrid_line_distance.hide()
+        self.Egrid_margin.hide()
         self.Sgrid_line_thickness.hide()
         self.Sgrid_z_pos.hide()
         self.Cgrid_plane.hide()
@@ -509,6 +540,7 @@ class NapariStormGUI(QWidget):
 
     def show_avaiable_widgets(self):
         """Show the Controls usable atm"""
+        self.render_range_group.show()
         self.Srender_rangex.show()
         self.Srender_rangey.show()
         self.Lrangex.show()
@@ -641,24 +673,86 @@ class TestListView(QListWidget):
         )
 
 
+def _format_z_nm(value):
+    """A z coordinate, in nanometres below a micrometre and in µm above it."""
+    if abs(value) >= 1000:
+        return f"{value / 1000:.2f} µm"
+    return f"{value:.0f} nm"
+
+
 class ZColorCodingColorBarWidget(QWidget):
+    """The rainbow ramp, with the z values its two ends stand for.
+
+    The ends were labelled with the literal words "min" and "max", held apart
+    by a run of spaces inside a single centred label.  So the bar said which
+    way z ran but not over what interval (issue #37), and the padding drifted
+    out of line with the bar's ends whenever the font or DPI changed.
+    """
+
     def __init__(self):
         super().__init__()
 
         self.colorbar_set = False
         self.setFixedWidth(256)
         self.setFixedHeight(128)
-        self.titel = QLabel("Z-color-encoding scalebar:")
+        self.title = QLabel("Z-color-encoding scalebar:")
         self.colorbar = QLabel("")
 
-        self.label = QLabel("min                                                   max")
+        # Anchored to the ends of the bar rather than centred with padding, so
+        # each number stays under the colour it describes at any font size.
+        self.low_label = QLabel()
+        self.high_label = QLabel()
+        self.high_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        ends_layout = QHBoxLayout()
+        ends_layout.setContentsMargins(0, 0, 0, 0)
+        ends_layout.addWidget(self.low_label)
+        ends_layout.addStretch(1)
+        ends_layout.addWidget(self.high_label)
+        self.ends = QWidget()
+        self.ends.setLayout(ends_layout)
+
+        # Every dataset is normalized to its own z extent by the planner, so a
+        # single pair of numbers speaks for the whole scene only while there is
+        # one dataset in it.  Saying so beats quietly labelling the bar with a
+        # range that is right for one channel and wrong for the others.
+        self.note = QLabel("Each dataset is scaled to its own z range.")
+        self.note.setWordWrap(True)
+        self.note.hide()
 
         self.layout = QFormLayout()
-        self.layout.addRow(self.titel)
+        self.layout.addRow(self.title)
         self.layout.addRow(self.colorbar)
-        self.layout.addRow(self.label)
+        self.layout.addRow(self.ends)
+        self.layout.addRow(self.note)
 
         self.setLayout(self.layout)
+        self.set_range(None, None)
+
+    def set_range(self, low_nm, high_nm, shared=True):
+        """Label the ends of the bar with the z values they encode.
+
+        A range of None -- no dataset, or no usable z extent -- falls back to
+        the words the bar showed before, which claim nothing.  *shared* is
+        False when more than one dataset is drawn, each on its own scale.
+        """
+        # bool(), because np.isfinite hands back numpy.bool_ and PyQt6 will
+        # not accept that where it wants a bool.
+        finite = bool(
+            low_nm is not None
+            and high_nm is not None
+            and np.isfinite(low_nm)
+            and np.isfinite(high_nm)
+            and high_nm >= low_nm
+        )
+        if finite:
+            self.low_label.setText(_format_z_nm(low_nm))
+            self.high_label.setText(_format_z_nm(high_nm))
+        else:
+            self.low_label.setText("min")
+            self.high_label.setText("max")
+        self.note.setVisible(finite and not shared)
 
     def set_pixmap(self, scalebar_pixmap):
         if not self.colorbar_set:

@@ -1,4 +1,4 @@
-![alt text](/resources/napari_storm_logo.png)
+![napari-storm](https://raw.githubusercontent.com/napari-storm/napari-storm/main/resources/napari_storm_logo.png)
 
 # napari-storm
 

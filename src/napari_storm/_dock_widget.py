@@ -22,6 +22,21 @@ from .ns_constants import (FWHM_TO_SIGMA, MAX_FWHM_NM, MIN_FWHM_NM,
 from .render_config import RenderConfig
 
 
+def _non_negative_number(text):
+    """Parse *text* as a float of zero or more, or return None.
+
+    Same contract as :func:`_positive_number`, for the controls where zero is
+    a real setting rather than a rejected one.
+    """
+    try:
+        value = float(str(text).strip())
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value < 0:
+        return None
+    return value
+
+
 def _positive_number(text):
     """Parse *text* as a positive float, or return None.
 
@@ -359,6 +374,14 @@ class napari_storm(NapariStormGUI):
     def grid_plane_line_distance_um(self, value):
         self.render_config.grid_plane_line_distance_um = value
 
+    @property
+    def grid_plane_margin_percent(self):
+        return self.render_config.grid_plane_margin_percent
+
+    @grid_plane_margin_percent.setter
+    def grid_plane_margin_percent(self, value):
+        self.render_config.grid_plane_margin_percent = value
+
     def update_render_range_box_opacity(self):
         self.render_range_box_opacity = self.Srender_range_box_opacity.value() / 100
 
@@ -382,9 +405,24 @@ class napari_storm(NapariStormGUI):
         self.grid_plane_line_distance_um = value
         self.data_to_layer_itf.update_grid_plane(line_distance_nm=1000 * value)
 
+    def update_grid_plane_margin(self):
+        """Issue #38: how far past the data the grid is allowed to run.
+
+        Rebuilt through the line-distance path because that is the one that
+        remakes the vectors, and the geometry is what a margin changes.
+        """
+        value = _non_negative_number(self.Egrid_margin.text())
+        if value is None:
+            return
+        self.grid_plane_margin_percent = value
+        self.data_to_layer_itf.update_grid_plane(
+            line_distance_nm=self.grid_plane_line_distance_um * 1000
+        )
+
     def grid_plane(self):
         if self.Cgrid_plane.isChecked():
             self.Egrid_line_distance.show()
+            self.Egrid_margin.show()
             self.Sgrid_line_thickness.show()
             self.Sgrid_z_pos.show()
             self.Bgrid_plane_color.show()
@@ -392,6 +430,7 @@ class napari_storm(NapariStormGUI):
 
         else:
             self.Egrid_line_distance.hide()
+            self.Egrid_margin.hide()
             self.Sgrid_line_thickness.hide()
             self.Sgrid_z_pos.hide()
             self.grid_plane_enabled = 0
@@ -538,6 +577,7 @@ class napari_storm(NapariStormGUI):
             self.render_range_slider_y_percent = values
         else:
             self.render_range_slider_z_percent = values
+            self._refresh_z_colorbar()
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
@@ -591,6 +631,26 @@ class napari_storm(NapariStormGUI):
             ChannelControls(parent=self, name=name, channel_index=len(self.channel))
         )
         self.channel_controls_widget_layout.addRow(self.channel[-1])
+        # A second dataset changes both the z extent and whether one pair of
+        # numbers can speak for the scene at all.
+        self._refresh_z_colorbar()
+
+    def _refresh_z_colorbar(self):
+        """Label the z colour bar with the interval it currently encodes.
+
+        The planner normalizes each dataset against its own z extent, so the
+        numbers only describe the whole scene while one dataset is loaded;
+        past that the bar says so rather than picking a channel to speak for.
+        """
+        itf = getattr(self, "data_to_layer_itf", None)
+        if itf is None:
+            return
+        low, high = itf.percent_to_absolute(
+            itf.render_range_z, self.render_config.range_z_percent
+        )
+        self.Lcolor_encoding_bar.set_range(
+            low, high, shared=len(self.localization_datasets) <= 1
+        )
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
@@ -607,6 +667,7 @@ class napari_storm(NapariStormGUI):
                     self.data_to_layer_itf.colormap_icons[-1]
                 )
                 self.Lcolor_encoding_bar.show()
+            self._refresh_z_colorbar()
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()

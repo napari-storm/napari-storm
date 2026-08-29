@@ -34,6 +34,12 @@ class GridPlaneRenderer:
         selected = low + np.asarray(percent_range, dtype=float) / 100 * (high - low)
         return float(selected[0]), float(selected[1])
 
+    @staticmethod
+    def _widened(low, high, fraction):
+        """Grow an interval by *fraction* of its span at each end."""
+        pad = (high - low) * fraction
+        return low - pad, high + pad
+
     def _grid_metrics(self, render_range_x, render_range_y, line_distance_nm):
         """Return selected bounds, spans, and unique line counts."""
         if not np.isfinite(line_distance_nm) or line_distance_nm <= 0:
@@ -45,6 +51,13 @@ class GridPlaneRenderer:
         y0, y1 = self._window(
             render_range_y, self.render_config.range_y_percent
         )
+        # Issue #38: a grid is a ruler laid under the data, and one that stops
+        # exactly where the data stops cannot show that the data stopped.  The
+        # margin widens the plane symmetrically, as a fraction of each span.
+        margin = max(0.0, float(self.render_config.grid_plane_margin_percent)) / 100
+        if margin:
+            x0, x1 = self._widened(x0, x1, margin)
+            y0, y1 = self._widened(y0, y1, margin)
         x_span = max(0.0, x1 - x0)
         y_span = max(0.0, y1 - y0)
 

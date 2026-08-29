@@ -16,6 +16,18 @@ from .base_class import LocalizationDataBaseClass
 from .data_formats import storm_data_dtype
 
 
+def _normalized_csv_header(field):
+    """Reduce one CSV header field to a stable lookup key.
+
+    ThunderSTORM quotes every field it writes, other exporters do not, and a
+    file that has been through a spreadsheet picks up stray spaces around the
+    unit.  Matching the raw text meant one branch per spelling: `"x [nm]"` and
+    `x [nm]` were two cases of the same column, and `x  [nm]` -- reported in
+    issue #17 -- matched neither.
+    """
+    return " ".join(field.strip().strip("\"'").split()).lower()
+
+
 class StormDatasetCollection:
     def __init__(self, list_of_datasets=None):
         self.dataset_type = "StormDatasetCollection"
@@ -377,84 +389,78 @@ class StormDataClass(LocalizationDataBaseClass):
 
     def load_csv(self, file_path, name):
         """Loads Thunderstorm .csv files"""
-        data = {}
-        photon_count_present = False
         sigma_present = False
 
         with open(file_path) as infile:
-            header = infile.readline()
-            header = header.replace("\n", "")
-            header = header.split(",")
-            data_list = np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
-        for i in range(len(header)):
-            data[header[i]] = data_list[:, i]
+            header = [
+                _normalized_csv_header(field)
+                for field in infile.readline().rstrip("\n").split(",")
+            ]
+            # atleast_2d so a file holding a single localization still reads as
+            # one row of columns rather than as one column of rows.
+            data_list = np.atleast_2d(
+                np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
+            )
+        data = dict(zip(header, data_list.T))
         pixelsize = 1
 
-        if '"x [nm]"' in header:
-            locs_pos_x_nm = data['"x [nm]"']
-            locs_pos_y_nm = data['"y [nm]"']
-        elif "x [nm]" in header:
-            locs_pos_x_nm = data["x [nm]"]
-            locs_pos_y_nm = data["y [nm]"]
-        else:
+        locs_pos_x_nm = data.get("x [nm]")
+        locs_pos_y_nm = data.get("y [nm]")
+        if locs_pos_x_nm is None or locs_pos_y_nm is None:
+            # Only x used to be checked and y was read blind, so a file
+            # carrying one without the other raised KeyError rather than this.
             raise ImportError("Localisation Position in X or Y not found in header")
+        count = len(locs_pos_x_nm)
 
-        if '"z [nm]"' in header:
-            locs_pos_z_nm = data['"z [nm]"']
-            zdim = True
-        elif "z [nm]" in header:
-            locs_pos_z_nm = data["z [nm]"]
-            zdim = True
-        else:
-            locs_pos_z_nm = np.ones(len(locs_pos_x_nm))
-            zdim = False
+        locs_pos_z_nm = data.get("z [nm]")
+        zdim = locs_pos_z_nm is not None
+        if not zdim:
+            locs_pos_z_nm = np.ones(count)
 
-        # Check if frame number info is present in file
-        if '"frame"' in header:
-            frame_numbers = data['"frame"']
-        elif "frame" in header:
-            frame_numbers = data["frame"]
-        else:
-            frame_numbers = np.ones(len(locs_pos_x_nm))
+        frame_numbers = data.get("frame")
+        if frame_numbers is None:
+            frame_numbers = np.ones(count)
 
-        # Check if uncertainty info is present in file
-        if "uncertainty_xy [nm]" in header:
-            uncertainty_x_nm = data["uncertainty_xy [nm]"]
-            uncertainty_y_nm = data["uncertainty_xy [nm]"]
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+        # ThunderSTORM writes photon counts *alongside* uncertainties, and this
+        # was an elif behind them, so the column was discarded for every file
+        # that had both.  Reading it unconditionally does not change what gets
+        # rendered -- variable-Gaussian mode still prefers sigma when both are
+        # present -- it gives the photon-count filter something to work on.
+        intensity_photons = data.get("intensity [photon]")
+        photon_count_present = intensity_photons is not None
+        if not photon_count_present:
+            intensity_photons = np.ones(count)
+
+        uncertainty_xy_nm = data.get("uncertainty_xy [nm]")
+        uncertainty_x_nm = data.get("uncertainty_x [nm]")
+        uncertainty_y_nm = data.get("uncertainty_y [nm]")
+        uncertainty_z_nm = data.get("uncertainty_z [nm]")
+
+        if uncertainty_xy_nm is not None:
+            uncertainty_x_nm = uncertainty_xy_nm
+            uncertainty_y_nm = uncertainty_xy_nm
             sigma_present = True
-            if zdim:
-                uncertainty_z_nm = data["uncertainty_z [nm]"]
-            else:
-                uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif "uncertainty_x [nm]" in header:
-            uncertainty_x_nm = data["uncertainty_x [nm]"]
-            uncertainty_y_nm = data["uncertainty_y [nm]"]
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+        elif uncertainty_x_nm is not None:
+            if uncertainty_y_nm is None:
+                # Read blind before, so x-without-y raised KeyError.  A single
+                # measured lateral uncertainty describes both axes.
+                uncertainty_y_nm = uncertainty_x_nm
             sigma_present = True
-            if zdim and "uncertainty_z [nm]" in header:
-                uncertainty_z_nm = data["uncertainty_z [nm]"]
-            else:
-                uncertainty_z_nm = 2 * np.sqrt(
-                    uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2
-                )
-        elif '"intensity [photon]"' in header:
-            photon_count_present = True
-            intensity_photons = data['"intensity [photon]"']
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif "intensity [photon]" in header:
-            photon_count_present = True
-            intensity_photons = data["intensity [photon]"]
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
         else:
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+            uncertainty_x_nm = np.ones(count)
+            uncertainty_y_nm = np.ones(count)
+
+        if not (zdim and sigma_present):
+            # A flat dataset has no z extent to describe, and with no lateral
+            # uncertainty there is nothing to derive a z uncertainty from.
+            uncertainty_z_nm = np.ones(count)
+        elif uncertainty_z_nm is None:
+            # Was an unguarded lookup in the uncertainty_xy branch: a 3D file
+            # with lateral uncertainties but no z column raised KeyError.
+            uncertainty_z_nm = 2 * np.sqrt(
+                uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2
+            )
+
         locs = np.rec.array(
             (
                 frame_numbers,

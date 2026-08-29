@@ -60,6 +60,10 @@ class RenderConfig:
 
     # Grid plane
     grid_plane_line_distance_um: float = DEFAULT_GRID_LINE_DISTANCE_UM
+    # Issue #38: how far past the data the grid is allowed to run, as a
+    # percentage of each axis' span, added at both ends.  0 keeps the old
+    # behaviour of stopping exactly at the render range.
+    grid_plane_margin_percent: float = 0.0
 
     # Scalebar
     scalebar_size_nm: int = DEFAULT_SCALEBAR_NM
