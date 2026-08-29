@@ -1,5 +1,4 @@
-"""
-"""
+""" """
 
 from abc import ABC
 
@@ -14,13 +13,11 @@ class TextureFilter(Filter):
     def __init__(self, texture, **kwargs):
         kwargs.setdefault("fhook", "post")
 
-        self._fcode = Function(
-            """
+        self._fcode = Function("""
         void apply() {
             gl_FragColor *= texture2D($u_texture, v_texcoord);
         }
-        """
-        )
+        """)
         texture = np.asarray(texture).astype(np.float32)
         if not texture.ndim == 3:
             raise ValueError("texure needs to be array of size (M,N,1)")
@@ -159,8 +156,7 @@ class ShaderFilter(Filter):
     def __init__(self, mode="gaussian", distance_intensity_increase=1, **kwargs):
         kwargs.setdefault("fhook", "post")
 
-        fcode = Function(
-            """
+        fcode = Function("""
 
 
         void apply() {
@@ -181,8 +177,7 @@ class ShaderFilter(Filter):
 
 
 
-        }"""
-        )
+        }""")
 
         if mode in _shader_functions:
             fcode["func"] = Function(_shader_functions[mode])

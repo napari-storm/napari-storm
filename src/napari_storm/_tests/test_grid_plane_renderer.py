@@ -3,6 +3,7 @@ Integration tests for GridPlaneRenderer.
 
 Require a real napari viewer (make_napari_viewer fixture from napari).
 """
+
 import numpy as np
 import pytest
 
@@ -65,9 +66,7 @@ def test_asymmetric_nonzero_ranges_place_grid_on_world_axes(gpr):
     renderer, _viewer = gpr
     renderer.render_config.range_x_percent[:] = [25, 75]
     renderer.render_config.range_y_percent[:] = [20, 60]
-    renderer.create_remove(
-        True, [10_000, 12_000], [40_000, 50_000], [-500, 500]
-    )
+    renderer.create_remove(True, [10_000, 12_000], [40_000, 50_000], [-500, 500])
 
     # Vectors are (z, y, x): a line running along x carries its direction in
     # column 2 and steps across column 1.

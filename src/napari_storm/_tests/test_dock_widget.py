@@ -3,11 +3,12 @@ Smoke tests for the napari_storm dock widget.
 
 These require a real napari viewer and Qt event loop.
 """
+
 import numpy as np
 from qtpy.QtWidgets import QApplication, QScrollArea
 
-from napari_storm.FileToLocalizationDataInterface import QFileDialog
 from napari_storm._dock_widget import napari_storm
+from napari_storm.FileToLocalizationDataInterface import QFileDialog
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
 from napari_storm.render_config import RenderConfig
 
@@ -22,9 +23,7 @@ def _make_dataset_2d(n=20, name="smoke_2d"):
     locs = np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = np.linspace(0, 5000, n)
     locs["y_pos_nm"] = np.linspace(0, 5000, n)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=False
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=False)
 
 
 def test_widget_instantiation(make_napari_viewer):
@@ -211,7 +210,5 @@ def test_render_state_follows_identity_not_position(make_napari_viewer):
     widget.unload_dataset(0)
 
     # The third dataset moved from index 2 to index 1 and kept its own arrays.
-    assert (
-        widget.data_to_layer_itf.render_state[datasets[2].dataset_id] is third_state
-    )
+    assert widget.data_to_layer_itf.render_state[datasets[2].dataset_id] is third_state
     assert datasets[0].dataset_id not in widget.data_to_layer_itf.render_state

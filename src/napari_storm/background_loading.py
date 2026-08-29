@@ -25,6 +25,7 @@ it to napari.  That is a main-thread requirement of the renderer, not an
 oversight, and it is the larger cost on big datasets -- see the benchmark's
 ``open`` column.  This module bounds the read, not the upload.
 """
+
 from __future__ import annotations
 
 import threading
@@ -242,9 +243,7 @@ def load_in_background(
     dialog.canceled.connect(handle.cancel)
     # setLabelText touches a widget, so it has to happen on the GUI thread even
     # though checkpoint() is called from the worker.
-    handle.set_progress_sink(
-        lambda text: run_on_main_thread(dialog.setLabelText, text)
-    )
+    handle.set_progress_sink(lambda text: run_on_main_thread(dialog.setLabelText, text))
 
     # QProgressDialog only auto-shows from setValue(), which an indeterminate
     # dialog never calls.  Show it on a timer instead so a fast load does not

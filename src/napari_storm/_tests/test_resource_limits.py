@@ -3,25 +3,26 @@
 Covers P0-04: an over-budget dataset or an over-large Gaussian must produce a
 warning and deterministic degraded output rather than taking the process down.
 """
+
 import numpy as np
 
 from napari_storm import memory_budget
 from napari_storm._dock_widget import napari_storm
 from napari_storm._tests.fixtures import extreme_gaussian_dataset, make_dataset
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
-from napari_storm.memory_budget import (RENDER_BYTES_PER_LOCALIZATION,
-                                        cap_splat_size_nm,
-                                        default_render_budget_mb,
-                                        max_localizations_for_budget)
+from napari_storm.memory_budget import (
+    RENDER_BYTES_PER_LOCALIZATION,
+    cap_splat_size_nm,
+    default_render_budget_mb,
+    max_localizations_for_budget,
+)
 
 
 def _dataset(n, name="budgeted"):
     locs = np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = np.arange(n)
     locs["y_pos_nm"] = np.arange(n) * 2
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=False
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=False)
 
 
 # ------------------------------------------------------------- budget maths
@@ -167,9 +168,7 @@ def test_budget_is_shared_between_loaded_datasets(make_napari_viewer):
     widget = napari_storm(napari_viewer=make_napari_viewer())
     widget.render_config.render_budget_mb = 0.352  # 1000 localizations total
 
-    widget.get_dataset_from_test_mode(
-        [_dataset(1_000, "a"), _dataset(1_000, "b")]
-    )
+    widget.get_dataset_from_test_mode([_dataset(1_000, "a"), _dataset(1_000, "b")])
 
     # Two datasets, so each gets half the budget.
     assert [d.number_of_active_entries() for d in widget.localization_datasets] == [

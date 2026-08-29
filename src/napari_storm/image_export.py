@@ -14,6 +14,7 @@ committing the error, pairing the two column-wise all along. Both are now
 ``(z, y, x)``, napari's order and this exporter's, so a channel is built by
 reading the request rather than by rearranging it.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -116,10 +117,13 @@ def export_bounds_nm(widget, options, channels=None):
             raise ValueError("no localizations to export")
         # Pad by the widest splat so the Gaussians are not clipped at the edge
         # of their own bounding box.
-        pad = max(
-            (float(np.max(c.sigmas_nm)) for c in channels if len(c.sigmas_nm)),
-            default=0.0,
-        ) * SIGMA_TO_SIZE_FACTOR
+        pad = (
+            max(
+                (float(np.max(c.sigmas_nm)) for c in channels if len(c.sigmas_nm)),
+                default=0.0,
+            )
+            * SIGMA_TO_SIZE_FACTOR
+        )
         low = stacked.min(axis=0) - pad
         high = stacked.max(axis=0) + pad
         return ((low[0], high[0]), (low[1], high[1]), (low[2], high[2]))
@@ -181,7 +185,11 @@ def run_export(
         return None
 
     dialog = QProgressDialog(
-        f"Writing {plan.shape[3]:,} x {plan.shape[2]:,} px...", "Cancel", 0, total, parent
+        f"Writing {plan.shape[3]:,} x {plan.shape[2]:,} px...",
+        "Cancel",
+        0,
+        total,
+        parent,
     )
     dialog.setWindowModality(Qt.WindowModal)
     dialog.setAutoClose(False)

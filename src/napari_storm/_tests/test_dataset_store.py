@@ -5,10 +5,16 @@ resources are keyed by stable dataset IDs rather than by positions in parallel
 lists. The point of the store is that unloading a dataset cannot silently
 misalign somebody else's bookkeeping.
 """
+
 import pytest
 
-from napari_storm.core import (BatchCommitted, DatasetClosed, DatasetOpened,
-                               DatasetStore, StoreCleared)
+from napari_storm.core import (
+    BatchCommitted,
+    DatasetClosed,
+    DatasetOpened,
+    DatasetStore,
+    StoreCleared,
+)
 
 
 class _Dataset:

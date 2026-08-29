@@ -1,6 +1,14 @@
 import numpy as np
-from qtpy.QtWidgets import (QComboBox, QDialog, QFormLayout, QGridLayout,
-                            QLabel, QLineEdit, QPushButton, QWidget)
+from qtpy.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 from .LocalizationData import LocalizationData
 from .ns_constants import LOCS_DTYPE

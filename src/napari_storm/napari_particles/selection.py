@@ -14,6 +14,7 @@ instance must still be able to show a reconstruction, so the choice is made per
 session, from the capability that is actually present, and the fallback says so
 rather than failing at the first draw.
 """
+
 from __future__ import annotations
 
 from ._napari_compat import instancing_available

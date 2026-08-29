@@ -8,6 +8,7 @@ Requires VisPy's ``gl+`` GL backend. Call
 *before* napari builds a canvas, or construction fails with an explanation
 rather than a blank viewer.
 """
+
 from __future__ import annotations
 
 from ..core.renderer import LayerAppearance, LocalizationRenderer

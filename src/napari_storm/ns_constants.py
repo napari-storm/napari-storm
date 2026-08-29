@@ -1,8 +1,5 @@
-from ._data_constants import (
-    MINFLUX_Z_CORRECTION_FACTOR as MINFLUX_Z_CORRECTION_FACTOR,
-)
+from ._data_constants import MINFLUX_Z_CORRECTION_FACTOR as MINFLUX_Z_CORRECTION_FACTOR
 from ._data_constants import STORM_DATA_DTYPE
-
 
 FWHM_TO_SIGMA = 2.354
 

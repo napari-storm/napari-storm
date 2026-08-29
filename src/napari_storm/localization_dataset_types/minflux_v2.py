@@ -17,6 +17,7 @@ The layout, the version markers and the per-container quirks were taken from
 pyMINFLUX (https://github.com/bsse-scf/pyMINFLUX, D-BSSE ETH Zurich,
 Apache-2.0), which documents this format in its ``MinFluxReaderV2``.
 """
+
 import json
 from pathlib import Path
 
@@ -158,9 +159,7 @@ def _zarr_root(path):
     while path != path.parent:
         if (path / ".zgroup").exists() or (path / ".zarray").exists():
             parent = path.parent
-            if not (
-                (parent / ".zgroup").exists() or (parent / ".zarray").exists()
-            ):
+            if not ((parent / ".zgroup").exists() or (parent / ".zarray").exists()):
                 return path
             path = parent
         else:
@@ -198,7 +197,9 @@ def _drop_invalid(array):
 
 
 def _read_npy(path):
-    return _columns_from_structured(_drop_invalid(np.load(str(path), allow_pickle=False)))
+    return _columns_from_structured(
+        _drop_invalid(np.load(str(path), allow_pickle=False))
+    )
 
 
 def _read_zarr(path):

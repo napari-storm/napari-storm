@@ -10,17 +10,21 @@ The failure this prevents is silent and serious: writing an evenly strided
 subsample of a scientist's data to disk because their graphics card was busy,
 in a file that looks complete.
 """
+
 import numpy as np
 
-from napari_storm.core import (ACTIVE, FILTERED, DatasetTraits,
-                               GaussianSettings, LocalizationTable,
-                               RenderPlanner)
+from napari_storm.core import (
+    ACTIVE,
+    FILTERED,
+    DatasetTraits,
+    GaussianSettings,
+    LocalizationTable,
+    RenderPlanner,
+)
 
 
 def _table(n=1000):
-    records = np.rec.array(
-        np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    records = np.rec.array(np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     records.x_pos_nm = np.arange(n, dtype="f4")
     records.y_pos_nm = np.arange(n, dtype="f4") * 2
     return LocalizationTable(records)

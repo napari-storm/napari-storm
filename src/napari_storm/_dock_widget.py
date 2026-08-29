@@ -17,8 +17,13 @@ from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .GUI import NapariStormGUI
 from .localization_dataset_types import LocalizationDataBaseClass, StormDataClass
 from .napari_particles._napari_compat import guard_camera_drag_state
-from .ns_constants import (FWHM_TO_SIGMA, MAX_FWHM_NM, MIN_FWHM_NM,
-                           standard_colors, standard_colormaps)
+from .ns_constants import (
+    FWHM_TO_SIGMA,
+    MAX_FWHM_NM,
+    MIN_FWHM_NM,
+    standard_colormaps,
+    standard_colors,
+)
 from .render_config import RenderConfig
 
 
@@ -121,7 +126,9 @@ class napari_storm(NapariStormGUI):
 
         self.active_render_range_box_color = standard_colormaps[0]
         self.render_range_box_opacity = 0.25
-        self._render_range_preview = None  # single shared Surface layer for range-box feedback
+        self._render_range_preview = (
+            None  # single shared Surface layer for range-box feedback
+        )
 
         self.pixelsize_nm = []
         self.channel = []
@@ -586,10 +593,7 @@ class napari_storm(NapariStormGUI):
 
     def move_camera_center_to_render_range_center(self):
         itf = self.data_to_layer_itf
-        if not (
-            itf.render_range_x[1] == -np.inf
-            or itf.render_range_y[1] == -np.inf
-        ):
+        if not (itf.render_range_x[1] == -np.inf or itf.render_range_y[1] == -np.inf):
             # Midpoint of the selected percentage window, mapped onto the true
             # nanometre extent of each axis.  This used to multiply the axis
             # maximum alone, which was only correct while the auto-offset forced
@@ -823,9 +827,7 @@ class napari_storm(NapariStormGUI):
             return False
         return self._apply_loaded_datasets(datasets, merge=merge)
 
-    def _open_in_background(
-        self, merge, file_path, file_recognition, custom_import
-    ):
+    def _open_in_background(self, merge, file_path, file_recognition, custom_import):
         """Read a localization file on a worker, then apply it on the GUI thread.
 
         Picking the file stays here: a modal file dialog belongs to the gesture
@@ -1125,7 +1127,9 @@ class napari_storm(NapariStormGUI):
         try:
             from napari.utils.notifications import show_info
 
-            show_info(f"napari-storm: wrote {path} ({plan.n_localizations:,} localizations)")
+            show_info(
+                f"napari-storm: wrote {path} ({plan.n_localizations:,} localizations)"
+            )
         except Exception:
             logging.getLogger(__name__).info("napari-storm: wrote %s", path)
 
@@ -1188,9 +1192,7 @@ class napari_storm(NapariStormGUI):
             pass
 
         # Create live controls and insert at top of channel-controls section
-        controls = ImageLayerControls(
-            layer=layer, result=result, dock_widget=self
-        )
+        controls = ImageLayerControls(layer=layer, result=result, dock_widget=self)
         self.image_layer_controls.append(controls)
         self.channel_controls_widget_layout.insertRow(0, controls)
 

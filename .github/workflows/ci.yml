@@ -67,6 +67,23 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix" | jq .
 
+  # Formatting was configured in 2022 and never enforced: .pre-commit-config
+  # declared black, isort and flake8, and no workflow ran any of them, so the
+  # tree drifted out of shape while the config claimed otherwise (issue #10).
+  # One cheap job on Linux, since formatting does not vary by platform.
+  lint:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install "black==26.5.1" "isort==6.1.0"
+      - run: black --check --diff src napari_start.py
+      - run: isort --check-only --diff src napari_start.py
+
   test:
     name: ${{ matrix.platform }} py${{ matrix.python-version }}
     needs: plan

@@ -9,8 +9,14 @@ import h5py
 import numpy as np
 import yaml
 
-from ..core import (DATA_IN_NM, PHOTON_COUNT_PRESENT, PIXEL_SIZE_NM,
-                    SIGMA_PRESENT, ZDIM_PRESENT, MetadataProvider)
+from ..core import (
+    DATA_IN_NM,
+    PHOTON_COUNT_PRESENT,
+    PIXEL_SIZE_NM,
+    SIGMA_PRESENT,
+    ZDIM_PRESENT,
+    MetadataProvider,
+)
 from ..CustomErrors import PixelSizeIsNecessaryError
 from .base_class import LocalizationDataBaseClass
 from .data_formats import storm_data_dtype
@@ -332,9 +338,7 @@ class StormDataClass(LocalizationDataBaseClass):
         if hasattr(locs, "pixelsize"):
             pixelsize = locs.pixelsize_nm
         else:
-            pixelsize = provider.ask_text(
-                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
-            )
+            pixelsize = provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
             if pixelsize is None:
                 raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)
@@ -358,7 +362,7 @@ class StormDataClass(LocalizationDataBaseClass):
         if hasattr(locs, "lpz") and zdim:
             uncertainty_z_pixels = locs.lpz
         else:
-            uncertainty_z_pixels = 2 * np.sqrt(locs.lpx ** 2 + locs.lpy ** 2)
+            uncertainty_z_pixels = 2 * np.sqrt(locs.lpx**2 + locs.lpy**2)
 
         if hasattr(locs, "photons"):
             intensity_photons = locs.photons
@@ -457,9 +461,7 @@ class StormDataClass(LocalizationDataBaseClass):
         elif uncertainty_z_nm is None:
             # Was an unguarded lookup in the uncertainty_xy branch: a 3D file
             # with lateral uncertainties but no z column raised KeyError.
-            uncertainty_z_nm = 2 * np.sqrt(
-                uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2
-            )
+            uncertainty_z_nm = 2 * np.sqrt(uncertainty_x_nm**2 + uncertainty_y_nm**2)
 
         locs = np.rec.array(
             (
@@ -601,9 +603,7 @@ class StormDataClass(LocalizationDataBaseClass):
         try:
             pixelsize = prop["pixelsize"]
         except KeyError:
-            pixelsize = provider.ask_text(
-                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
-            )
+            pixelsize = provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
             if pixelsize is None:
                 raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)

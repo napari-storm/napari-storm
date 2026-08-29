@@ -1,7 +1,11 @@
 import numpy as np
 
-from ..core import (DEFAULT_POSITION_COLUMNS, ZDIM_PRESENT, LocalizationTable,
-                    MetadataProvider)
+from ..core import (
+    DEFAULT_POSITION_COLUMNS,
+    ZDIM_PRESENT,
+    LocalizationTable,
+    MetadataProvider,
+)
 
 
 class LocalizationDataBaseClass:
@@ -27,7 +31,10 @@ class LocalizationDataBaseClass:
     _table = None
 
     def __init__(
-        self, locs=None, name=None, zdim_present=False,
+        self,
+        locs=None,
+        name=None,
+        zdim_present=False,
     ):
         self.dataset_type = "LocalizationDataBaseClass"
         self._table = None

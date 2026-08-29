@@ -21,6 +21,7 @@ nothing here ever allocates the output: :func:`rasterize_tiles` yields one tile
 at a time and the caller streams them to disk. Peak memory is set by the tile,
 not by the image.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

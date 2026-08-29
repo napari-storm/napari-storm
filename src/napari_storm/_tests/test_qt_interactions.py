@@ -4,9 +4,9 @@ from qtpy.QtCore import QEvent, QPoint, QPointF, Qt
 from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import QApplication, QStyle, QStyleOptionSlider, QWidget
 
-from napari_storm.pyqt.GridPlaneSlider import GridPlaneSlider
-from napari_storm.pyqt.detachable_tab import DetachableTabWidget
 import napari_storm.pyqt.detachable_tab as detachable_tab_module
+from napari_storm.pyqt.detachable_tab import DetachableTabWidget
+from napari_storm.pyqt.GridPlaneSlider import GridPlaneSlider
 
 
 def _move_event(x, y=10):
@@ -73,12 +73,16 @@ class _GridInterface:
 def _slider_handle_center(slider):
     option = QStyleOptionSlider()
     slider.initStyleOption(option)
-    return slider.style().subControlRect(
-        QStyle.CC_Slider,
-        option,
-        QStyle.SC_SliderHandle,
-        slider,
-    ).center()
+    return (
+        slider.style()
+        .subControlRect(
+            QStyle.CC_Slider,
+            option,
+            QStyle.SC_SliderHandle,
+            slider,
+        )
+        .center()
+    )
 
 
 def test_grid_slider_clicking_handle_does_not_jump(qtbot):

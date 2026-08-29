@@ -3,14 +3,26 @@
 All of it host-free except the last section, which checks that the application
 is actually driven by it rather than merely carrying it alongside.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.core import (EMPTY, AppearanceChanged, Bounds, DatasetState,
-                               DatasetStore, DatasetTraits, GaussianSettings,
-                               LayerAppearance, LocalizationTable, MaskChanged,
-                               RenderPlanner, TransformChanged, WorldTransform)
+from napari_storm.core import (
+    EMPTY,
+    AppearanceChanged,
+    Bounds,
+    DatasetState,
+    DatasetStore,
+    DatasetTraits,
+    GaussianSettings,
+    LayerAppearance,
+    LocalizationTable,
+    MaskChanged,
+    RenderPlanner,
+    TransformChanged,
+    WorldTransform,
+)
 
 
 def _table(n=10, zdim=False):

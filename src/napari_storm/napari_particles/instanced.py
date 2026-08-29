@@ -17,6 +17,7 @@ napari — that needs a `Layer` subclass and an entry in napari's private
 whether the memory target is real and whether the Gaussian survives the change,
 which are the two questions the decision rests on.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -29,9 +30,7 @@ __all__ = [
 ]
 
 #: The quad, once.  Corners in [-0.5, 0.5]; every instance reuses these.
-QUAD = np.array(
-    [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=np.float32
-)
+QUAD = np.array([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=np.float32)
 QUAD_INDICES = np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)
 
 #: Quad half-extent as a multiple of sigma.  Matches the existing renderer's

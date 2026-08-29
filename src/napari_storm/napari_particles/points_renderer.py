@@ -19,6 +19,7 @@ What it gives up is stated plainly, because the decision turns on it:
 What it gives back is memory and maintenance: it stores a position, a size and
 a colour per localization, and nothing else.
 """
+
 from __future__ import annotations
 
 import numpy as np

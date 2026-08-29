@@ -21,14 +21,19 @@ Two things fix that, and this module is both:
 Host-free, like the rest of ``napari_storm.core``: it holds datasets and emits
 dataclasses, and knows nothing about layers, widgets or the viewer.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from .dataset_state import (AppearanceChanged, DatasetState, MaskChanged,
-                            TransformChanged)
+from .dataset_state import (
+    AppearanceChanged,
+    DatasetState,
+    MaskChanged,
+    TransformChanged,
+)
 
 __all__ = [
     "DatasetStore",

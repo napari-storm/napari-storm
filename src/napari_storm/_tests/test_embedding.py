@@ -8,11 +8,17 @@ The question behind it is Level 5's — can a host like ImSwitch render
 localizations without adopting our UI? — and the answer has to be demonstrated
 rather than asserted, which is what §7.5 asks for.
 """
+
 import numpy as np
 
-from napari_storm.core import (DatasetTraits, GaussianSettings,
-                               LayerAppearance, LocalizationTable,
-                               RenderPlanner, WorldTransform)
+from napari_storm.core import (
+    DatasetTraits,
+    GaussianSettings,
+    LayerAppearance,
+    LocalizationTable,
+    RenderPlanner,
+    WorldTransform,
+)
 from napari_storm.napari_particles.selection import select_renderer
 
 

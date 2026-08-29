@@ -8,11 +8,14 @@ unusual file into a `KeyError` from inside numpy indexing.
 
 These pin the normalization and each of the reads that used to be blind.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm.localization_dataset_types.storm_class import (
-    StormDataClass, _normalized_csv_header)
+    StormDataClass,
+    _normalized_csv_header,
+)
 
 
 def _write(tmp_path, header, rows):
@@ -78,7 +81,7 @@ def test_a_3d_file_without_a_z_uncertainty_derives_one(tmp_path):
         [(1.0, 2.0, 3.0, 6.0)],
     )
     assert dataset.zdim_present
-    assert dataset.locs_all.sigma_z_pixels == pytest.approx(2 * np.sqrt(2 * 6.0 ** 2))
+    assert dataset.locs_all.sigma_z_pixels == pytest.approx(2 * np.sqrt(2 * 6.0**2))
 
 
 def test_photon_counts_survive_a_file_that_also_carries_uncertainties(tmp_path):

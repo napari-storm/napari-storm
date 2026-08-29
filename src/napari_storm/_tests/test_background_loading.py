@@ -5,29 +5,30 @@ that a read is abortable mid-syscall -- it is not -- but that the window stays
 responsive, the user is told what is happening, and cancelling leaves the
 session exactly as it was.
 """
+
 import threading
 import time
 
 import h5py
 import numpy as np
 import pytest
-from qtpy.QtWidgets import (QApplication, QFileDialog, QProgressDialog,
-                            QPushButton)
+from qtpy.QtWidgets import QApplication, QFileDialog, QProgressDialog, QPushButton
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.background_loading import (LoadCancelled, LoadHandle,
-                                             load_in_background,
-                                             on_main_thread,
-                                             run_on_main_thread)
+from napari_storm.background_loading import (
+    LoadCancelled,
+    LoadHandle,
+    load_in_background,
+    on_main_thread,
+    run_on_main_thread,
+)
 
 
 @pytest.fixture
 def ns_file(tmp_path):
     """A minimal .ns dataset the known-filetype importer can read."""
     path = tmp_path / "background.ns"
-    locs = np.rec.array(
-        np.zeros(8, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(8, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     locs.x_pos_nm = np.linspace(10_000, 12_000, 8)
     locs.y_pos_nm = np.linspace(40_000, 50_000, 8)
     with h5py.File(path, "w") as file:

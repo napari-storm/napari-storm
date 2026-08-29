@@ -19,6 +19,7 @@ the ceiling on an export is disk space. This is the opposite policy from the
 screen: the render budget degrades the *view* under memory pressure, and the
 exporter must never degrade the *file*.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -68,10 +69,7 @@ class ExportChannel:
 
     @property
     def was_display_limited(self):
-        return (
-            self.n_displayed is not None
-            and self.n_displayed < self.n_localizations
-        )
+        return self.n_displayed is not None and self.n_displayed < self.n_localizations
 
 
 @dataclass(frozen=True)
@@ -172,8 +170,7 @@ def _ome_metadata(plan):
     # render range it was cut from.  Plane order for CZYX is channel-major.
     nz = grid.shape[0]
     z_positions = [
-        float(grid.origin_nm[0] + index * grid.pixel_size_nm[0])
-        for index in range(nz)
+        float(grid.origin_nm[0] + index * grid.pixel_size_nm[0]) for index in range(nz)
     ] * len(plan.channels)
     n_planes = len(z_positions)
     metadata["Plane"] = {

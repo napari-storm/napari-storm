@@ -11,15 +11,25 @@ The dialog's job is not to collect three numbers. It is to make the two things
   thinned the view. The export contains more localizations than are being
   drawn, and saying so afterwards would be too late to be useful.
 """
+
 from __future__ import annotations
 
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import (QButtonGroup, QDialog, QDialogButtonBox,
-                            QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel,
-                            QLineEdit, QPushButton, QRadioButton, QVBoxLayout)
+from qtpy.QtWidgets import (
+    QButtonGroup,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+)
 
-from ..image_export import (SCOPE_CURRENT_VIEW, SCOPE_EVERYTHING,
-                            ExportOptions)
+from ..image_export import SCOPE_CURRENT_VIEW, SCOPE_EVERYTHING, ExportOptions
 
 __all__ = ["ExportImageDialog", "format_size", "describe_plan"]
 
@@ -136,7 +146,11 @@ class ExportImageDialog(QDialog):
     def options(self):
         return ExportOptions(
             pixel_size_nm=float(self.pixel_size.value()),
-            scope=SCOPE_CURRENT_VIEW if self.current_view.isChecked() else SCOPE_EVERYTHING,
+            scope=(
+                SCOPE_CURRENT_VIEW
+                if self.current_view.isChecked()
+                else SCOPE_EVERYTHING
+            ),
             z_step_nm=float(self.z_step.value()),
         )
 

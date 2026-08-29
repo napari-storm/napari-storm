@@ -10,29 +10,44 @@ These tests pin the symmetric contract, and the unit-correctness property that
 had to come with it: the repair floor for an unusable width is a physical
 length, so it means the same thing whatever unit the column is stored in.
 """
+
 import numpy as np
 import pytest
 
-from napari_storm.core import (DatasetTraits, GaussianSettings,
-                               InvalidLocalizationData, LocalizationTable,
-                               RenderPlanner)
+from napari_storm.core import (
+    DatasetTraits,
+    GaussianSettings,
+    InvalidLocalizationData,
+    LocalizationTable,
+    RenderPlanner,
+)
 
 PIXEL_SIZE_NM = 100.0
 
 NM_DTYPE = [
-    ("x_nm", "f4"), ("y_nm", "f4"), ("z_nm", "f4"),
-    ("sigma_x_nm", "f4"), ("sigma_y_nm", "f4"), ("sigma_z_nm", "f4"),
+    ("x_nm", "f4"),
+    ("y_nm", "f4"),
+    ("z_nm", "f4"),
+    ("sigma_x_nm", "f4"),
+    ("sigma_y_nm", "f4"),
+    ("sigma_z_nm", "f4"),
     ("photons", "f4"),
 ]
 
 PIXEL_DTYPE = [
-    ("x_pos_pixels", "f4"), ("y_pos_pixels", "f4"), ("z_pos_pixels", "f4"),
-    ("sigma_x_pixels", "f4"), ("sigma_y_pixels", "f4"), ("sigma_z_pixels", "f4"),
+    ("x_pos_pixels", "f4"),
+    ("y_pos_pixels", "f4"),
+    ("z_pos_pixels", "f4"),
+    ("sigma_x_pixels", "f4"),
+    ("sigma_y_pixels", "f4"),
+    ("sigma_z_pixels", "f4"),
     ("photon_count", "f4"),
 ]
 
 TRAITS = DatasetTraits(
-    zdim_present=True, sigma_present=True, photon_count_present=True,
+    zdim_present=True,
+    sigma_present=True,
+    photon_count_present=True,
     pixel_size_nm=PIXEL_SIZE_NM,
 )
 
@@ -83,8 +98,11 @@ def _pixel_table(n=2000, seed=0, zeros=0):
         records,
         # What `StormDataClass` declares; sigmas and photons need nothing,
         # which is the point of the defaults.
-        position_columns={"x": "x_pos_pixels", "y": "y_pos_pixels",
-                          "z": "z_pos_pixels"},
+        position_columns={
+            "x": "x_pos_pixels",
+            "y": "y_pos_pixels",
+            "z": "z_pos_pixels",
+        },
         position_scale_nm=PIXEL_SIZE_NM,
         copy=False,
     )
@@ -149,9 +167,7 @@ def test_that_holds_when_dead_rows_have_to_be_repaired():
 def test_a_repaired_row_is_weighted_as_it_is_actually_drawn():
     """A dead row must not dominate the range it is normalized against."""
     settings = GaussianSettings(mode=1)
-    request = RenderPlanner().plan(
-        _nm_table(zeros=5), settings, TRAITS, name="nm"
-    )
+    request = RenderPlanner().plan(_nm_table(zeros=5), settings, TRAITS, name="nm")
 
     repaired, real = request.values[:5], request.values[5:]
     # Before the fix the repaired rows sat ~10^5x above the real ones.
@@ -190,9 +206,7 @@ def test_dead_rows_do_not_set_the_scale_at_any_fitted_width(width_nm):
         copy=False,
     )
 
-    values = RenderPlanner().values(
-        table.selection(), GaussianSettings(mode=1), TRAITS
-    )
+    values = RenderPlanner().values(table.selection(), GaussianSettings(mode=1), TRAITS)
 
     assert values[dead:].max() == pytest.approx(values.max(), rel=1e-6)
 
@@ -219,9 +233,7 @@ def test_a_degenerate_width_distribution_plans_rather_than_raising():
         copy=False,
     )
 
-    values = RenderPlanner().values(
-        table.selection(), GaussianSettings(mode=1), TRAITS
-    )
+    values = RenderPlanner().values(table.selection(), GaussianSettings(mode=1), TRAITS)
 
     assert np.all(np.isfinite(values))
     # The tighter rows are still the brighter ones; nothing is inverted.
@@ -250,8 +262,15 @@ def test_a_two_dimensional_fit_needs_no_axial_width_column():
     """
     rng = np.random.default_rng(0)
     records = np.rec.array(
-        np.zeros(100, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4"),
-                             ("sigma_x_pixels", "f4"), ("sigma_y_pixels", "f4")])
+        np.zeros(
+            100,
+            dtype=[
+                ("x_pos_nm", "f4"),
+                ("y_pos_nm", "f4"),
+                ("sigma_x_pixels", "f4"),
+                ("sigma_y_pixels", "f4"),
+            ],
+        )
     )
     records.x_pos_nm = rng.uniform(0, 1000, 100)
     records.y_pos_nm = rng.uniform(0, 1000, 100)
@@ -262,8 +281,9 @@ def test_a_two_dimensional_fit_needs_no_axial_width_column():
     request = RenderPlanner().plan(
         table,
         GaussianSettings(mode=1),
-        DatasetTraits(zdim_present=False, sigma_present=True,
-                      pixel_size_nm=PIXEL_SIZE_NM),
+        DatasetTraits(
+            zdim_present=False, sigma_present=True, pixel_size_nm=PIXEL_SIZE_NM
+        ),
         name="flat",
     )
 

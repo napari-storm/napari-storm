@@ -9,6 +9,7 @@ invisible to every state assertion, because every piece of state was correct.
 of this work could not check pixels. The canvas' own
 ``_scene_canvas.render()`` does work headless, and that is what these use.
 """
+
 import numpy as np
 import pytest
 
@@ -30,7 +31,9 @@ def _two_spots():
     locs = np.zeros(2, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = [-3000.0, 3000.0]
     locs["y_pos_nm"] = [0.0, 0.0]
-    return LocalizationDataBaseClass(np.rec.array(locs), name="spots", zdim_present=False)
+    return LocalizationDataBaseClass(
+        np.rec.array(locs), name="spots", zdim_present=False
+    )
 
 
 def _render(make_napari_viewer, backend_class, fwhm="600"):
@@ -131,9 +134,7 @@ def _asymmetry(image):
     }
 
 
-@pytest.mark.parametrize(
-    "backend_class", [NapariParticlesRenderer, InstancedRenderer]
-)
+@pytest.mark.parametrize("backend_class", [NapariParticlesRenderer, InstancedRenderer])
 def test_a_splat_is_a_symmetric_gaussian(make_napari_viewer, backend_class):
     """The split showed up as a break in this symmetry, nothing else.
 

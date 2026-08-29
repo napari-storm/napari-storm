@@ -15,6 +15,7 @@ Questions are addressed by a stable *key* rather than by their prompt text, so a
 provider can answer ``"pixelsize_nm"`` without matching on an English sentence
 that may be reworded at any time.
 """
+
 from __future__ import annotations
 
 __all__ = [

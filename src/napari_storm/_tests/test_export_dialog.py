@@ -8,15 +8,18 @@ Two of its jobs are not cosmetic and are tested as behaviour:
 * a view thinned by the render budget says so before the export runs, not
   after, since afterwards is too late to act on.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.image_export import (SCOPE_EVERYTHING, ExportOptions,
-                                       plan_from_widget)
+from napari_storm.image_export import SCOPE_EVERYTHING, ExportOptions, plan_from_widget
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
-from napari_storm.pyqt.export_dialog import (ExportImageDialog, describe_plan,
-                                             format_size)
+from napari_storm.pyqt.export_dialog import (
+    ExportImageDialog,
+    describe_plan,
+    format_size,
+)
 
 
 def _dataset(name="ds", n=200, zdim=False):
@@ -46,7 +49,12 @@ def _dialog(make_napari_viewer, thinned=False, zdim=False):
 
 @pytest.mark.parametrize(
     "nbytes,expected",
-    [(512, "512 B"), (2048, "2.0 KB"), (5 * 1024**2, "5.0 MB"), (3 * 1024**3, "3.0 GB")],
+    [
+        (512, "512 B"),
+        (2048, "2.0 KB"),
+        (5 * 1024**2, "5.0 MB"),
+        (3 * 1024**3, "3.0 GB"),
+    ],
 )
 def test_sizes_are_readable(nbytes, expected):
     assert format_size(nbytes) == expected

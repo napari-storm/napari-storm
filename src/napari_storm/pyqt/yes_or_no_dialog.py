@@ -3,7 +3,7 @@ from qtpy.QtWidgets import QDialog, QFormLayout, QLabel, QPushButton, QWidget
 
 class YesNoWrapper(QDialog):
     """Dialog wrapper for QWidget that should be shown in a dialog,
-     also has the option to return a value from said widget"""
+    also has the option to return a value from said widget"""
 
     def __init__(self, question):
         super().__init__()

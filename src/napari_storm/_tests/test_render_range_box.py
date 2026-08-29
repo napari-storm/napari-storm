@@ -11,6 +11,7 @@ been relying on without saying so:
   is what made the reconstruction look wrong for the duration of a drag. That one
   is covered in `test_additive_blending.py`.
 """
+
 import numpy as np
 from qtpy.QtWidgets import QApplication
 

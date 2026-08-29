@@ -1,4 +1,5 @@
 """Reader hook for the localization formats handled by napari-storm."""
+
 import napari
 
 from ._dock_widget import napari_storm

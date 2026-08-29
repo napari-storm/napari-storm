@@ -6,14 +6,20 @@ adapter. `RenderPlanner` returns coordinates as ``(z, x, y)`` and sigmas as
 plausible with its lateral widths transposed. Every fixture here is
 deliberately asymmetric in all three axes so that a swap cannot pass.
 """
+
 import numpy as np
 import pytest
 import tifffile
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.image_export import (SCOPE_CURRENT_VIEW, SCOPE_EVERYTHING,
-                                       ExportOptions, channel_for,
-                                       export_bounds_nm, plan_from_widget)
+from napari_storm.image_export import (
+    SCOPE_CURRENT_VIEW,
+    SCOPE_EVERYTHING,
+    ExportOptions,
+    channel_for,
+    export_bounds_nm,
+    plan_from_widget,
+)
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
 
 
@@ -37,7 +43,9 @@ def _dataset(name="ds", zdim=False, n=200, anisotropic=False):
         locs["sigma_x_pixels"] = 20.0
         locs["sigma_y_pixels"] = 60.0
         locs["sigma_z_pixels"] = 100.0
-    dataset = LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=zdim)
+    dataset = LocalizationDataBaseClass(
+        np.rec.array(locs), name=name, zdim_present=zdim
+    )
     if anisotropic:
         dataset.sigma_present = True
     return dataset
@@ -233,7 +241,9 @@ def test_two_datasets_become_two_channels(make_napari_viewer, tmp_path):
     path = tmp_path / "two.ome.tif"
 
     widget.export_image(
-        options=ExportOptions(pixel_size_nm=100.0), path=str(path), force_synchronous=True
+        options=ExportOptions(pixel_size_nm=100.0),
+        path=str(path),
+        force_synchronous=True,
     )
 
     with tifffile.TiffFile(path) as handle:
@@ -345,9 +355,7 @@ def test_the_exported_image_is_the_raster_of_the_same_model(
     expected = rasterize(
         channel.coords_nm, channel.sigmas_nm, channel.values, plan.grid
     )
-    np.testing.assert_allclose(
-        np.reshape(written, expected.shape), expected, atol=1e-5
-    )
+    np.testing.assert_allclose(np.reshape(written, expected.shape), expected, atol=1e-5)
 
 
 # ---------------------------------------------- reference-image placement
@@ -417,7 +425,9 @@ def test_an_exported_file_reimports_at_its_original_scale_and_position(
     against the other rather than against itself.
     """
     from napari_storm.pyqt.image_import_dialog import (
-        _try_read_ome_position_nm, _try_read_tiff_pixel_size)
+        _try_read_ome_position_nm,
+        _try_read_tiff_pixel_size,
+    )
 
     widget, _ = _widget(make_napari_viewer)
     path = tmp_path / "roundtrip.ome.tif"
@@ -551,9 +561,7 @@ def test_an_rgb_reference_keeps_its_colour_axis(make_napari_viewer):
     assert data.shape == (1, 10, 40, 3)
 
 
-def test_an_exported_image_reimports_the_right_way_round(
-    make_napari_viewer, tmp_path
-):
+def test_an_exported_image_reimports_the_right_way_round(make_napari_viewer, tmp_path):
     """The round trip that showed the bug: export, re-import, compare extents."""
     from napari_storm.pyqt.image_import_dialog import ImageImportResult
     from napari_storm.pyqt.image_layer_controls import _expand_image

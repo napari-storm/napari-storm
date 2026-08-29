@@ -1,6 +1,5 @@
 from .._data_constants import STORM_DATA_DTYPE
 
-
 lm_base_data_dtype = [("x_pos_nm", "f4"), ("y_pos_nm", "f4"), ("z_pos_nm", "f4")]
 
 storm_data_dtype = STORM_DATA_DTYPE

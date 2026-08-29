@@ -6,7 +6,6 @@ from .data_formats import lm_base_data_dtype
 from .Minflux_class import MinfluxDataBaseClass
 from .storm_class import StormDataClass
 
-
 __all__ = [
     "LocalizationDataBaseClass",
     "MinfluxDataBaseClass",

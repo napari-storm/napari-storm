@@ -60,9 +60,7 @@ def make_colormaps():
         icon = np.zeros((128, 128, 4))
         icon[:, :, -1] = 1
         icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
-        icon[:, :, (i + 1) % 3] = np.interp(
-            (np.arange(128) + 1) / 128, [0, 1], [0, 1]
-        )
+        icon[:, :, (i + 1) % 3] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
         icon = QIcon(_rgba_pixmap(icon))
         cmap_icons.append(icon)
     names = ["orange", "mint", "purple"]
@@ -77,17 +75,13 @@ def make_colormaps():
         icon = np.zeros((128, 128, 4))
         icon[:, :, -1] = 1
         icon[:, :, i] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
-        icon[:, :, (i + 1) % 3] = np.interp(
-            (np.arange(128) + 1) / 128, [0, 1], [0, 1]
-        )
+        icon[:, :, (i + 1) % 3] = np.interp((np.arange(128) + 1) / 128, [0, 1], [0, 1])
         icon = QIcon(_rgba_pixmap(icon))
         cmap_icons.append(icon)
     colors = np.zeros((2, 4))
     colors[-1][:] = 1
     colors[:, -1] = 1
-    cmaps.append(
-        napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray")
-    )
+    cmaps.append(napari.utils.colormaps.colormap.Colormap(colors=colors, name="gray"))
     icon = np.zeros((128, 128, 4))
     icon[:, :, -1] = 1
     for i in range(4):

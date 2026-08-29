@@ -14,6 +14,7 @@ other (P0-04 and §3.2 of ``docs/modernization-review.md``):
 Both limits degrade rather than fail: over-budget datasets render a uniform
 subsample, and over-large splats are clamped to a fraction of the field of view.
 """
+
 from __future__ import annotations
 
 import os

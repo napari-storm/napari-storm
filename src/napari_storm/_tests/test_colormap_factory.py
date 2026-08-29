@@ -3,14 +3,24 @@ Tests for colormap_factory.make_colormaps().
 
 Requires a QApplication (provided by the qtbot fixture from pytest-qt).
 """
+
 import napari.utils.colormaps.colormap as ncc
 from qtpy.QtGui import QIcon, QPixmap
 
 from napari_storm.colormap_factory import make_colormaps
 
 EXPECTED_NAMES = {
-    "red", "green", "blue", "yellow", "cyan", "pink",
-    "orange", "mint", "purple", "gray", "red hot",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "cyan",
+    "pink",
+    "orange",
+    "mint",
+    "purple",
+    "gray",
+    "red hot",
 }
 
 

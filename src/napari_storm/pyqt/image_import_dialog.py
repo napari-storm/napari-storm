@@ -22,7 +22,6 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
-
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
@@ -238,9 +237,7 @@ def _try_read_tiff_pixel_size(file_path: str):
                 res_unit = page.tags.get("ResolutionUnit")
                 if x_res is not None:
                     val = x_res.value
-                    num, den = (
-                        (val[0], val[1]) if hasattr(val, "__len__") else (val, 1)
-                    )
+                    num, den = (val[0], val[1]) if hasattr(val, "__len__") else (val, 1)
                     ru = res_unit.value if res_unit else 2
                     nm_per_px = _res_tag_to_nm(num, den, ru, ij_unit)
                     if nm_per_px:
@@ -253,9 +250,7 @@ def _try_read_tiff_pixel_size(file_path: str):
             res_unit = page.tags.get("ResolutionUnit")
             if x_res is not None:
                 val = x_res.value
-                num, den = (
-                    (val[0], val[1]) if hasattr(val, "__len__") else (val, 1)
-                )
+                num, den = (val[0], val[1]) if hasattr(val, "__len__") else (val, 1)
                 ru = res_unit.value if res_unit else 2
                 nm_per_px = _res_tag_to_nm(num, den, ru)
                 if nm_per_px:
@@ -379,9 +374,7 @@ class ImageImportDialog(QDialog):
         outer.addLayout(form)
 
         # ── Dialog buttons ───────────────────────────────────────────────
-        self._btn_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        self._btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self._btn_box.button(QDialogButtonBox.Ok).setText("Import")
         self._btn_box.button(QDialogButtonBox.Ok).setEnabled(False)
         self._btn_box.accepted.connect(self.accept)

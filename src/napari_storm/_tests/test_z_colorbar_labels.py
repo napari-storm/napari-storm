@@ -9,6 +9,7 @@ The scene-wide claim needs care: the planner normalizes every dataset against
 its own z extent, so one pair of numbers is only true of the whole scene while
 there is one dataset in it.
 """
+
 import numpy as np
 import pytest
 

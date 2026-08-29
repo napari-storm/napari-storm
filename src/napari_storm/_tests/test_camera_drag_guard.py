@@ -10,6 +10,7 @@ while a plain drag rotates and expects two *screen* coordinates. Let go of Shift
 without letting go of the mouse and the rotate branch reads the translate
 branch's three-tuple.
 """
+
 import numpy as np
 import pytest
 
@@ -23,9 +24,7 @@ class _MouseEvent:
     def __init__(self, modifiers=(), press=True):
         self.modifiers = modifiers
         self.pos = np.array([120, 90])
-        self.press_event = (
-            _MouseEvent(modifiers, press=False) if press else None
-        )
+        self.press_event = _MouseEvent(modifiers, press=False) if press else None
 
 
 class _Event:

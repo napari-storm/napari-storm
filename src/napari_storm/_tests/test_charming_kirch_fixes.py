@@ -24,9 +24,7 @@ def _parent():
 
 
 def test_dataset_inputs_do_not_alias_canonical_rows():
-    locs = np.rec.array(
-        np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     dataset = LocalizationDataBaseClass(locs, zdim_present=False)
 
     locs.x_pos_nm[0] = 10
@@ -60,9 +58,7 @@ def test_shared_dtype_and_minflux_factor_have_one_value():
 
 def test_ns_loader_returns_a_list_and_applies_namespace(tmp_path):
     file_path = tmp_path / "saved.ns"
-    locs = np.rec.array(
-        np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     with h5py.File(file_path, "w") as file:
         stored = file.create_dataset("dataset", data=locs)
         stored.attrs["name"] = "saved"
@@ -86,9 +82,7 @@ def test_smlm_loader_uses_the_source_basename(monkeypatch):
 
     monkeypatch.setattr(StormDataClass, "load_smlm", fake_load)
     provider = StaticMetadataProvider({PIXEL_SIZE_NM: "100"})
-    interface = FileToLocalizationDataInterface(
-        _parent(), metadata_provider=provider
-    )
+    interface = FileToLocalizationDataInterface(_parent(), metadata_provider=provider)
     interface.load_smlm(r"C:\measurements\sample.smlm")
 
     # The reader is also handed the provider it needs for a .smlm file with no

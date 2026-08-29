@@ -1,16 +1,34 @@
 import logging
+
 import numpy as np
 from qtpy import QtCore
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QDoubleValidator, QFont
-from qtpy.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout,
-                            QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                            QListWidget, QPushButton, QScrollArea, QSizePolicy,
-                            QSlider, QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 
 from napari_storm.CustomErrors import ParentError
-from napari_storm.ns_constants import (FWHM_TO_SIGMA, MAX_FWHM_NM,
-                                       MIN_FWHM_NM, standard_colors)
+from napari_storm.ns_constants import (
+    FWHM_TO_SIGMA,
+    MAX_FWHM_NM,
+    MIN_FWHM_NM,
+    standard_colors,
+)
 from napari_storm.pyqt.dataset_info_widget import DatasetInfoPanel
 from napari_storm.pyqt.GridPlaneSlider import GridPlaneSlider
 from napari_storm.pyqt.PyQTvisuals import QHSeperationLine
@@ -189,7 +207,9 @@ class NapariStormGUI(QWidget):
 
         self.Esigma_min_xy = QLineEdit()
         self.Esigma_min_xy.setValidator(self._make_fwhm_validator())
-        self.Esigma_min_xy.setText(str(self.render_var_gauss_sigma_min_xy_nm * FWHM_TO_SIGMA))
+        self.Esigma_min_xy.setText(
+            str(self.render_var_gauss_sigma_min_xy_nm * FWHM_TO_SIGMA)
+        )
         self.Esigma_min_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
@@ -197,7 +217,9 @@ class NapariStormGUI(QWidget):
 
         self.Esigma_min_z = QLineEdit()
         self.Esigma_min_z.setValidator(self._make_fwhm_validator())
-        self.Esigma_min_z.setText(str(self.render_var_gauss_sigma_min_z_nm * FWHM_TO_SIGMA))
+        self.Esigma_min_z.setText(
+            str(self.render_var_gauss_sigma_min_z_nm * FWHM_TO_SIGMA)
+        )
         self.Esigma_min_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
@@ -237,9 +259,7 @@ class NapariStormGUI(QWidget):
         self.Breset_render_range = QPushButton()
         self.Breset_render_range.setText("Reset Render Range")
         self.Breset_render_range.clicked.connect(self.reset_render_range)
-        self.render_range_group_layout.addWidget(
-            self.Breset_render_range, 3, 0, 1, 2
-        )
+        self.render_range_group_layout.addWidget(self.Breset_render_range, 3, 0, 1, 2)
 
         self.data_controls_tab_layout.addWidget(self.render_range_group, 11, 0, 1, 4)
 
@@ -437,9 +457,7 @@ class NapariStormGUI(QWidget):
         self.data_controls_scroll = QScrollArea(self.data_control_tab)
         self.data_controls_scroll.setObjectName("dataControlsScrollArea")
         self.data_controls_scroll.setWidgetResizable(True)
-        self.data_controls_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
-        )
+        self.data_controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.data_controls_scroll.setStyleSheet("QScrollArea { border: none; }")
         self.data_controls_scroll.setWidget(self.data_controls_content)
         data_control_outer_layout = QVBoxLayout(self.data_control_tab)

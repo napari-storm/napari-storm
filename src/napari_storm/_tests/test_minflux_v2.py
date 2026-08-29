@@ -10,28 +10,62 @@ Fixtures are written to the layout pyMINFLUX documents, since a real Abberior
 export cannot be committed here. What they cannot check is whether a genuine
 file matches that layout in some detail nobody wrote down.
 """
+
 import json
 
 import numpy as np
 import pytest
 
 from napari_storm.localization_dataset_types.minflux_v2 import (
-    MinfluxDataV2Class, MinfluxV2FormatError, is_v2_file, read_v2_columns,
-    select_iteration, zarr_store_root)
+    MinfluxDataV2Class,
+    MinfluxV2FormatError,
+    is_v2_file,
+    read_v2_columns,
+    select_iteration,
+    zarr_store_root,
+)
 
 V2_DTYPE = [
-    ("vld", "?"), ("fnl", "?"), ("bot", "?"), ("eot", "?"), ("sta", "u1"),
-    ("tim", "<f8"), ("tid", "<u4"), ("gri", "<u4"), ("thi", "u1"), ("sqi", "u1"),
-    ("itr", "<i4"), ("loc", "<f8", (3,)), ("lnc", "<f8", (3,)),
-    ("eco", "<u4"), ("ecc", "<u4"), ("efo", "<f4"), ("efc", "<f4"),
-    ("cfr", "<f2"), ("dcr", "<f2", (2,)), ("fbg", "<f4"),
+    ("vld", "?"),
+    ("fnl", "?"),
+    ("bot", "?"),
+    ("eot", "?"),
+    ("sta", "u1"),
+    ("tim", "<f8"),
+    ("tid", "<u4"),
+    ("gri", "<u4"),
+    ("thi", "u1"),
+    ("sqi", "u1"),
+    ("itr", "<i4"),
+    ("loc", "<f8", (3,)),
+    ("lnc", "<f8", (3,)),
+    ("eco", "<u4"),
+    ("ecc", "<u4"),
+    ("efo", "<f4"),
+    ("efc", "<f4"),
+    ("cfr", "<f2"),
+    ("dcr", "<f2", (2,)),
+    ("fbg", "<f4"),
 ]
 
 #: The older layout, abbreviated: what matters is that `itr` is nested.
 V1_DTYPE = [
-    ("vld", "?"), ("tim", "<f8"), ("tid", "<u4"), ("act", "?"),
-    ("itr", [("loc", "<f8", (3,)), ("eco", "<u4"), ("efo", "<f4"),
-             ("cfr", "<f4"), ("dcr", "<f4"), ("sta", "<i4")], (4,)),
+    ("vld", "?"),
+    ("tim", "<f8"),
+    ("tid", "<u4"),
+    ("act", "?"),
+    (
+        "itr",
+        [
+            ("loc", "<f8", (3,)),
+            ("eco", "<u4"),
+            ("efo", "<f4"),
+            ("cfr", "<f4"),
+            ("dcr", "<f4"),
+            ("sta", "<i4"),
+        ],
+        (4,),
+    ),
 ]
 
 N_TRACES, N_ITR = 8, 4
@@ -107,7 +141,7 @@ def test_fnl_is_used_rather_than_the_highest_iteration_number(tmp_path):
     `itr == max` are not the same set of rows."""
     a = _v2_array(n_traces=3, n_itr=4)
     a["fnl"] = False
-    a["fnl"][[1, 6, 11]] = True          # itr 1, 2 and 3 respectively
+    a["fnl"][[1, 6, 11]] = True  # itr 1, 2 and 3 respectively
     path = tmp_path / "track.npy"
     np.save(path, a)
     kept = select_iteration(read_v2_columns(str(path)))
@@ -127,7 +161,7 @@ def test_asking_for_an_iteration_that_is_not_there_says_so(npy_file):
 
 def test_invalid_entries_are_dropped(tmp_path):
     path = tmp_path / "some_invalid.npy"
-    np.save(path, _v2_array(invalid=N_ITR))   # the whole first trace
+    np.save(path, _v2_array(invalid=N_ITR))  # the whole first trace
     dataset = MinfluxDataV2Class().load(str(path))
     assert len(dataset.locs_all) == N_TRACES - 1
 
@@ -168,16 +202,25 @@ def test_json_reads_the_same_as_npy(tmp_path, npy_file):
     a = _v2_array()
     records = [
         {
-            "vld": bool(row["vld"]), "fnl": bool(row["fnl"]),
-            "bot": bool(row["bot"]), "eot": bool(row["eot"]),
-            "sta": int(row["sta"]), "tim": float(row["tim"]),
-            "tid": int(row["tid"]), "gri": int(row["gri"]),
-            "thi": int(row["thi"]), "sqi": int(row["sqi"]),
-            "itr": int(row["itr"]), "loc": [float(v) for v in row["loc"]],
+            "vld": bool(row["vld"]),
+            "fnl": bool(row["fnl"]),
+            "bot": bool(row["bot"]),
+            "eot": bool(row["eot"]),
+            "sta": int(row["sta"]),
+            "tim": float(row["tim"]),
+            "tid": int(row["tid"]),
+            "gri": int(row["gri"]),
+            "thi": int(row["thi"]),
+            "sqi": int(row["sqi"]),
+            "itr": int(row["itr"]),
+            "loc": [float(v) for v in row["loc"]],
             "lnc": [float(v) for v in row["lnc"]],
-            "eco": int(row["eco"]), "ecc": int(row["ecc"]),
-            "efo": float(row["efo"]), "efc": float(row["efc"]),
-            "cfr": float(row["cfr"]), "dcr": [float(v) for v in row["dcr"]],
+            "eco": int(row["eco"]),
+            "ecc": int(row["ecc"]),
+            "efo": float(row["efo"]),
+            "efc": float(row["efc"]),
+            "cfr": float(row["cfr"]),
+            "dcr": [float(v) for v in row["dcr"]],
             "fbg": float(row["fbg"]),
         }
         for row in a
@@ -240,12 +283,18 @@ def test_pmx_reads_the_same_as_npy(tmp_path, npy_file):
     h5py = pytest.importorskip("h5py")
     a = _v2_array()
     columns = {
-        "vld": a["vld"].astype(float), "fnl": a["fnl"].astype(float),
-        "tid": a["tid"].astype(float), "itr": a["itr"].astype(float),
+        "vld": a["vld"].astype(float),
+        "fnl": a["fnl"].astype(float),
+        "tid": a["tid"].astype(float),
+        "itr": a["itr"].astype(float),
         "tim": a["tim"],
-        "x": a["loc"][:, 0], "y": a["loc"][:, 1], "z": a["loc"][:, 2],
-        "eco": a["eco"].astype(float), "efo": a["efo"].astype(float),
-        "cfr": a["cfr"].astype(float), "dcr": a["dcr"][:, 0].astype(float),
+        "x": a["loc"][:, 0],
+        "y": a["loc"][:, 1],
+        "z": a["loc"][:, 2],
+        "eco": a["eco"].astype(float),
+        "efo": a["efo"].astype(float),
+        "cfr": a["cfr"].astype(float),
+        "dcr": a["dcr"][:, 0].astype(float),
         "fbg": a["fbg"].astype(float),
     }
     path = tmp_path / "exp.pmx"
@@ -275,8 +324,9 @@ def test_an_older_pmx_file_is_not_read_as_the_new_layout(tmp_path):
 def _interface():
     from types import SimpleNamespace
 
-    from napari_storm.FileToLocalizationDataInterface import \
-        FileToLocalizationDataInterface
+    from napari_storm.FileToLocalizationDataInterface import (
+        FileToLocalizationDataInterface,
+    )
 
     return FileToLocalizationDataInterface(
         parent=SimpleNamespace(localization_datasets=[])

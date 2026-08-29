@@ -4,7 +4,6 @@ import napari
 import numpy as np
 from qtpy.QtWidgets import QWidget
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +13,7 @@ def custom_keys_and_scalebar(self):
     # a and d to rotate view
     v = napari.current_viewer()
     try:
+
         @v.bind_key("w")
         def fly_ahead(v):
             v.camera.zoom *= 1.1
@@ -77,6 +77,7 @@ def custom_keys_and_scalebar(self):
             for layer in v.layers:
                 if layer.name != "scalebar":
                     layer.translate += [0, 0, 50]
+
     except Exception as exc:
         # Reinitializing a dock can encounter keys already bound by the prior
         # instance.  Report it through logging rather than writing to stdout.
@@ -105,7 +106,7 @@ class Panning_create_anker(QWidget):
         # on press — left button (1) + Shift
         if event.button == 1 and "Shift" in event.modifiers:
             # self.create_anker()
-            pass # currently not needed, if necessary needs to be created more efficiently.
+            pass  # currently not needed, if necessary needs to be created more efficiently.
         yield
         # on move
         while event.type == "mouse_move":

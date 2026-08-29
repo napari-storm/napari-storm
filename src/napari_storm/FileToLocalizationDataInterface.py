@@ -1,19 +1,25 @@
-import h5py
-import numpy as np
 import os.path as _ospath
 
-import napari_storm.localization_dataset_types as dataset_classes
+import h5py
+import numpy as np
 from qtpy.QtWidgets import QFileDialog
+
+import napari_storm.localization_dataset_types as dataset_classes
 
 from .background_loading import run_on_main_thread
 from .CustomErrors import FileImportAbortedError, ParentError
 from .file_and_data_recognition import file_and_data_recognition
 from .localization_dataset_types.Custom_Import import custom_import_function
 from .localization_dataset_types.Minflux_class import MinfluxDataAIIterationClass
-from .localization_dataset_types.minflux_v2 import (MinfluxDataV2Class,
-                                                    is_v2_file,
-                                                    zarr_store_root)
-from .localization_dataset_types.storm_class import StormDataClass, StormDatasetCollection
+from .localization_dataset_types.minflux_v2 import (
+    MinfluxDataV2Class,
+    is_v2_file,
+    zarr_store_root,
+)
+from .localization_dataset_types.storm_class import (
+    StormDataClass,
+    StormDatasetCollection,
+)
 from .ns_constants import LOCS_DTYPE
 from .pyqt.prompts import QtMetadataProvider
 
@@ -103,9 +109,7 @@ class FileToLocalizationDataInterface:
             # starts building layers on the GUI thread.
             handle.checkpoint(f"Preparing {len(datasets)} dataset(s)…")
 
-        self.sync_dataset_entries(
-            [*self.parent.localization_datasets, *datasets]
-        )
+        self.sync_dataset_entries([*self.parent.localization_datasets, *datasets])
         return datasets
 
     def open_known_filetype_and_import_dataset(self, file_path):
@@ -174,8 +178,7 @@ class FileToLocalizationDataInterface:
 
         def conflicts(candidate):
             return any(
-                existing == candidate
-                or existing.startswith(candidate + " Channel ")
+                existing == candidate or existing.startswith(candidate + " Channel ")
                 for existing in existing_names
             )
 
@@ -244,9 +247,7 @@ class FileToLocalizationDataInterface:
         filename = _ospath.basename(source.rstrip("/\\").replace("\\", "/"))
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
-        return [
-            MinfluxDataV2Class().load(file_path=file_path, name=filename, itr=itr)
-        ]
+        return [MinfluxDataV2Class().load(file_path=file_path, name=filename, itr=itr)]
 
     def load_mfx_json(self, file_path, itr=-1):
         """loads localizations from AIs json format, in either layout"""

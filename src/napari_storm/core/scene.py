@@ -23,6 +23,7 @@ change rather than a cached copy of what it used to be.
 Nothing here imports a host. A scene can be written from a script, inspected in
 a text editor, and read back without a viewer.
 """
+
 from __future__ import annotations
 
 import json

@@ -10,16 +10,25 @@ backend's mesh is a four-vertex quad standing in for every localization, so
 saving through the host's own layer state would write a quad and call it a
 reconstruction.
 """
+
 import json
 
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.core import (CameraState, DatasetEntry, GaussianSettings,
-                               LayerAppearance, ReferenceImageEntry, Scene,
-                               SceneFormatError, WorldTransform, load_scene,
-                               save_scene)
+from napari_storm.core import (
+    CameraState,
+    DatasetEntry,
+    GaussianSettings,
+    LayerAppearance,
+    ReferenceImageEntry,
+    Scene,
+    SceneFormatError,
+    WorldTransform,
+    load_scene,
+    save_scene,
+)
 from napari_storm.core.scene import SCENE_FORMAT, SCENE_VERSION
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
 
@@ -149,9 +158,7 @@ def test_invalid_json_is_refused_with_its_reason(tmp_path):
 def test_a_newer_scene_is_refused_rather_than_guessed_at(tmp_path):
     """Silently ignoring fields whose meaning changed would misplace data."""
     path = tmp_path / "future.json"
-    path.write_text(
-        json.dumps({"format": SCENE_FORMAT, "version": SCENE_VERSION + 1})
-    )
+    path.write_text(json.dumps({"format": SCENE_FORMAT, "version": SCENE_VERSION + 1}))
 
     with pytest.raises(SceneFormatError, match="reads up to"):
         load_scene(path)
@@ -203,7 +210,10 @@ def test_loading_a_scene_restores_the_alignment(make_napari_viewer, tmp_path):
     widget.save_scene_to(path)
 
     widget.channel[0].reset_shift()
-    assert widget.dataset_store.state(dataset.dataset_id).transform.translation_nm[0] == 0.0
+    assert (
+        widget.dataset_store.state(dataset.dataset_id).transform.translation_nm[0]
+        == 0.0
+    )
 
     widget.load_scene_from(path)
 

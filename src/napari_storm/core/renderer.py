@@ -15,6 +15,7 @@ a name. The one deliberately loose field is ``colormap``, which is whatever
 palette handle the backend understands; the planner passes it through without
 inspecting it, so a napari ``Colormap`` never has to be named here.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
@@ -235,9 +236,7 @@ class NullRenderer(LocalizationRenderer):
         if current is None:
             raise KeyError(f"dataset {dataset_id} is not open")
         changes = {
-            name: value
-            for name, value in vars(appearance).items()
-            if value is not None
+            name: value for name, value in vars(appearance).items() if value is not None
         }
         self.appearances[dataset_id] = replace(current, **changes)
         if appearance.visible is not None:

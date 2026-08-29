@@ -6,6 +6,7 @@ shader filter, its viewer registration and its teardown — so that a second
 backend can be written against `LocalizationRenderer` without touching the code
 that decides what to draw.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -197,8 +198,15 @@ class NapariParticlesRenderer(LocalizationRenderer):
         if layer is None:
             return 0
         total = 0
-        for name in ("_coords", "_centercoords", "_sigmas", "_size", "_texcoords",
-                     "_view_faces", "_view_vertices"):
+        for name in (
+            "_coords",
+            "_centercoords",
+            "_sigmas",
+            "_size",
+            "_texcoords",
+            "_view_faces",
+            "_view_vertices",
+        ):
             array = getattr(layer, name, None)
             if isinstance(array, np.ndarray):
                 total += array.nbytes

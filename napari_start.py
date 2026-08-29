@@ -1,11 +1,13 @@
-import napari
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+import napari
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 from napari_storm import *
 
+
 def main():
-    from napari_storm.napari_particles._napari_compat import \
-        enable_instanced_backend
+    from napari_storm.napari_particles._napari_compat import enable_instanced_backend
 
     if not enable_instanced_backend():
         print(
@@ -22,6 +24,7 @@ def main():
 
     napari.run()
     return 0
+
 
 if __name__ == "__main__":
     main()

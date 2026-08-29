@@ -43,6 +43,7 @@ Axis *order* is deliberately not this class's business. Positions are keyed by
 axis name here; the renderer's ``(z, y, x)`` column order is applied at that
 boundary, where it belongs.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -121,9 +122,7 @@ class TableSelection:
 
     @property
     def n(self):
-        return (
-            self._table.n_filtered if self.kind == FILTERED else self._table.n_active
-        )
+        return self._table.n_filtered if self.kind == FILTERED else self._table.n_active
 
     @property
     def records(self):
@@ -136,7 +135,9 @@ class TableSelection:
     @property
     def ids(self):
         return (
-            self._table.filtered_ids if self.kind == FILTERED else self._table.active_ids
+            self._table.filtered_ids
+            if self.kind == FILTERED
+            else self._table.active_ids
         )
 
     def coordinate_nm(self, axis):
@@ -226,9 +227,7 @@ class LocalizationTable:
         self._sigma_columns = dict(
             DEFAULT_SIGMA_COLUMNS if sigma_columns is None else sigma_columns
         )
-        self._sigma_scale_nm = (
-            None if sigma_scale_nm is None else float(sigma_scale_nm)
-        )
+        self._sigma_scale_nm = None if sigma_scale_nm is None else float(sigma_scale_nm)
         self._photon_column = (
             DEFAULT_PHOTON_COLUMN if photon_column is None else photon_column
         )
@@ -692,7 +691,9 @@ class LocalizationTable:
         """Narrow the selection to rows with ``low <= prop <= high``."""
         if low == -np.inf and high == np.inf:
             raise ValueError("Nothing to filter here")
-        self.set_filter_mask(self._filter_mask & self.mask_for_property(prop, low, high))
+        self.set_filter_mask(
+            self._filter_mask & self.mask_for_property(prop, low, high)
+        )
 
     def keep_values(self, prop, values):
         """Narrow the selection to rows whose *prop* is one of *values*."""
@@ -753,9 +754,7 @@ class LocalizationTable:
         """
         if self._records is None:
             return 0
-        columns = [
-            self.coordinate_nm(axis) for axis in AXES if self.has_axis(axis)
-        ]
+        columns = [self.coordinate_nm(axis) for axis in AXES if self.has_axis(axis)]
         if not columns:
             return 0
         bad = non_finite_mask(*columns)

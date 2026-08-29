@@ -12,6 +12,7 @@ settings or into a dataset class for its columns: it takes a
 :class:`GaussianSettings`, a :class:`~napari_storm.core.LocalizationTable` and a
 few flags describing what the format actually recorded.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,8 +21,11 @@ import numpy as np
 
 from .localization_table import ACTIVE
 from .renderer import DEFAULT_COLORMAP, Changed, RenderRequest
-from .validation import (InvalidLocalizationData, require_positive_maximum,
-                         sanitize_positive)
+from .validation import (
+    InvalidLocalizationData,
+    require_positive_maximum,
+    sanitize_positive,
+)
 from .world_transform import IDENTITY
 
 __all__ = ["GaussianSettings", "DatasetTraits", "RenderPlanner"]
@@ -195,9 +199,7 @@ class RenderPlanner:
         if settings.z_color_encoding:
             if not traits.zdim_present:
                 raise InvalidLocalizationData("no z coordinate to colour by")
-            values = np.array(
-                rows.coordinate_nm("z"), dtype=np.float32, copy=True
-            )
+            values = np.array(rows.coordinate_nm("z"), dtype=np.float32, copy=True)
             values = _normalized(values)
 
         return require_positive_maximum(values, "render values")
@@ -214,9 +216,9 @@ class RenderPlanner:
             sigma_xy = psf_xy / np.sqrt(photons)
             if traits.zdim_present:
                 psf_z = settings.var_psf_sigma_z_nm / traits.pixel_size_nm
-                product = sigma_xy ** 2 * (psf_z / np.sqrt(photons))
+                product = sigma_xy**2 * (psf_z / np.sqrt(photons))
             else:
-                product = sigma_xy ** 2
+                product = sigma_xy**2
 
         values = _normalized(1.0 / product)
         # Map the 99th percentile to 1 so a few very tight localizations do not

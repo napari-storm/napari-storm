@@ -61,9 +61,9 @@ def test_reference_images_do_not_change_camera_projection(make_napari_viewer):
     [
         # Normals in the layer's (z, y, x) order: the plane is named by the two
         # axes it spans, so its normal is the third.
-        ("XY", (1, 0, 0)),   # constant z
-        ("XZ", (0, 1, 0)),   # constant y
-        ("YZ", (0, 0, 1)),   # constant x
+        ("XY", (1, 0, 0)),  # constant z
+        ("XZ", (0, 1, 0)),  # constant y
+        ("YZ", (0, 0, 1)),  # constant x
     ],
 )
 @pytest.mark.parametrize("rgb", [False, True], ids=["grayscale", "rgb"])
@@ -87,21 +87,15 @@ def test_planar_references_use_no_depth_plane_rendering(
 
 
 @pytest.mark.parametrize("rgb", [False, True], ids=["grayscale", "rgb"])
-def test_volumetric_reference_keeps_normal_volume_rendering(
-    make_napari_viewer, rgb
-):
+def test_volumetric_reference_keeps_normal_volume_rendering(make_napari_viewer, rgb):
     viewer = make_napari_viewer()
     widget = napari_storm(napari_viewer=viewer)
-    widget._add_image_layer_from_result(
-        _reference_image(orientation="3D", rgb=rgb)
-    )
+    widget._add_image_layer_from_result(_reference_image(orientation="3D", rgb=rgb))
     layer = widget.image_layer_controls[0]._layer
 
     assert layer.rgb is rgb
     assert layer.depiction == "volume"
-    assert _reference_image_rendering_options(
-        layer.data, "3D", rgb=rgb
-    ) == {}
+    assert _reference_image_rendering_options(layer.data, "3D", rgb=rgb) == {}
 
 
 def test_grayscale_reference_has_live_contrast_and_colormap_controls(
@@ -180,12 +174,8 @@ def test_rotation_buttons_turn_about_each_axis_without_moving_the_centre(
     controls._rotation_buttons[(axis, 1)].click()
 
     np.testing.assert_allclose(layer.rotate, _quarter_turn_matrix(axis))
-    np.testing.assert_allclose(
-        _layer_centre_in_world(layer), centre_before, atol=1e-9
-    )
+    np.testing.assert_allclose(_layer_centre_in_world(layer), centre_before, atol=1e-9)
 
     controls._rotation_buttons[(axis, -1)].click()
     np.testing.assert_allclose(layer.rotate, np.eye(3), atol=1e-12)
-    np.testing.assert_allclose(
-        _layer_centre_in_world(layer), centre_before, atol=1e-9
-    )
+    np.testing.assert_allclose(_layer_centre_in_world(layer), centre_before, atol=1e-9)
