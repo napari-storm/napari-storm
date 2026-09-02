@@ -87,14 +87,18 @@ class FileToLocalizationDataInterface:
             else:
                 datasets = self.open_known_filetype_and_import_dataset(file_path)
 
-        except (FileImportAbortedError, FileNotFoundError):
+        except FileImportAbortedError:
+            # A deliberate abort is the one silent outcome: whoever aborted
+            # already knows why nothing was loaded.
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             return None
         except Exception:
             # Importers currently register names while loading.  Roll that
             # bookkeeping back if an importer fails part-way through, while
-            # still surfacing unexpected errors to the caller.
+            # still surfacing unexpected errors to the caller.  A missing
+            # Picasso .yaml arrives here as a FileNotFoundError whose message
+            # is the entire diagnosis, so it must not be mistaken for a cancel.
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             raise

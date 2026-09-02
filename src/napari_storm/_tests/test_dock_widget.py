@@ -4,6 +4,7 @@ Smoke tests for the napari_storm dock widget.
 These require a real napari viewer and Qt event loop.
 """
 
+import h5py
 import numpy as np
 from qtpy.QtWidgets import QApplication, QScrollArea
 
@@ -212,3 +213,27 @@ def test_render_state_follows_identity_not_position(make_napari_viewer):
     # The third dataset moved from index 2 to index 1 and kept its own arrays.
     assert widget.data_to_layer_itf.render_state[datasets[2].dataset_id] is third_state
     assert datasets[0].dataset_id not in widget.data_to_layer_itf.render_state
+
+
+def test_a_picasso_hdf5_without_its_yaml_warns_instead_of_failing_silently(
+    make_napari_viewer, tmp_path, monkeypatch
+):
+    """Inline opens keep their True/False contract, but say what went wrong."""
+    viewer = make_napari_viewer()
+    widget = napari_storm(napari_viewer=viewer)
+
+    file_path = tmp_path / "locs.hdf5"
+    locs = np.rec.array(np.zeros(3, dtype=[("frame", "i4"), ("x", "f4"), ("y", "f4")]))
+    with h5py.File(file_path, "w") as file:
+        file.create_dataset("locs", data=locs)
+
+    warnings = []
+    monkeypatch.setattr(widget, "_warn_user", warnings.append)
+
+    assert (
+        widget.open_localization_data_file_and_get_dataset(file_path=str(file_path))
+        is False
+    )
+    assert len(warnings) == 1
+    assert "yaml" in warnings[0]
+    assert widget.localization_datasets == []

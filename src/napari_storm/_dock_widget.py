@@ -818,11 +818,24 @@ class napari_storm(NapariStormGUI):
             )
         # File selection and import happen before touching the current session.
         # Closing a dialog is therefore a no-op instead of an accidental clear.
-        datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(
-            file_path=file_path,
-            file_type_recognizer=file_recognition,
-            custom_import=custom_import,
-        )
+        try:
+            datasets = (
+                self._file_to_data_itf.open_localization_data_file_and_get_dataset(
+                    file_path=file_path,
+                    file_type_recognizer=file_recognition,
+                    custom_import=custom_import,
+                )
+            )
+        except FileNotFoundError as error:
+            # The background path reports this through its own error callback.
+            # Inline callers -- the napari reader hook, the tests -- rely on a
+            # True/False return, so the message is surfaced here rather than
+            # raised into napari's reader machinery as a traceback.
+            self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
+            self._warn_user(
+                f"could not open {file_path or 'the selected file'}: {error}"
+            )
+            return False
         if not datasets:
             return False
         return self._apply_loaded_datasets(datasets, merge=merge)

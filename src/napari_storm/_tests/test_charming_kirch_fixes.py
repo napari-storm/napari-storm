@@ -92,3 +92,19 @@ def test_smlm_loader_uses_the_source_basename(monkeypatch):
 
 def test_missing_picasso_metadata_returns_an_empty_list(tmp_path):
     assert StormDataClass().load_info(str(tmp_path / "missing.hdf5")) == []
+
+
+def test_a_picasso_hdf5_without_its_yaml_reports_why_it_did_not_open(tmp_path):
+    """The missing sidecar must not be swallowed as if it were a cancel."""
+    file_path = tmp_path / "locs.hdf5"
+    locs = np.rec.array(np.zeros(3, dtype=[("frame", "i4"), ("x", "f4"), ("y", "f4")]))
+    with h5py.File(file_path, "w") as file:
+        file.create_dataset("locs", data=locs)
+
+    interface = FileToLocalizationDataInterface(_parent())
+    with pytest.raises(FileNotFoundError, match="yaml"):
+        interface.open_localization_data_file_and_get_dataset(file_path=str(file_path))
+
+    # Nothing was registered on the way out, whichever way the caller reports it.
+    assert interface.dataset_names == []
+    assert interface.n_datasets == 0
