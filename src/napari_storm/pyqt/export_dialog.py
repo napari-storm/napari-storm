@@ -17,6 +17,7 @@ from __future__ import annotations
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -29,7 +30,14 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..image_export import SCOPE_CURRENT_VIEW, SCOPE_EVERYTHING, ExportOptions
+from ..image_export import (
+    PROJECTION_XY,
+    PROJECTION_XZ,
+    PROJECTION_YZ,
+    SCOPE_CURRENT_VIEW,
+    SCOPE_EVERYTHING,
+    ExportOptions,
+)
 
 __all__ = ["ExportImageDialog", "format_size", "describe_plan"]
 
@@ -94,6 +102,22 @@ class ExportImageDialog(QDialog):
         form.addRow("Export:", self.current_view)
         form.addRow("", self.everything)
 
+        # Only meaningful for a 2-D export: a volume already contains every
+        # plane, so it is disabled rather than hidden alongside the Z step.
+        self.projection = QComboBox()
+        for label, value in (
+            ("XY (looking down Z)", PROJECTION_XY),
+            ("XZ (looking along Y)", PROJECTION_XZ),
+            ("YZ (looking along X)", PROJECTION_YZ),
+        ):
+            self.projection.addItem(label, value)
+        self.projection.setToolTip(
+            "Which plane the localizations are summed onto. The Gaussians are "
+            "rasterized in the chosen plane, so an XZ view carries the axial "
+            "widths rather than a reslice of the XY image."
+        )
+        form.addRow("Projection:", self.projection)
+
         self.z_step = QDoubleSpinBox()
         self.z_step.setDecimals(3)
         self.z_step.setRange(0.001, 100_000.0)
@@ -152,6 +176,7 @@ class ExportImageDialog(QDialog):
                 else SCOPE_EVERYTHING
             ),
             z_step_nm=float(self.z_step.value()),
+            projection=self.projection.currentData(),
         )
 
     def output_path(self):
@@ -164,7 +189,9 @@ class ExportImageDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_scope_changed(self, *_):
-        self.z_step.setEnabled(self.everything.isChecked())
+        volume = self.everything.isChecked()
+        self.z_step.setEnabled(volume)
+        self.projection.setEnabled(not volume)
         self._refresh()
 
     def _browse(self):

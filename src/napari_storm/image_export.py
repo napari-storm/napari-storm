@@ -17,7 +17,7 @@ reading the request rather than by rearranging it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -41,6 +41,54 @@ SCOPE_CURRENT_VIEW = "current_view"
 #: Opt-in: a Z-stack over the whole dataset extent, ignoring the render range.
 SCOPE_EVERYTHING = "everything"
 
+#: Which plane a 2-D export projects onto.  The rasterizer always collapses
+#: axis 0 and draws axes 1 and 2, so a projection is a permutation of the
+#: ``(z, y, x)`` columns rather than a second code path: put the axis being
+#: summed over first, and the remaining two are the image, row axis first.
+PROJECTION_XY = "xy"
+PROJECTION_XZ = "xz"
+PROJECTION_YZ = "yz"
+
+_PROJECTION_AXES = {
+    PROJECTION_XY: (0, 1, 2),  # sum z, image (y, x) -- what exports did before
+    PROJECTION_XZ: (1, 0, 2),  # sum y, image (z, x)
+    PROJECTION_YZ: (2, 0, 1),  # sum x, image (z, y)
+}
+
+
+def projection_axes(projection):
+    """The ``(z, y, x)`` column order *projection* rasterizes in."""
+    try:
+        return _PROJECTION_AXES[projection]
+    except KeyError:
+        raise ValueError(
+            f"unknown projection {projection!r}; "
+            f"expected one of {sorted(_PROJECTION_AXES)}"
+        ) from None
+
+
+def project_channel(channel, projection):
+    """*channel* with its coordinates and widths permuted for *projection*.
+
+    Widths move with the coordinates because a Gaussian's extent is per axis:
+    projecting onto XZ and keeping the y width would draw the wrong shape and
+    would silently look plausible.
+    """
+    axes = projection_axes(projection)
+    if axes == (0, 1, 2):
+        return channel
+    return replace(
+        channel,
+        coords_nm=np.ascontiguousarray(channel.coords_nm[:, axes]),
+        sigmas_nm=np.ascontiguousarray(channel.sigmas_nm[:, axes]),
+    )
+
+
+def project_bounds(bounds_nm, projection):
+    """*bounds_nm* reordered to match :func:`project_channel`."""
+    axes = projection_axes(projection)
+    return tuple(tuple(bounds_nm[axis]) for axis in axes)
+
 
 @dataclass(frozen=True)
 class ExportOptions:
@@ -49,6 +97,8 @@ class ExportOptions:
     pixel_size_nm: float = 10.0
     scope: str = SCOPE_CURRENT_VIEW
     z_step_nm: float = 50.0
+    #: Only consulted for a 2-D export: a volume has every plane in it already.
+    projection: str = PROJECTION_XY
 
     @property
     def is_3d(self):
@@ -249,6 +299,9 @@ def plan_from_widget(widget, options):
 
     channels = [channel_for(interface, dataset) for dataset in datasets]
     bounds = export_bounds_nm(widget, options, channels)
+    if not options.is_3d:
+        channels = [project_channel(c, options.projection) for c in channels]
+        bounds = project_bounds(bounds, options.projection)
     return plan_export(
         channels,
         bounds,
