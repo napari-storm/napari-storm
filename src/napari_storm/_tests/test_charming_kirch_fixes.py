@@ -8,6 +8,7 @@ import pytest
 
 from napari_storm import ns_constants
 from napari_storm.core import PIXEL_SIZE_NM, StaticMetadataProvider
+from napari_storm.CustomErrors import UnknownFileLayoutError
 from napari_storm.FileToLocalizationDataInterface import (
     FileToLocalizationDataInterface,
 )
@@ -94,15 +95,14 @@ def test_missing_picasso_metadata_returns_an_empty_list(tmp_path):
     assert StormDataClass().load_info(str(tmp_path / "missing.hdf5")) == []
 
 
-def test_a_picasso_hdf5_without_its_yaml_reports_why_it_did_not_open(tmp_path):
-    """The missing sidecar must not be swallowed as if it were a cancel."""
-    file_path = tmp_path / "locs.hdf5"
-    locs = np.rec.array(np.zeros(3, dtype=[("frame", "i4"), ("x", "f4"), ("y", "f4")]))
+def test_an_hdf5_that_cannot_be_read_reports_why_it_did_not_open(tmp_path):
+    """A file we cannot read must not be swallowed as if it were a cancel."""
+    file_path = tmp_path / "something_else.hdf5"
     with h5py.File(file_path, "w") as file:
-        file.create_dataset("locs", data=locs)
+        file.create_dataset("mystery", data=np.zeros(3))
 
     interface = FileToLocalizationDataInterface(_parent())
-    with pytest.raises(FileNotFoundError, match="yaml"):
+    with pytest.raises(UnknownFileLayoutError):
         interface.open_localization_data_file_and_get_dataset(file_path=str(file_path))
 
     # Nothing was registered on the way out, whichever way the caller reports it.

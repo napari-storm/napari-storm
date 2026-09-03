@@ -34,9 +34,15 @@ MAX_FWHM_NM = 100_000.0
 # the single source of truth shared with data_formats.py.
 LOCS_DTYPE = STORM_DATA_DTYPE
 
+#: The extensions an HDF5 localization file turns up under.  Which reader one
+#: needs is decided by looking inside it, not by which of these it happens to
+#: carry: Picasso tables and daxview molecule sets use them interchangeably.
+HDF5_EXTENSIONS = ("h5", "hdf5", "hdf")
+
 list_of_recognized_file_formats = [
     "h5",
     "hdf5",
+    "hdf",
     "yaml",
     "csv",
     "smlm",

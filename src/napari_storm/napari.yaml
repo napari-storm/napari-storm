@@ -22,6 +22,7 @@ contributions:
       filename_patterns:
         - "*.h5"
         - "*.hdf5"
+        - "*.hdf"
         - "*.yaml"
         - "*.csv"
         - "*.smlm"

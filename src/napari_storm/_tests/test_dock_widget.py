@@ -215,17 +215,16 @@ def test_render_state_follows_identity_not_position(make_napari_viewer):
     assert datasets[0].dataset_id not in widget.data_to_layer_itf.render_state
 
 
-def test_a_picasso_hdf5_without_its_yaml_warns_instead_of_failing_silently(
+def test_an_unreadable_hdf5_warns_instead_of_failing_silently(
     make_napari_viewer, tmp_path, monkeypatch
 ):
     """Inline opens keep their True/False contract, but say what went wrong."""
     viewer = make_napari_viewer()
     widget = napari_storm(napari_viewer=viewer)
 
-    file_path = tmp_path / "locs.hdf5"
-    locs = np.rec.array(np.zeros(3, dtype=[("frame", "i4"), ("x", "f4"), ("y", "f4")]))
+    file_path = tmp_path / "something_else.hdf5"
     with h5py.File(file_path, "w") as file:
-        file.create_dataset("locs", data=locs)
+        file.create_dataset("mystery", data=np.zeros(3))
 
     warnings = []
     monkeypatch.setattr(widget, "_warn_user", warnings.append)
@@ -235,5 +234,5 @@ def test_a_picasso_hdf5_without_its_yaml_warns_instead_of_failing_silently(
         is False
     )
     assert len(warnings) == 1
-    assert "yaml" in warnings[0]
+    assert "molecule_set_data" in warnings[0]
     assert widget.localization_datasets == []

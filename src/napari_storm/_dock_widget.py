@@ -8,7 +8,11 @@ from qtpy.QtCore import Qt
 from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
 from .core import DatasetStore, LayerAppearance, Scene, WorldTransform
-from .CustomErrors import DimensionError, StaticAttributeError
+from .CustomErrors import (
+    DimensionError,
+    StaticAttributeError,
+    UnknownFileLayoutError,
+)
 from .DataAdjustment import DataAdjustmentInterface
 from .DataFilter import DataFilterInterface
 from .DataToLayerInterface import DataToLayerInterface
@@ -826,8 +830,8 @@ class napari_storm(NapariStormGUI):
                     custom_import=custom_import,
                 )
             )
-        except FileNotFoundError as error:
-            # The background path reports this through its own error callback.
+        except (FileNotFoundError, UnknownFileLayoutError) as error:
+            # The background path reports these through its own error callback.
             # Inline callers -- the napari reader hook, the tests -- rely on a
             # True/False return, so the message is surfaced here rather than
             # raised into napari's reader machinery as a traceback.

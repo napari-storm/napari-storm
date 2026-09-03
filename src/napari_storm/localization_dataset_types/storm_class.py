@@ -21,6 +21,73 @@ from ..CustomErrors import PixelSizeIsNecessaryError
 from .base_class import LocalizationDataBaseClass
 from .data_formats import storm_data_dtype
 
+#: Root members that tell the two unrelated HDF5 layouts apart.  Picasso writes
+#: a single ``locs`` table; daxview writes a ``molecule_set_data`` group.
+#: Neither format owns an extension -- both turn up as .h5 and as .hdf5 -- so
+#: the file itself has to be asked which one it is.
+PICASSO_LOCS_KEY = "locs"
+MOLECULE_SET_KEY = "molecule_set_data"
+
+#: Picasso records its metadata in a sibling .yaml, and current versions also
+#: embed the same documents as JSON under this key so the .hdf5 stands alone.
+PICASSO_METADATA_KEY = "metadata"
+
+#: The camera pixel size in nm, which Picasso's format *requires* that metadata
+#: to carry.  Asking the user for a number the file is obliged to state was
+#: only ever a consequence of loading the metadata and then discarding it.
+PICASSO_PIXELSIZE_KEY = "Pixelsize"
+
+
+def hdf5_layout(path):
+    """Return ``"picasso"``, ``"molecule_set"`` or ``None`` for *path*."""
+    try:
+        with h5py.File(path, "r") as file:
+            if MOLECULE_SET_KEY in file:
+                return "molecule_set"
+            if PICASSO_LOCS_KEY in file:
+                return "picasso"
+    except FileNotFoundError:
+        raise
+    except OSError:
+        # Not HDF5 at all, or unreadable.  That is the caller's story to tell,
+        # in its own words, rather than h5py's.
+        return None
+    return None
+
+
+def info_from_hdf5(path):
+    """Read the metadata documents Picasso embeds in the .hdf5 itself."""
+    try:
+        with h5py.File(path, "r") as file:
+            if PICASSO_METADATA_KEY not in file:
+                return []
+            payload = file[PICASSO_METADATA_KEY][()]
+    except OSError:
+        return []
+    if isinstance(payload, bytes):
+        payload = payload.decode()
+    try:
+        info = json.loads(payload)
+    except (TypeError, ValueError):
+        return []
+    return info if isinstance(info, list) else [info]
+
+
+def pixelsize_from_info(info):
+    """The pixel size [nm] recorded in Picasso metadata, or None.
+
+    Each document describes a later processing step than the one before it, so
+    the last one to state a pixel size is the one that applies.
+    """
+    for entry in reversed(list(info or [])):
+        if not isinstance(entry, dict) or PICASSO_PIXELSIZE_KEY not in entry:
+            continue
+        try:
+            return float(entry[PICASSO_PIXELSIZE_KEY])
+        except (TypeError, ValueError):
+            continue
+    return None
+
 
 def _normalized_csv_header(field):
     """Reduce one CSV header field to a stable lookup key.
@@ -310,15 +377,19 @@ class StormDataClass(LocalizationDataBaseClass):
         )
 
     def load_info(self, path):
-        """Loads Infos from Picassos .yaml"""
+        """Loads Infos from Picassos .yaml, or from inside the .hdf5 itself"""
         path_base, path_extension = os.path.splitext(path)
         filename = path_base + ".yaml"
         try:
             with open(filename) as info_file:
                 info = list(yaml.load_all(info_file, Loader=yaml.FullLoader))
         except FileNotFoundError:
-            logging.warning("Could not find metadata file: %s", filename)
-            info = []
+            # A missing sidecar is not the end of it: current Picasso embeds
+            # the same documents in the file and falls back to them exactly
+            # like this, so a file Picasso can open opens here too.
+            info = info_from_hdf5(path)
+            if not info:
+                logging.warning("Could not find metadata file: %s", filename)
         return info
 
     def load_locs(self, path):
@@ -335,9 +406,16 @@ class StormDataClass(LocalizationDataBaseClass):
         """Wrapper for load_locs and load_infos -> picassos hdf5"""
         provider = metadata_provider or MetadataProvider()
         locs, info = self.load_locs(file_path)
-        if hasattr(locs, "pixelsize"):
-            pixelsize = locs.pixelsize_nm
-        else:
+        # The metadata was already being read and then dropped on the floor,
+        # leaving every well-formed Picasso file to ask its user for a number
+        # the format requires it to carry.
+        pixelsize = pixelsize_from_info(info)
+        if pixelsize is None and hasattr(locs, "pixelsize"):
+            # A file that states it per localization.  This branch used to test
+            # for ``pixelsize`` and then read ``pixelsize_nm``, so on the only
+            # files it applied to it raised AttributeError instead.
+            pixelsize = np.asarray(locs.pixelsize).ravel()[0]
+        if pixelsize is None:
             pixelsize = provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
             if pixelsize is None:
                 raise PixelSizeIsNecessaryError("Pixelsize is mandatory")

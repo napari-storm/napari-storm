@@ -7,7 +7,11 @@ from qtpy.QtWidgets import QFileDialog
 import napari_storm.localization_dataset_types as dataset_classes
 
 from .background_loading import run_on_main_thread
-from .CustomErrors import FileImportAbortedError, ParentError
+from .CustomErrors import (
+    FileImportAbortedError,
+    ParentError,
+    UnknownFileLayoutError,
+)
 from .file_and_data_recognition import file_and_data_recognition
 from .localization_dataset_types.Custom_Import import custom_import_function
 from .localization_dataset_types.Minflux_class import MinfluxDataAIIterationClass
@@ -17,10 +21,13 @@ from .localization_dataset_types.minflux_v2 import (
     zarr_store_root,
 )
 from .localization_dataset_types.storm_class import (
+    MOLECULE_SET_KEY,
+    PICASSO_LOCS_KEY,
     StormDataClass,
     StormDatasetCollection,
+    hdf5_layout,
 )
-from .ns_constants import LOCS_DTYPE
+from .ns_constants import HDF5_EXTENSIONS, LOCS_DTYPE
 from .pyqt.prompts import QtMetadataProvider
 
 
@@ -124,27 +131,23 @@ class FileToLocalizationDataInterface:
         if zarr_store_root(file_path) is not None:
             return self.load_mfx_v2(file_path)
         filetype = file_path.split(".")[-1]
-        if filetype == "hdf5":
-            if _ospath.isfile(file_path[: -(len(filetype))] + "yaml"):
-                return self.load_hdf5(file_path)
-            else:
-                raise FileNotFoundError(
-                    "Assuming .hdf5 is a picasso file, the correspoding "
-                    ".yaml file couldn t be found in same directory"
-                )
+        if filetype in HDF5_EXTENSIONS:
+            return self.load_hdf5_by_layout(file_path)
         elif filetype == "yaml":
-            file_path = file_path[: -(len(filetype))] + "hdf5"
-            if _ospath.isfile(file_path):
-                return self.load_hdf5(file_path)
+            # Picked the sidecar rather than the data: open what it describes.
+            sidecar_of = self.hdf5_beside(file_path)
+            if sidecar_of is not None:
+                return self.load_hdf5_by_layout(sidecar_of)
+            raise FileNotFoundError(
+                f"{_ospath.basename(file_path)} is metadata, and no data file "
+                "with the same name is in the same directory"
+            )
         # Thunderstorm csv
         elif filetype == "csv":
             return self.load_csv(file_path)
         # SMLM File
         elif filetype == "smlm":
             return self.load_smlm(file_path)
-        # h5 -> special type of hdf5
-        elif filetype == "h5":
-            return self.load_h5(file_path)
         # MINFLUX files
         elif filetype == "json":
             return self.load_mfx_json(file_path)
@@ -218,6 +221,38 @@ class FileToLocalizationDataInterface:
         return [
             MinfluxDataAIIterationClass().load_mfx(file_path=file_path, name=filename)
         ]
+
+    @staticmethod
+    def hdf5_beside(yaml_path):
+        """The data file a Picasso .yaml describes, if it is there."""
+        path_base = yaml_path[: -len("yaml")]
+        for extension in HDF5_EXTENSIONS:
+            candidate = path_base + extension
+            if _ospath.isfile(candidate):
+                return candidate
+        return None
+
+    def load_hdf5_by_layout(self, file_path):
+        """Route an HDF5 file to the reader for the layout it actually has.
+
+        Picasso localization tables and daxview molecule sets are unrelated
+        formats that both ship as .h5 and as .hdf5, so the extension cannot
+        decide this.  It used to be decided by whether a .yaml sat next to the
+        file, which answered a different question entirely: it said nothing
+        about the contents, and Picasso files whose metadata lives inside the
+        .hdf5 -- which Picasso itself reads -- were turned away for it.
+        """
+        layout = hdf5_layout(file_path)
+        if layout == "picasso":
+            return self.load_hdf5(file_path)
+        if layout == "molecule_set":
+            return self.load_h5(file_path)
+        raise UnknownFileLayoutError(
+            f"{_ospath.basename(file_path)} is neither a Picasso localization "
+            f"table (a '{PICASSO_LOCS_KEY}' dataset) nor a molecule set (a "
+            f"'{MOLECULE_SET_KEY}' group). Try the file recognition import, "
+            "which can read any HDF5 layout."
+        )
 
     def load_hdf5(self, file_path):
         """wrapper to load .hdf5 files in the picasso format"""
