@@ -18,7 +18,13 @@ contributions:
     # localization tables rather than fitting raw data.
   readers:
     - command: napari-storm.read
-      accepts_directories: false
+      # A MINFLUX Zarr dataset is a directory, so refusing directories outright
+      # made the one format that has no file to pick unopenable from napari.
+      # The hook itself checks that a folder really is a Zarr store.
+      accepts_directories: true
+      # Kept in step with ns_constants.list_of_recognized_file_formats by
+      # test_reader_registration.py -- a format missing here is one napari
+      # cannot offer, however well the dock importer handles it.
       filename_patterns:
         - "*.h5"
         - "*.hdf5"
@@ -28,4 +34,8 @@ contributions:
         - "*.smlm"
         - "*.npy"
         - "*.json"
+        - "*.mfx"
+        - "*.mat"
+        - "*.pmx"
+        - "*.ns"
         - "*.test"

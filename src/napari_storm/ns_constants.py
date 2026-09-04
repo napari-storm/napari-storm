@@ -39,6 +39,14 @@ LOCS_DTYPE = STORM_DATA_DTYPE
 #: carry: Picasso tables and daxview molecule sets use them interchangeably.
 HDF5_EXTENSIONS = ("h5", "hdf5", "hdf")
 
+#: Every suffix `open_known_filetype_and_import_dataset` will dispatch on, and
+#: the single source of truth for what napari is told this plugin reads.  The
+#: manifest is checked against this list by a test, because a format the
+#: dispatcher handles but the manifest omits is one that File -> Open and
+#: drag-and-drop cannot find -- which is what happened to .mat, .pmx and .mfx.
+#:
+#: Deliberately absent: tif/tiff/dat/raw, which the dispatcher recognizes only
+#: in order to explain that raw movies are not what this plugin renders.
 list_of_recognized_file_formats = [
     "h5",
     "hdf5",
@@ -48,6 +56,10 @@ list_of_recognized_file_formats = [
     "smlm",
     "npy",
     "json",
+    "mfx",
+    "mat",
+    "pmx",
+    "ns",
     "test",
 ]
 
