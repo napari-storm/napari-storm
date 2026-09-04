@@ -15,13 +15,14 @@ from .CustomErrors import (
 )
 from .DataAdjustment import DataAdjustmentInterface
 from .DataFilter import DataFilterInterface
-from .DataToLayerInterface import DataToLayerInterface
+from .DataToLayerInterface import DataToLayerInterface, look_at_plane
 from .Exp_Controls import custom_keys_and_scalebar
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .GUI import NapariStormGUI
 from .localization_dataset_types import LocalizationDataBaseClass, StormDataClass
 from .napari_particles._napari_compat import guard_camera_drag_state
 from .ns_constants import (
+    DEFAULT_AXIS_VIEW,
     FWHM_TO_SIGMA,
     MAX_FWHM_NM,
     MIN_FWHM_NM,
@@ -622,16 +623,13 @@ class napari_storm(NapariStormGUI):
             else:
                 # 2-D localization layers live in the z=1 plane.
                 tmp_z_center_nm = 1.0
-            self.data_to_layer_itf.camera[1] = (
-                tmp_z_center_nm,
-                tmp_x_center_nm,
-                tmp_y_center_nm,
-            )
-            self.viewer.camera.center = (
-                tmp_z_center_nm,
-                tmp_x_center_nm,
-                tmp_y_center_nm,
-            )
+            # (z, y, x), which is the order napari reads a camera centre in.
+            # Written as (z, x, y), recentring after a render-range change put
+            # the camera at a point with x and y interchanged -- square fields
+            # of view hid it, and anything else drifted off target.
+            centre_nm = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+            self.data_to_layer_itf.camera[1] = centre_nm
+            self.viewer.camera.center = centre_nm
 
     def add_channel(self, name="Channel"):
         """Adds a Channel in the visual controls"""
@@ -729,18 +727,12 @@ class napari_storm(NapariStormGUI):
     def _start_typing_timer(self, timer):
         timer.start(500)
 
-    def change_camera(self, set_view_to="XY"):
+    def change_camera(self, set_view_to=DEFAULT_AXIS_VIEW):
+        """Look at the named plane, keeping the current centre and zoom."""
         v = napari.current_viewer()
-        values = {}
-        if set_view_to == "XY":
-            v.camera.angles = (90, 0, -90)
-        elif set_view_to == "XZ":
-            v.camera.angles = (-180, 90, 180)
-        else:
-            v.camera.angles = (-180, 0, -180)
+        look_at_plane(v.camera, set_view_to)
         v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.zoom = self.zoom
-        v.camera.update(values)
 
     @staticmethod
     def _read_fwhm(field, current_sigma_nm):
@@ -1201,7 +1193,6 @@ class napari_storm(NapariStormGUI):
         except Exception as exc:
             self._warn_user(f"could not add image layer: {exc}")
             return
-
         # Place beneath localisation layers
         try:
             self.viewer.layers.move(len(self.viewer.layers) - 1, 0)

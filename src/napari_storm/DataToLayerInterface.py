@@ -20,8 +20,14 @@ from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
 from .memory_budget import max_localizations_for_budget, render_bytes_for
 from .napari_particles.selection import select_renderer
-from .ns_constants import FLAT_DATA_Z_NM
+from .ns_constants import AXIS_VIEWS, DEFAULT_AXIS_VIEW, FLAT_DATA_Z_NM
 from .scalebar_renderer import ScalebarRenderer
+
+
+def look_at_plane(camera, plane=DEFAULT_AXIS_VIEW):
+    """Point *camera* at the named plane of the (z, y, x) world."""
+    view_direction, up_direction = AXIS_VIEWS[plane]
+    camera.set_view_direction(view_direction=view_direction, up_direction=up_direction)
 
 
 @dataclass
@@ -445,7 +451,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # after range/filter changes is handled explicitly by the widget using
         # normalized (x, y, z) render ranges.
         self.viewer.camera.perspective = 50
-        self.viewer.camera.angles = (90, 0, -90)
+        look_at_plane(self.viewer.camera)
         self.camera = [
             self.viewer.camera.zoom,
             self.viewer.camera.center,
