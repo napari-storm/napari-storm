@@ -16,8 +16,10 @@ from .file_and_data_recognition import file_and_data_recognition
 from .localization_dataset_types.Custom_Import import custom_import_function
 from .localization_dataset_types.Minflux_class import MinfluxDataAIIterationClass
 from .localization_dataset_types.minflux_v2 import (
+    LAYOUT_V1,
+    LAYOUT_V2,
     MinfluxDataV2Class,
-    is_v2_file,
+    file_layout,
     zarr_store_root,
 )
 from .localization_dataset_types.storm_class import (
@@ -213,6 +215,22 @@ class FileToLocalizationDataInterface:
         self.dataset_names.append(dataset.name)
         return [dataset]
 
+    @staticmethod
+    def reject_unknown_minflux_layout(file_path):
+        """Refuse a file that is neither MINFLUX layout, by name.
+
+        Neither reader can say anything useful about a file that is not a
+        MINFLUX export at all, and the old one was the default for everything
+        that was not recognized as new -- so an unrelated .json was reported as
+        a broken MINFLUX file rather than as the wrong file.
+        """
+        if file_layout(file_path) not in (LAYOUT_V1, LAYOUT_V2):
+            raise UnknownFileLayoutError(
+                f"{_ospath.basename(file_path)} is not a MINFLUX export: it "
+                "carries neither the new layout's markers nor the old "
+                "layout's nested 'itr' iterations."
+            )
+
     def load_mfx(self, file_path):
         """wrapper to load .mfx files"""
         filename = file_path.split("/")[-1]
@@ -290,7 +308,8 @@ class FileToLocalizationDataInterface:
 
     def load_mfx_json(self, file_path, itr=-1):
         """loads localizations from AIs json format, in either layout"""
-        if is_v2_file(file_path):
+        self.reject_unknown_minflux_layout(file_path)
+        if file_layout(file_path) == LAYOUT_V2:
             return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
@@ -306,7 +325,8 @@ class FileToLocalizationDataInterface:
         Which layout is decided from the file's header alone, so routing a
         multi-gigabyte export costs no more than opening it.
         """
-        if is_v2_file(file_path):
+        self.reject_unknown_minflux_layout(file_path)
+        if file_layout(file_path) == LAYOUT_V2:
             return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)

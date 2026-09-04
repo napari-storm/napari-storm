@@ -16,9 +16,14 @@ import json
 import numpy as np
 import pytest
 
+from napari_storm.CustomErrors import UnknownFileLayoutError
 from napari_storm.localization_dataset_types.minflux_v2 import (
+    LAYOUT_UNKNOWN,
+    LAYOUT_V1,
+    LAYOUT_V2,
     MinfluxDataV2Class,
     MinfluxV2FormatError,
+    file_layout,
     is_v2_file,
     read_v2_columns,
     select_iteration,
@@ -394,3 +399,188 @@ def test_a_z_extent_of_hundreds_of_nanometres_is_3d(tmp_path):
     path = tmp_path / "really_3d.npy"
     np.save(path, a)
     assert MinfluxDataV2Class().load(str(path)).zdim_present
+
+
+# --- layout detection --------------------------------------------------------
+#
+# `.json` was classified as v2 on its extension alone, so an old export -- the
+# one thing the retained v1 reader exists for -- was handed to a reader that
+# rejects it.  `.npy` was classified from a header parsed as though every file
+# were format 1.0.
+
+#: Every per-iteration scalar the old JSON reader reads by name.
+_V1_ITERATION_SCALARS = (
+    "eco",
+    "ecc",
+    "efo",
+    "efc",
+    "sta",
+    "cfr",
+    "dcr",
+    "gvy",
+    "gvx",
+    "eoy",
+    "eox",
+    "dmz",
+    "lcy",
+    "lcx",
+    "lcz",
+    "fbg",
+    "tic",
+)
+
+#: Ten iterations is what the old reader reads as a 3-D acquisition.
+N_V1_ITERATIONS = 10
+
+
+def _v1_json_records(n_traces=6, n_itr=N_V1_ITERATIONS):
+    """The older layout: one record per trace, iterations nested under `itr`."""
+    records = []
+    for trace in range(n_traces):
+        iterations = [
+            {
+                "loc": [(trace + 1) * 1e-9, (trace + 2) * 1e-9, (trace + 3) * 1e-9],
+                "lnc": [0.0, 0.0, 0.0],
+                "ext": [0.0, 0.0, 0.0],
+                **{name: float(index) for name in _V1_ITERATION_SCALARS},
+            }
+            for index in range(n_itr)
+        ]
+        records.append(
+            {
+                "vld": True,
+                "tim": 0.001 * trace,
+                "act": False,
+                "tid": trace,
+                "itr": iterations,
+            }
+        )
+    return records
+
+
+def _v2_json_records(array=None):
+    a = _v2_array() if array is None else array
+    return [
+        {
+            name: (row[name].tolist() if np.ndim(row[name]) else row[name].item())
+            for name in a.dtype.names
+        }
+        for row in a
+    ]
+
+
+def _written(tmp_path, name, records):
+    path = tmp_path / name
+    path.write_text(json.dumps(records))
+    return str(path)
+
+
+def test_a_legacy_json_export_is_not_called_the_new_layout(tmp_path):
+    path = _written(tmp_path, "old.json", _v1_json_records())
+    assert file_layout(path) == LAYOUT_V1
+    assert not is_v2_file(path)
+
+
+def test_a_v2_json_export_is_still_the_new_layout(tmp_path):
+    path = _written(tmp_path, "new.json", _v2_json_records())
+    assert file_layout(path) == LAYOUT_V2
+
+
+def test_json_that_is_not_minflux_at_all_is_unknown(tmp_path):
+    path = _written(tmp_path, "other.json", [{"name": "not minflux", "value": 1}])
+    assert file_layout(path) == LAYOUT_UNKNOWN
+
+
+def test_a_scalar_iteration_marks_the_new_layout_without_the_flags(tmp_path):
+    """`fnl`/`bot`/`eot` are the obvious markers; the dtype of `itr` is the
+    one that holds when a file carries none of them."""
+    path = _written(tmp_path, "scalar.json", [{"tid": 0, "itr": 3, "vld": True}])
+    assert file_layout(path) == LAYOUT_V2
+
+
+def test_the_first_record_decides_without_reading_the_rest(tmp_path):
+    """Routing must not cost a parse of a file the reader will parse anyway."""
+    path = tmp_path / "truncated.json"
+    # A complete first record, then nonsense: a whole-file parse would fail.
+    path.write_text(json.dumps(_v1_json_records(n_traces=1))[:-1] + ", {oh no")
+    assert file_layout(str(path)) == LAYOUT_V1
+
+
+# --- npy header formats ------------------------------------------------------
+
+
+def _write_npy(path, array, version):
+    with open(path, "wb") as handle:
+        np.lib.format.write_array(handle, array, version=version)
+    return str(path)
+
+
+@pytest.mark.parametrize("version", [(1, 0), (2, 0), (3, 0)])
+def test_every_npy_format_recognises_the_new_layout(tmp_path, version):
+    """2.0 and 3.0 size their header with four bytes, not two."""
+    path = _write_npy(tmp_path / f"v{version[0]}.npy", _v2_array(), version)
+    assert file_layout(path) == LAYOUT_V2
+
+
+@pytest.mark.parametrize("version", [(1, 0), (2, 0), (3, 0)])
+def test_every_npy_format_recognises_the_old_layout(tmp_path, version):
+    path = _write_npy(
+        tmp_path / f"old_v{version[0]}.npy", np.zeros(3, dtype=V1_DTYPE), version
+    )
+    assert file_layout(path) == LAYOUT_V1
+
+
+def test_a_v2_format_npy_reads_the_same_as_a_v1_format_one(tmp_path, npy_file):
+    path = _write_npy(tmp_path / "modern.npy", _v2_array(), (2, 0))
+    locs = MinfluxDataV2Class().load(path).locs_all
+    assert np.allclose(locs.x_pos_nm, _reference(npy_file).x_pos_nm)
+
+
+def test_a_truncated_npy_header_says_so(tmp_path):
+    whole = tmp_path / "whole.npy"
+    _write_npy(whole, _v2_array(), (2, 0))
+    path = tmp_path / "cut.npy"
+    path.write_bytes(whole.read_bytes()[:9])
+
+    with pytest.raises(MinfluxV2FormatError, match="truncated"):
+        file_layout(str(path))
+
+
+def test_an_npy_of_an_unknown_format_version_names_it(tmp_path):
+    whole = tmp_path / "whole.npy"
+    _write_npy(whole, _v2_array(), (1, 0))
+    raw = bytearray(whole.read_bytes())
+    raw[6] = 9  # a major version that does not exist
+    path = tmp_path / "future.npy"
+    path.write_bytes(bytes(raw))
+
+    with pytest.raises(MinfluxV2FormatError, match="9.0"):
+        file_layout(str(path))
+
+
+# --- routing on layout -------------------------------------------------------
+
+
+def test_a_legacy_json_export_reaches_the_old_reader(tmp_path):
+    path = _written(tmp_path, "old.json", _v1_json_records())
+
+    dataset = _interface().open_known_filetype_and_import_dataset(path)[0]
+
+    assert dataset.number_of_entries() == 6
+    assert dataset.zdim_present
+
+
+def test_a_v2_json_export_reaches_the_new_reader(tmp_path, npy_file):
+    path = _written(tmp_path, "new.json", _v2_json_records())
+
+    dataset = _interface().open_known_filetype_and_import_dataset(path)[0]
+
+    assert np.allclose(dataset.locs_all.x_pos_nm, _reference(npy_file).x_pos_nm)
+
+
+def test_json_that_is_not_minflux_is_refused_as_unrecognized(tmp_path):
+    """Not reported as a broken MINFLUX file, which is what it is not."""
+    path = _written(tmp_path, "other.json", [{"name": "not minflux"}])
+
+    with pytest.raises(UnknownFileLayoutError, match="not a MINFLUX export"):
+        _interface().open_known_filetype_and_import_dataset(path)

@@ -44,6 +44,20 @@ _MIN_Z_EXTENT_NM = 1.0
 #: both layouts carry the name -- it is the *scalar* dtype that marks v2.
 _V2_MARKER_FIELDS = ("fnl", "bot", "eot")
 
+#: The layouts this package can read, and the answer for a file that is
+#: neither.  A boolean could only say "v2 or not", which left every file that
+#: is not v2 -- including files that are not MINFLUX at all -- indistinguishable
+#: from a genuine old-layout export and sent to the old reader.
+LAYOUT_V1 = "v1"
+LAYOUT_V2 = "v2"
+LAYOUT_UNKNOWN = "unknown"
+
+#: How much of a JSON export to read while looking for its first record.  One
+#: old-layout record, nested iterations and all, is a few kB; a megabyte is
+#: generous, and the cap below keeps a pathological file from being read whole.
+_JSON_PROBE_BYTES = 1 << 20
+_JSON_PROBE_LIMIT = 16 << 20
+
 #: Columns this reader keeps, mapped from the names the containers use to the
 #: names :data:`minflux_v2_data_dtype` declares.
 _COLUMN_ALIASES = {
@@ -59,16 +73,96 @@ class MinfluxV2FormatError(Exception):
     """The file is not a MINFLUX dataset this reader can read."""
 
 
-def _is_v2_dtype(names_and_types):
-    """True when a (name, dtype-ish) sequence describes the new layout."""
+def _layout_of_fields(names_and_types):
+    """The layout a (name, dtype-ish) sequence describes."""
+    carries_itr = False
     for name, dtype in names_and_types:
         if name in _V2_MARKER_FIELDS:
-            return True
-        if name == "itr" and np.dtype(dtype).kind in "iu":
-            # v1 nests a structured sub-array under `itr`; v2 makes it a plain
-            # integer.  The kind is the whole difference.
-            return True
-    return False
+            return LAYOUT_V2
+        if name == "itr":
+            carries_itr = True
+            if np.dtype(dtype).kind in "iu":
+                # v1 nests a structured sub-array under `itr`; v2 makes it a
+                # plain integer.  The kind is the whole difference.
+                return LAYOUT_V2
+    return LAYOUT_V1 if carries_itr else LAYOUT_UNKNOWN
+
+
+def _first_json_record(path):
+    """The first object in a JSON export, without parsing the rest of it.
+
+    An export runs to gigabytes and the reader that follows will parse it
+    properly anyway, so deciding which reader that is must not cost a parse of
+    its own.
+    """
+    decoder = json.JSONDecoder()
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read(_JSON_PROBE_BYTES)
+        while True:
+            start = text.find("{")
+            if start >= 0:
+                try:
+                    record, _end = decoder.raw_decode(text, start)
+                except ValueError:
+                    pass  # Truncated mid-record: read further and retry.
+                else:
+                    return record if isinstance(record, dict) else None
+            if len(text) >= _JSON_PROBE_LIMIT:
+                return None
+            more = handle.read(_JSON_PROBE_BYTES)
+            if not more:
+                return None
+            text += more
+
+
+def json_layout(path):
+    """The layout of a MINFLUX JSON export, from its first record.
+
+    Every ``.json`` used to be called v2 outright, which sent old exports --
+    which the retained v1 reader handles -- to a reader that rejects them.
+    """
+    record = _first_json_record(path)
+    if not isinstance(record, dict):
+        return LAYOUT_UNKNOWN
+    if any(marker in record for marker in _V2_MARKER_FIELDS):
+        return LAYOUT_V2
+    iteration = record.get("itr")
+    if isinstance(iteration, bool) or iteration is None:
+        return LAYOUT_UNKNOWN
+    if isinstance(iteration, int):
+        # v2 numbers the iteration; v1 stores the iterations themselves.
+        return LAYOUT_V2
+    if isinstance(iteration, (list, dict)):
+        return LAYOUT_V1
+    return LAYOUT_UNKNOWN
+
+
+def file_layout(file_path):
+    """Which MINFLUX layout *file_path* holds, in any of the containers.
+
+    Cheap by design: a ``.npy`` is decided from its header and a ``.json`` from
+    its first record, so routing a multi-gigabyte export costs no more than
+    opening it.
+    """
+    path = Path(file_path)
+    if zarr_store_root(path) is not None:
+        return LAYOUT_V2
+    if path.is_dir():
+        return LAYOUT_UNKNOWN
+    suffix = path.suffix.lower()
+    if suffix == ".npy":
+        return _layout_of_fields(_npy_header_fields(path))
+    if suffix == ".json":
+        return json_layout(path)
+    if suffix == ".mat":
+        from scipy.io import whosmat
+
+        return _layout_of_fields(
+            (name, dtype) for name, _shape, dtype in whosmat(str(path))
+        )
+    if suffix == ".pmx":
+        return LAYOUT_V2 if _pmx_reader_version(path) == 2 else LAYOUT_V1
+    return LAYOUT_UNKNOWN
 
 
 def zarr_store_root(file_path):
@@ -86,29 +180,8 @@ def zarr_store_root(file_path):
 
 
 def is_v2_file(file_path):
-    """Whether *file_path* holds a MINFLUX dataset in the new layout.
-
-    Cheap by design: for ``.npy`` this reads the header only, so routing a
-    multi-gigabyte export costs no more than opening it.
-    """
-    path = Path(file_path)
-    if zarr_store_root(path) is not None:
-        return True
-    if path.is_dir():
-        return False
-    suffix = path.suffix.lower()
-    if suffix == ".npy":
-        return _is_v2_dtype(_npy_header_fields(path))
-    if suffix == ".json":
-        # The new layout is the only one written as JSON records.
-        return True
-    if suffix == ".mat":
-        from scipy.io import whosmat
-
-        return _is_v2_dtype((name, dtype) for name, _shape, dtype in whosmat(str(path)))
-    if suffix == ".pmx":
-        return _pmx_reader_version(path) == 2
-    return False
+    """Whether *file_path* holds a MINFLUX dataset in the new layout."""
+    return file_layout(file_path) == LAYOUT_V2
 
 
 def _npy_header_fields(path):
@@ -123,9 +196,28 @@ def _npy_header_fields(path):
     with open(path, "rb") as handle:
         if handle.read(6) != b"\x93NUMPY":
             raise MinfluxV2FormatError(f"{path} is not a .npy file")
-        handle.seek(8)
-        header_length = int.from_bytes(handle.read(2), byteorder="little")
-        header = handle.read(header_length).decode("ascii")
+        version = handle.read(2)
+        if len(version) != 2:
+            raise MinfluxV2FormatError(f"the header of {path} is truncated")
+        major, minor = version[0], version[1]
+        if major not in (1, 2, 3):
+            raise MinfluxV2FormatError(
+                f"{path} is .npy format {major}.{minor}, which this reader "
+                "does not know"
+            )
+        # Format 1.0 sizes its header with two bytes and 2.0/3.0 with four.
+        # Reading two either way took half the length of a valid v2 file and
+        # then decoded from the wrong offset, so the file looked corrupt.
+        length_bytes = 2 if major == 1 else 4
+        raw_length = handle.read(length_bytes)
+        if len(raw_length) != length_bytes:
+            raise MinfluxV2FormatError(f"the header of {path} is truncated")
+        header_length = int.from_bytes(raw_length, byteorder="little")
+        raw_header = handle.read(header_length)
+        if len(raw_header) != header_length:
+            raise MinfluxV2FormatError(f"the header of {path} is truncated")
+        # 3.0 declares its header UTF-8; 1.0 and 2.0 are latin1.
+        header = raw_header.decode("utf-8" if major >= 3 else "latin1")
     try:
         descr = ast.literal_eval(header.replace("\n", "").replace(" ", ""))["descr"]
     except (SyntaxError, ValueError, KeyError) as error:
@@ -265,7 +357,10 @@ def _read_json(path):
         records = json.load(handle)
     if not isinstance(records, list) or not records:
         raise MinfluxV2FormatError(f"{path} holds no MINFLUX records")
-    if not _is_v2_dtype((key, np.asarray(records[0][key]).dtype) for key in records[0]):
+    layout = _layout_of_fields(
+        (key, np.asarray(records[0][key]).dtype) for key in records[0]
+    )
+    if layout != LAYOUT_V2:
         raise MinfluxV2FormatError(f"{path} is not in the Imspector >= 24.10 layout")
     columns = {}
     for key in records[0]:
