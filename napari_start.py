@@ -3,7 +3,9 @@ import warnings
 import napari
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
-from napari_storm import *
+# After the filter above, deliberately: importing napari_storm pulls in
+# napari, which is what emits the FutureWarnings being silenced.
+from napari_storm import napari_storm  # noqa: E402
 
 
 def main():

@@ -1,11 +1,9 @@
-from typing import Tuple, Union
-
 import numpy as np
 
 
 def generate_billboards_2d(
-    coords: np.ndarray, size: Union[float, np.ndarray] = 20
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    coords: np.ndarray, size: float | np.ndarray = 20
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Build billboard quads that always face the camera.
 

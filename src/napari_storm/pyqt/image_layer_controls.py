@@ -1,5 +1,3 @@
-import logging
-
 """
 Live controls panel for one reference-image napari layer.
 
@@ -7,6 +5,8 @@ Inserted at row 0 of channel_controls_widget_layout (a QFormLayout) when an
 image is imported.  Provides live pixel-size and offset spinboxes plus a
 "✕ Remove" button.
 """
+
+import logging
 
 import numpy as np
 from napari.utils.colormaps import AVAILABLE_COLORMAPS

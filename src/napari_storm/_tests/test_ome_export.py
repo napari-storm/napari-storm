@@ -20,7 +20,6 @@ from napari_storm.core.ome_export import (
     tile_count,
     write_ome_tiff,
 )
-from napari_storm.core.raster import GaussianGrid
 
 
 def _channel(name="ch", n=4, span=1000.0, n_displayed=None, colormap=None):

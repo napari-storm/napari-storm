@@ -19,7 +19,6 @@ from .core.renderer import Changed, LayerAppearance
 from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
 from .memory_budget import max_localizations_for_budget, render_bytes_for
-from .napari_particles.renderer import NapariParticlesRenderer
 from .napari_particles.selection import select_renderer
 from .ns_constants import FLAT_DATA_Z_NM
 from .scalebar_renderer import ScalebarRenderer

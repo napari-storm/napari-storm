@@ -13,11 +13,9 @@ import tifffile
 
 from napari_storm._dock_widget import napari_storm
 from napari_storm.image_export import (
-    SCOPE_CURRENT_VIEW,
     SCOPE_EVERYTHING,
     ExportOptions,
     channel_for,
-    export_bounds_nm,
     plan_from_widget,
 )
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass

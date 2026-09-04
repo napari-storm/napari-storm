@@ -153,5 +153,3 @@ Detach tabs by dragging them out to see multiple panels at once.
 For STORM/PALM datasets, try Variable Gaussian mode to incorporate uncertainty or photon counts into rendering.
 
 Hold Shift + drag to pan the canvas smoothly.
-
-

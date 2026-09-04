@@ -206,7 +206,7 @@ def load_txt(filepath):
 def load_npy(filepath):
     file_content = np.load(filepath)
     try:
-        if type(file_content[0]) == np.recarray:
+        if isinstance(file_content[0], np.recarray):
             data = file_content[0]
         else:
             data = file_content

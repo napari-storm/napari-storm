@@ -7,7 +7,7 @@ from qtpy.QtCore import Qt
 
 from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
-from .core import DatasetStore, LayerAppearance, Scene, WorldTransform
+from .core import DatasetStore, LayerAppearance, WorldTransform
 from .CustomErrors import (
     DimensionError,
     StaticAttributeError,

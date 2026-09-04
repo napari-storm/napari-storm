@@ -35,14 +35,14 @@ To work on napari-storm itself, install from a clone instead:
 ## Usage
 
 ### Starting napari-storm
-To start the program, run the napari_start.py, e.g. by navigating in your anaconda prompt to the location of the 
+To start the program, run the napari_start.py, e.g. by navigating in your anaconda prompt to the location of the
 napri_start.py (root) and run it with:
 
-    python.exe napari_start.py 
+    python.exe napari_start.py
 
-Or simply start the napari version that was just installed into your environment, e.g. again using the conda prompt:  
+Or simply start the napari version that was just installed into your environment, e.g. again using the conda prompt:
 
-    napari 
+    napari
 
 and then opening napari-storm in the plugins tab.
 
@@ -61,22 +61,22 @@ If your file is not covered:
 
 - one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
 - try the (experimental) file recognition import button, which will try to extract the headers of your file
-and lets you assign your data. This should work for any .hdf5, .csv or npy. file. 
+and lets you assign your data. This should work for any .hdf5, .csv or npy. file.
 
 ### Basic usage
-When a dataset is imported you should be able to see 4 tabs in the widget: Data Controls, File Infos, Decorators and 
-Data Filter. In the data controls tab you can change the render range, load 
+When a dataset is imported you should be able to see 4 tabs in the widget: Data Controls, File Infos, Decorators and
+Data Filter. In the data controls tab you can change the render range, load
 a new file, merge the currently open dataset with another that from another file and change your view.
 There is also the option to change the colormap, adjust the contrast with the slider beneath the colormap picking as well
 as adding a scalebar or active rainbow colorcoding (for 3D datasets).
 
 The File Infos tab simply displays information on the currently opened datasets.
 
-In the decorators tab you can activate a grid plane and customize a lot of things for the grid as well as the render range box. 
+In the decorators tab you can activate a grid plane and customize a lot of things for the grid as well as the render range box.
 
 Last but not least is the data filter tab, which gives you the option to filter your displayed datasets by all properties available in the dataset.
-There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controlls 
-the cut-off/cut-on of your filter. To apply the filter settings to the dataset simply press 
+There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controlls
+the cut-off/cut-on of your filter. To apply the filter settings to the dataset simply press
 one of the apply buttons.
 
 ### Tips
@@ -85,7 +85,7 @@ one of the apply buttons.
 - hold shift and drag the mouse for panning
 
 ## Documentation
-There is a custom Q&A GPT for this repo specifically, available at 
+There is a custom Q&A GPT for this repo specifically, available at
 https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
 
 To access the documentation install the following packages (once):

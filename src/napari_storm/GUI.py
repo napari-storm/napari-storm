@@ -465,7 +465,7 @@ class NapariStormGUI(QWidget):
         data_control_outer_layout.addWidget(self.data_controls_scroll)
         self.infos_tab.setLayout(self.infos_tab_layout)
 
-    #### D and D
+    # D and D
     def _make_fwhm_validator(self):
         """Validator for the FWHM entry fields.
 
@@ -645,9 +645,9 @@ class TestListView(QListWidget):
                 + f"File: {filename}\n"
                 + f"Dataset-type: {self.datasets[idx].dataset_type}\n"
                 + f"Number of locs: {len(self.datasets[idx].x_pos_nm)}\n"
-                f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm))) / 1000}  µm\n"
-                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm))) / 1000}  µm\n"
-                + f"Imagedepth: {np.round((max(self.datasets[idx].z_pos_nm) - min(self.datasets[idx].z_pos_nm))) / 1000}  µm\n"
+                f"Imagewidth: {np.round(max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm)) / 1000}  µm\n"
+                + f"Imageheigth: {np.round(max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm)) / 1000}  µm\n"
+                + f"Imagedepth: {np.round(max(self.datasets[idx].z_pos_nm) - min(self.datasets[idx].z_pos_nm)) / 1000}  µm\n"
             )
         else:
             self.addItem(
@@ -655,8 +655,8 @@ class TestListView(QListWidget):
                 + f"File: {filename}\n"
                 + f"Dataset-type: {self.datasets[idx].dataset_type}\n"
                 + f"Number of locs: {len(self.datasets[idx].x_pos_nm)}\n"
-                f"Imagewidth: {np.round((max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm))) / 1000}  µm\n"
-                + f"Imageheigth: {np.round((max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm))) / 1000}  µm\n"
+                f"Imagewidth: {np.round(max(self.datasets[idx].x_pos_nm) - min(self.datasets[idx].x_pos_nm)) / 1000}  µm\n"
+                + f"Imageheigth: {np.round(max(self.datasets[idx].y_pos_nm) - min(self.datasets[idx].y_pos_nm)) / 1000}  µm\n"
             )
 
     def dragEnterEvent(self, event):

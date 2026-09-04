@@ -353,7 +353,7 @@ def _read_mat(path):
 
 
 def _read_json(path):
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         records = json.load(handle)
     if not isinstance(records, list) or not records:
         raise MinfluxV2FormatError(f"{path} holds no MINFLUX records")

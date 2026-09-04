@@ -22,40 +22,40 @@ def custom_import_function(filepath):
      (s. above)"""
 
     """
-    I) 
+    I)
     after you managed to load your data decide which dataset class fits best:
     1) LocalizationDataBaseClass
-        most basic data class only requires that you provide : 
+        most basic data class only requires that you provide :
         a) x_pos_nm [float]
         b) y_pos_nm [float]
-       (c) z_pos_nm [float]) <-- in case of 3D data 
+       (c) z_pos_nm [float]) <-- in case of 3D data
        additionally you should provide information if the dataset is 3D (zdim_present=True) or 2D (zdim_present=False)
     2) StormDataClass
         specialized data class for STORM/PALM/... microscopy data. More requirements,
-         but also more options compared to 1). In this data class the positions (x,y,z) are stored in pixel units 
-         not nm. Therefore you also need to provide the pixselsize in nm. The dataset allows you to store 
-         photon counts / intensity values for each localization, as well as uncertainty values, which of course 
-         can then be displayed. If you cannot provide these values, just set them to ones. 
+         but also more options compared to 1). In this data class the positions (x,y,z) are stored in pixel units
+         not nm. Therefore you also need to provide the pixselsize in nm. The dataset allows you to store
+         photon counts / intensity values for each localization, as well as uncertainty values, which of course
+         can then be displayed. If you cannot provide these values, just set them to ones.
      3) MinfluxDataBaseClass
         specialized data class for Minflux data. Requires you to provide trace_ids for each localization compared to 1)
-        
+
     ##### Additional Classes #######
-    There are also classes for dataset collections, e.g. if you're having multicolor datasets. For more information 
-    on this look into src/napari_storm/localization_dataset_types/ ... 
-    Also feel free to create your own class that fits your purpose. Just check the files 
+    There are also classes for dataset collections, e.g. if you're having multicolor datasets. For more information
+    on this look into src/napari_storm/localization_dataset_types/ ...
+    Also feel free to create your own class that fits your purpose. Just check the files
     in src/napari_storm/localization_dataset_types/ ... and implement it in a similar manner.
     ##################################
-    
+
     II)
     After you decided on a dataset class and got everything you need:
     1) create a data_rec_array=numpy.rec.array(<your_data_here>,dtype=<dataset_class_dtype>)
-    2) initialize the datasetclass and return the result return <datasetclass>(data=data_rec_array, ...), 
-    
-    example: 
+    2) initialize the datasetclass and return the result return <datasetclass>(data=data_rec_array, ...),
+
+    example:
         file = D:/really_good_measurements/best_example_I_could_think_of.npy
-        raw_data = np.load(file) 
+        raw_data = np.load(file)
         data_rec_array=np.rec.array(raw_data, dtype=lm_base_data_dtype)
-        zdim_present = True 
+        zdim_present = True
         name = file.split(/)[-1]
         return LocalizationDataBaseClass(data=data_rec_array, name=name, zdim_present=zdim)
     """

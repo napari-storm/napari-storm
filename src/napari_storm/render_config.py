@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -44,7 +43,7 @@ class RenderConfig:
     z_color_encoding: int = 0
 
     # Dimensionality
-    zdim: Optional[bool] = None
+    zdim: bool | None = None
 
     # Render range sliders (percent, 2-element arrays)
     range_x_percent: np.ndarray = field(default_factory=lambda: np.arange(2) * 100)

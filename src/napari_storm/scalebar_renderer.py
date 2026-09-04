@@ -21,7 +21,7 @@ class ScalebarRenderer:
         """
         v = napari.current_viewer()
         cpos = v.camera.center
-        l = int(self.render_config.scalebar_size_nm)
+        length_nm = int(self.render_config.scalebar_size_nm)
 
         # Use the viewer's actual layer list as the source of truth rather than
         # self.scalebar_exists, which can fall out of sync (e.g. after a widget
@@ -30,7 +30,7 @@ class ScalebarRenderer:
 
         if self.render_config.scalebar_enabled and dataset.number_of_active_entries():
             if dataset.zdim_present:
-                list = [l, 0.125 * l / 2, 0.125 * l / 2]
+                list = [length_nm, 0.125 * length_nm / 2, 0.125 * length_nm / 2]
                 faces = np.asarray(
                     [
                         [0, 1, 2],
@@ -54,34 +54,34 @@ class ScalebarRenderer:
                         [-list[1], -list[1], list[2]],
                         [-list[1], list[1], -list[2]],
                         [-list[1], -list[1], -list[2]],
-                        [l - list[1], list[1], list[2]],
-                        [l - list[1], -list[1], list[2]],
-                        [l - list[1], list[1], -list[2]],
-                        [l - list[1], -list[1], -list[2]],
+                        [length_nm - list[1], list[1], list[2]],
+                        [length_nm - list[1], -list[1], list[2]],
+                        [length_nm - list[1], list[1], -list[2]],
+                        [length_nm - list[1], -list[1], -list[2]],
                         [list[1], -list[1], list[2]],
                         [-list[1], -list[1], list[2]],
                         [list[1], -list[1], -list[2]],
                         [-list[1], -list[1], -list[2]],
-                        [list[1], l - list[1], list[2]],
-                        [-list[1], l - list[1], list[2]],
-                        [list[1], l - list[1], -list[2]],
-                        [-list[1], l - list[1], -list[2]],
+                        [list[1], length_nm - list[1], list[2]],
+                        [-list[1], length_nm - list[1], list[2]],
+                        [list[1], length_nm - list[1], -list[2]],
+                        [-list[1], length_nm - list[1], -list[2]],
                         [list[1], list[2], -list[1]],
                         [-list[1], list[2], -list[1]],
                         [list[1], -list[2], -list[1]],
                         [-list[1], -list[2], -list[1]],
-                        [list[1], list[2], l - list[1]],
-                        [-list[1], list[2], l - list[1]],
-                        [list[1], -list[2], l - list[1]],
-                        [-list[1], -list[2], l - list[1]],
+                        [list[1], list[2], length_nm - list[1]],
+                        [-list[1], list[2], length_nm - list[1]],
+                        [list[1], -list[2], length_nm - list[1]],
+                        [-list[1], -list[2], length_nm - list[1]],
                     ]
                 )
                 for i in range(len(vertices)):
-                    vertices[i] = vertices[i] + cpos - (l / 2, 0, 0)
+                    vertices[i] = vertices[i] + cpos - (length_nm / 2, 0, 0)
 
                 faces = np.asarray(np.vstack((faces, faces + 8, faces + 16)))
             else:
-                list = [l, 0.05 * l]
+                list = [length_nm, 0.05 * length_nm]
 
                 faces = np.asarray([[0, 1, 3], [1, 2, 3], [4, 5, 7], [5, 6, 7]])
                 verts = [

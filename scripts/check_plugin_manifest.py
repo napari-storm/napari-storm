@@ -16,6 +16,7 @@ Usage:
 
 Exits non-zero on the first problem, printing every problem found.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -23,10 +24,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_MANIFEST = (
-    Path(__file__).resolve().parent.parent
-    / "src"
-    / "napari_storm"
-    / "napari.yaml"
+    Path(__file__).resolve().parent.parent / "src" / "napari_storm" / "napari.yaml"
 )
 
 # Contribution kinds that carry a `command` field.

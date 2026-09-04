@@ -1,11 +1,9 @@
 """ """
 
-from abc import ABC
-
 import numpy as np
-from vispy.gloo import Texture2D, VertexBuffer
+from vispy.gloo import Texture2D
 from vispy.visuals.filters import Filter
-from vispy.visuals.shaders import Function, Varying
+from vispy.visuals.shaders import Function
 
 
 # TODO: Add mipmapping

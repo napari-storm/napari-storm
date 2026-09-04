@@ -4,7 +4,6 @@ Covers register items P1-10 (no input validation) and P1-15 (Z FWHM field
 seeded from the XY value) from docs/modernization-review.md.
 """
 
-import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm

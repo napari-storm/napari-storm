@@ -1,7 +1,4 @@
 import numpy as np
-import pytest
-
-from napari_storm.localization_dataset_types import LocalizationDataBaseClass
 
 
 def test_keep_all(two_d_dataset):
@@ -35,7 +32,6 @@ def test_parameter_filter_removes(two_d_dataset):
 
 def test_combined_filters(two_d_dataset):
     ds = two_d_dataset
-    n = len(ds.locs_all)
     # Keep only first 5 spatially; then remove index 0 by parameter
     ds.apply_filters(np.arange(5), np.array([0]))
     assert len(ds.locs_active) == 4

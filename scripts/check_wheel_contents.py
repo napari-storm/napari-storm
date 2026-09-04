@@ -10,6 +10,7 @@ that the artifact is usable -- it has to be inspected.
 Usage:
     python scripts/check_wheel_contents.py dist/napari_storm-*.whl
 """
+
 from __future__ import annotations
 
 import sys
@@ -67,7 +68,9 @@ def main(argv: list[str]) -> int:
                 f"{len(leaked)} file(s) under {prefix} should not be shipped"
             )
 
-    modules = [n for n in names if n.endswith(".py") and not n.startswith("napari_storm-")]
+    modules = [
+        n for n in names if n.endswith(".py") and not n.startswith("napari_storm-")
+    ]
     if len(modules) < MIN_MODULE_COUNT:
         problems.append(
             f"only {len(modules)} python modules in the wheel; "

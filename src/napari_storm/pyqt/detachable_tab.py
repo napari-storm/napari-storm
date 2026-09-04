@@ -1,8 +1,8 @@
 import sys
 
-from qtpy.QtCore import *
 from qtpy.QtCore import Signal as pyqtSignal
 from qtpy.QtCore import Slot as pyqtSlot
+from qtpy.QtCore import *
 from qtpy.QtGui import *
 from qtpy.QtWidgets import *
 
@@ -76,7 +76,7 @@ class DetachableTabWidget(QTabWidget):
     #  @param    contentWidget    the content widget from the DetachedTab dialog
     #  @param    name             the name of the detached tab
     #  @param    icon             the window icon for the detached tab
-    @pyqtSlot(QWidget, type(""), QIcon)
+    @pyqtSlot(QWidget, str, QIcon)
     def attachTab(self, contentWidget, name, icon):
 
         # Make the content widget a child of this widget
@@ -114,7 +114,7 @@ class DetachableTabWidget(QTabWidget):
     #  can be re-attached by closing the dialog or by double clicking on its
     #  window frame.
     class DetachedTab(QDialog):
-        onCloseSignal = pyqtSignal(QWidget, type(""), QIcon)
+        onCloseSignal = pyqtSignal(QWidget, str, QIcon)
 
         def __init__(self, contentWidget, parent=None):
             QDialog.__init__(self, parent)
@@ -209,7 +209,7 @@ class DetachableTabWidget(QTabWidget):
                 self.dragInitiated = True
 
             # If the current movement is a drag initiated by the left button
-            if ((event.buttons() & Qt.LeftButton)) and self.dragInitiated:
+            if (event.buttons() & Qt.LeftButton) and self.dragInitiated:
 
                 # Stop the move event
                 # Qt6 removed the QPoint overload and requires a QPointF.
@@ -291,7 +291,7 @@ class DetachableTabWidget(QTabWidget):
 
 class SurfViewer(QMainWindow):
     def __init__(self, parent=None):
-        super(SurfViewer, self).__init__()
+        super().__init__()
         self.parent = parent
         self.centralTabs = DetachableTabWidget()
         self.setCentralWidget(self.centralTabs)
