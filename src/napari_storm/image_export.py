@@ -30,6 +30,7 @@ __all__ = [
     "SCOPE_EVERYTHING",
     "ExportOptions",
     "channel_for",
+    "current_view_z_nm",
     "export_bounds_nm",
     "plan_from_widget",
 ]
@@ -184,9 +185,26 @@ def export_bounds_nm(widget, options, channels=None):
     y0, y1 = interface.percent_to_absolute(
         interface.render_range_y, widget.render_range_slider_y_percent
     )
-    # A degenerate z range is what makes the grid one plane: the 2-D export is
-    # a projection through the current z window, not a slice at one depth.
-    return ((0.0, 0.0), (float(y0), float(y1)), (float(x0), float(x1)))
+    z0, z1 = current_view_z_nm(widget)
+    return ((float(z0), float(z1)), (float(y0), float(y1)), (float(x0), float(x1)))
+
+
+def current_view_z_nm(widget):
+    """``(z0, z1)`` for a 2-D export: the z window it projects through.
+
+    What makes the grid one plane is ``z_step_nm=None``, not a degenerate
+    interval, so this reports the real window even for XY.  It used to report
+    ``(0, 0)`` unconditionally, which XY tolerated -- the rasterizer ignores
+    the collapsed axis entirely -- and which XZ and YZ could not: a projection
+    puts z on a *visible* image axis, and an empty interval there is an image
+    one pixel high, positioned at the origin, with the data outside it.
+    """
+    interface = widget.data_to_layer_itf
+    z_range = interface.render_range_z
+    if not getattr(widget, "zdim", False) or not np.all(np.isfinite(z_range)):
+        # Genuinely flat: there is no window to project through.
+        return 0.0, 0.0
+    return interface.percent_to_absolute(z_range, widget.render_range_slider_z_percent)
 
 
 def run_export(

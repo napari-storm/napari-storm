@@ -161,6 +161,10 @@ class ExportImageDialog(QDialog):
 
         self.pixel_size.valueChanged.connect(self._refresh)
         self.z_step.valueChanged.connect(self._refresh)
+        # Without this the summary kept describing the previous projection:
+        # options() said XZ while the cached plan was still the XY one, so the
+        # dimensions and file size on screen belonged to a different export.
+        self.projection.currentIndexChanged.connect(self._refresh)
         self.current_view.toggled.connect(self._on_scope_changed)
         self.path.textChanged.connect(self._refresh_button)
         self._on_scope_changed()
