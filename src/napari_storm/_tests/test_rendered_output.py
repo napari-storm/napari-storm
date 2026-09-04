@@ -10,6 +10,8 @@ of this work could not check pixels. The canvas' own
 ``_scene_canvas.render()`` does work headless, and that is what these use.
 """
 
+import platform
+
 import numpy as np
 import pytest
 
@@ -125,13 +127,63 @@ def _splat_and_mirrors(image):
     return splat, mirrors
 
 
-def _asymmetry(image):
-    """How far the splat departs from its mirrorings, worst mirror first."""
+def asymmetry(image):
+    """How far the splat departs from each of its mirrorings.
+
+    RMS over the window, not the worst single pixel.  What is being detected
+    is a systematic disagreement across half the window; what is being
+    tolerated is a rasterizer landing a handful of rim pixels differently from
+    another rasterizer.  A maximum cannot tell those apart -- it *is* the rim
+    pixel -- and that is why the tolerance could not be stated portably: on
+    this machine a clean splat and a one-pixel split were 2.4x apart under a
+    maximum and 7.8x apart under RMS, from the same two images.
+    """
     splat, mirrors = _splat_and_mirrors(image)
+    scale = max(splat.max(), 1)
     return {
-        name: np.abs(splat - mirrored).max() / max(splat.max(), 1)
+        name: float(np.sqrt((((splat - mirrored) / scale) ** 2).mean()))
         for name, mirrored in mirrors.items()
     }
+
+
+def worst_asymmetry(image):
+    return max(asymmetry(image).values())
+
+
+#: The acceptance rule, shared by the check and by the control that proves the
+#: check works.  Measured, on this machine, over ten runs of both backends
+#: with no variation at all: a clean splat comes to 0.0013, one triangle a
+#: single pixel out to 0.0103, and two pixels out to 0.0199.  0.004 is the
+#: geometric mean of the first two, so it sits 3.1x above a clean render and
+#: 2.6x below the smallest defect worth catching.
+#:
+#: Only macOS is measured here.  MIN_SPLIT_RATIO below is what will notice if
+#: another platform's noise floor rises far enough to close that gap: it fails
+#: with both numbers rather than letting the limit quietly stop meaning
+#: anything, which is how its predecessor came to pass a real defect.
+SYMMETRY_LIMIT = 0.004
+
+#: How much more asymmetric a one-pixel split has to measure than the clean
+#: render it was derived from, for SYMMETRY_LIMIT to have room between them.
+#: Measured at 7.8x; a third of that is the floor.
+MIN_SPLIT_RATIO = 3.0
+
+
+def is_symmetric(image):
+    """Whether *image* holds a splat this renderer is allowed to draw."""
+    return worst_asymmetry(image) < SYMMETRY_LIMIT
+
+
+def symmetry_report(label, image, backend_class=None):
+    """Everything needed to tell a platform difference from a defect."""
+    measured = asymmetry(image)
+    return (
+        f"{label}: worst {max(measured.values()):.5f} against a limit of "
+        f"{SYMMETRY_LIMIT} ("
+        + ", ".join(f"{name} {value:.5f}" for name, value in sorted(measured.items()))
+        + f"); backend {getattr(backend_class, '__name__', 'n/a')}; "
+        f"{platform.platform()}"
+    )
 
 
 @pytest.mark.parametrize("backend_class", [NapariParticlesRenderer, InstancedRenderer])
@@ -148,17 +200,7 @@ def test_a_splat_is_a_symmetric_gaussian(make_napari_viewer, backend_class):
     image = _render(make_napari_viewer, backend_class)
     splat, _ = _splat_and_mirrors(image)
 
-    # Mirror-symmetric both ways.  The split version is not: its two triangles
-    # interpolate different maps, so the halves disagree across the diagonal.
-    #
-    # 0.03 is measured, not guessed, and the test below is what measures it:
-    # aligned this way a clean splat comes to 0.011, one triangle a single
-    # pixel out to 0.037, and two pixels out to 0.074.  The 0.08 this
-    # assertion carried before the window was centred sat above two of those
-    # three -- loose enough to pass the defect the file exists for, and still
-    # tight enough to fail a clean image once the rasterizer changed.
-    for name, difference in _asymmetry(image).items():
-        assert difference < 0.03, (name, difference)
+    assert is_symmetric(image), symmetry_report("clean render", image, backend_class)
 
     # Falling away from the centre, not flat and not lumpy.
     profile = splat[HALF, HALF:]
@@ -183,37 +225,36 @@ def _split_along_the_diagonal(image, shift):
     return split
 
 
-#: How much more asymmetric a split splat has to measure than a clean one.
-#: Well under the 6.8x a one-pixel split actually reaches, so the assertion
-#: fails on a defect getting harder to see rather than on rasterizer noise.
-MIN_SPLIT_RATIO = 3.0
-
-
 @pytest.mark.parametrize("shift", [1, 2])
 def test_the_symmetry_check_would_catch_a_split_splat(make_napari_viewer, shift):
-    """Proof the tolerance above is load-bearing rather than merely satisfied.
+    """Proof that the rule above is load-bearing rather than merely satisfied.
 
-    Without this, 0.03 is a number that happens to pass today and nothing
-    says how much room is left before it stops meaning anything.  Its
-    predecessor, 0.08, passed both of these.
-
-    Stated as a ratio against the clean control rather than against 0.03,
-    because the absolute figure is the rasterizer's, not the renderer's.  A
-    one-pixel split measures 0.037 on CI's software rasterizer and 0.0256 on
-    an Apple GPU -- the same defect either side of the constant, so the
-    absolute form failed on this machine while passing in CI.  Against its own
-    control the split is 6.8x, and *that* is the property being claimed: the
-    check separates a split splat from a clean one.
+    This runs `is_symmetric` -- the same function, against the same constant --
+    on an image carrying the defect, which is the only way a control says
+    anything about the check it is controlling.  The previous version measured
+    a ratio while the check it stood for compared against an absolute 0.03, so
+    the two could and did disagree: a one-pixel split measuring 0.0256 on an
+    Apple GPU passed the real check while the control reported the defect
+    being caught.
     """
     clean = _render(make_napari_viewer, NapariParticlesRenderer)
-    clean_asymmetry = max(_asymmetry(clean).values())
-    assert clean_asymmetry < 0.03, "the control is not clean"
+    assert is_symmetric(clean), symmetry_report("the control is not clean", clean)
 
     split = _split_along_the_diagonal(clean, shift)
-    split_asymmetry = max(_asymmetry(split).values())
-    assert split_asymmetry > MIN_SPLIT_RATIO * clean_asymmetry, (
-        f"a {shift}px split measured {split_asymmetry:.4f} against a clean "
-        f"{clean_asymmetry:.4f}: too close to tell apart"
+    assert not is_symmetric(split), symmetry_report(
+        f"a {shift}px split passed the symmetry check", split
+    )
+
+    # And enough room between the two that the limit is not about to stop
+    # separating them on some other rasterizer.  This is the assertion to read
+    # first if this file ever fails on a platform it has not run on.
+    clean_asymmetry = worst_asymmetry(clean)
+    ratio = worst_asymmetry(split) / clean_asymmetry
+    assert ratio >= MIN_SPLIT_RATIO, (
+        f"a {shift}px split measured {worst_asymmetry(split):.5f} against a "
+        f"clean {clean_asymmetry:.5f}, a ratio of {ratio:.2f}. "
+        f"SYMMETRY_LIMIT={SYMMETRY_LIMIT} needs re-measuring on "
+        f"{platform.platform()} rather than loosening."
     )
 
 
