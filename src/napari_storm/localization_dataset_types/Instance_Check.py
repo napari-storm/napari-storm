@@ -1,5 +1,9 @@
 from .base_class import LocalizationDataBaseClass
-from .Minflux_class import MinfluxDataAIClass, MinfluxDataAIIterationClass, MinfluxDataBaseClass
+from .Minflux_class import (
+    MinfluxDataAIClass,
+    MinfluxDataAIIterationClass,
+    MinfluxDataBaseClass,
+)
 from .storm_class import StormDataClass, StormDatasetCollection
 
 

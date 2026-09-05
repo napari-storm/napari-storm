@@ -7,6 +7,7 @@ are comparable between runs and between machines.
 Everything here is seeded and depends only on numpy, so a fixture can be
 regenerated exactly rather than shipped as a large binary.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -76,6 +77,4 @@ def extreme_gaussian_dataset(n=1_000, *, seed=0):
     localization count is trivial, but every splat covers a large part of the
     screen, so cost is driven by overdraw rather than by geometry.
     """
-    return make_dataset(
-        n, seed=seed, name="extreme_gaussian", fov=(50.0, 50.0, 10.0)
-    )
+    return make_dataset(n, seed=seed, name="extreme_gaussian", fov=(50.0, 50.0, 10.0))

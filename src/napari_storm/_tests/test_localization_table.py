@@ -4,11 +4,15 @@
 which is where the application uses it. These tests pin down the core contract
 itself: stable IDs, unit resolution, ownership, and cache invalidation.
 """
+
 import numpy as np
 import pytest
 
-from napari_storm.core import (COORDINATE_DTYPE, DEFAULT_POSITION_COLUMNS,
-                               LocalizationTable)
+from napari_storm.core import (
+    COORDINATE_DTYPE,
+    DEFAULT_POSITION_COLUMNS,
+    LocalizationTable,
+)
 
 NM_COLUMNS = DEFAULT_POSITION_COLUMNS
 PIXEL_COLUMNS = {"x": "x_pos_pixels", "y": "y_pos_pixels", "z": "z_pos_pixels"}

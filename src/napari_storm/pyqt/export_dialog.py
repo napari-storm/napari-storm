@@ -11,15 +11,33 @@ The dialog's job is not to collect three numbers. It is to make the two things
   thinned the view. The export contains more localizations than are being
   drawn, and saying so afterwards would be too late to be useful.
 """
+
 from __future__ import annotations
 
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import (QButtonGroup, QDialog, QDialogButtonBox,
-                            QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel,
-                            QLineEdit, QPushButton, QRadioButton, QVBoxLayout)
+from qtpy.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+)
 
-from ..image_export import (SCOPE_CURRENT_VIEW, SCOPE_EVERYTHING,
-                            ExportOptions)
+from ..image_export import (
+    PROJECTION_XY,
+    PROJECTION_XZ,
+    PROJECTION_YZ,
+    SCOPE_CURRENT_VIEW,
+    SCOPE_EVERYTHING,
+    ExportOptions,
+)
 
 __all__ = ["ExportImageDialog", "format_size", "describe_plan"]
 
@@ -84,6 +102,22 @@ class ExportImageDialog(QDialog):
         form.addRow("Export:", self.current_view)
         form.addRow("", self.everything)
 
+        # Only meaningful for a 2-D export: a volume already contains every
+        # plane, so it is disabled rather than hidden alongside the Z step.
+        self.projection = QComboBox()
+        for label, value in (
+            ("XY (looking down Z)", PROJECTION_XY),
+            ("XZ (looking along Y)", PROJECTION_XZ),
+            ("YZ (looking along X)", PROJECTION_YZ),
+        ):
+            self.projection.addItem(label, value)
+        self.projection.setToolTip(
+            "Which plane the localizations are summed onto. The Gaussians are "
+            "rasterized in the chosen plane, so an XZ view carries the axial "
+            "widths rather than a reslice of the XY image."
+        )
+        form.addRow("Projection:", self.projection)
+
         self.z_step = QDoubleSpinBox()
         self.z_step.setDecimals(3)
         self.z_step.setRange(0.001, 100_000.0)
@@ -127,6 +161,10 @@ class ExportImageDialog(QDialog):
 
         self.pixel_size.valueChanged.connect(self._refresh)
         self.z_step.valueChanged.connect(self._refresh)
+        # Without this the summary kept describing the previous projection:
+        # options() said XZ while the cached plan was still the XY one, so the
+        # dimensions and file size on screen belonged to a different export.
+        self.projection.currentIndexChanged.connect(self._refresh)
         self.current_view.toggled.connect(self._on_scope_changed)
         self.path.textChanged.connect(self._refresh_button)
         self._on_scope_changed()
@@ -136,8 +174,13 @@ class ExportImageDialog(QDialog):
     def options(self):
         return ExportOptions(
             pixel_size_nm=float(self.pixel_size.value()),
-            scope=SCOPE_CURRENT_VIEW if self.current_view.isChecked() else SCOPE_EVERYTHING,
+            scope=(
+                SCOPE_CURRENT_VIEW
+                if self.current_view.isChecked()
+                else SCOPE_EVERYTHING
+            ),
             z_step_nm=float(self.z_step.value()),
+            projection=self.projection.currentData(),
         )
 
     def output_path(self):
@@ -150,7 +193,9 @@ class ExportImageDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_scope_changed(self, *_):
-        self.z_step.setEnabled(self.everything.isChecked())
+        volume = self.everything.isChecked()
+        self.z_step.setEnabled(volume)
+        self.projection.setEnabled(not volume)
         self._refresh()
 
     def _browse(self):

@@ -34,17 +34,26 @@ class GridPlaneRenderer:
         selected = low + np.asarray(percent_range, dtype=float) / 100 * (high - low)
         return float(selected[0]), float(selected[1])
 
+    @staticmethod
+    def _widened(low, high, fraction):
+        """Grow an interval by *fraction* of its span at each end."""
+        pad = (high - low) * fraction
+        return low - pad, high + pad
+
     def _grid_metrics(self, render_range_x, render_range_y, line_distance_nm):
         """Return selected bounds, spans, and unique line counts."""
         if not np.isfinite(line_distance_nm) or line_distance_nm <= 0:
             raise ValueError("Grid line distance must be a finite value above zero")
 
-        x0, x1 = self._window(
-            render_range_x, self.render_config.range_x_percent
-        )
-        y0, y1 = self._window(
-            render_range_y, self.render_config.range_y_percent
-        )
+        x0, x1 = self._window(render_range_x, self.render_config.range_x_percent)
+        y0, y1 = self._window(render_range_y, self.render_config.range_y_percent)
+        # Issue #38: a grid is a ruler laid under the data, and one that stops
+        # exactly where the data stops cannot show that the data stopped.  The
+        # margin widens the plane symmetrically, as a fraction of each span.
+        margin = max(0.0, float(self.render_config.grid_plane_margin_percent)) / 100
+        if margin:
+            x0, x1 = self._widened(x0, x1, margin)
+            y0, y1 = self._widened(y0, y1, margin)
         x_span = max(0.0, x1 - x0)
         y_span = max(0.0, y1 - y0)
 
@@ -76,16 +85,12 @@ class GridPlaneRenderer:
         vectors_x = np.zeros((x_line_intervals + 1, 2, 3), dtype=np.float32)
         vectors_x[:, 0, 0] = self.current_grid_plane_z_pos
         vectors_x[:, 0, 2] = x0
-        vectors_x[:, 0, 1] = (
-            y0 + np.arange(x_line_intervals + 1) * line_distance_nm
-        )
+        vectors_x[:, 0, 1] = y0 + np.arange(x_line_intervals + 1) * line_distance_nm
         vectors_x[:, 1, 2] = x_span
 
         vectors_y = np.zeros((y_line_intervals + 1, 2, 3), dtype=np.float32)
         vectors_y[:, 0, 0] = self.current_grid_plane_z_pos
-        vectors_y[:, 0, 2] = (
-            x0 + np.arange(y_line_intervals + 1) * line_distance_nm
-        )
+        vectors_y[:, 0, 2] = x0 + np.arange(y_line_intervals + 1) * line_distance_nm
         vectors_y[:, 0, 1] = y0
         vectors_y[:, 1, 1] = y_span
 
@@ -134,22 +139,17 @@ class GridPlaneRenderer:
             ):
                 return
             if self.render_config.zdim:
-                if (
-                    self.current_grid_plane_z_pos is None
-                    or not (
-                        render_range_z[0]
-                        <= self.current_grid_plane_z_pos
-                        <= render_range_z[1]
-                    )
+                if self.current_grid_plane_z_pos is None or not (
+                    render_range_z[0]
+                    <= self.current_grid_plane_z_pos
+                    <= render_range_z[1]
                 ):
                     self.current_grid_plane_z_pos = np.mean(render_range_z)
             else:
                 self.current_grid_plane_z_pos = 1
             default_line_dist_nm = self.render_config.grid_plane_line_distance_um * 1000
             vectors, num_of_lines_x, num_of_lines_y, x_span, y_span = (
-                self._make_vectors(
-                    render_range_x, render_range_y, default_line_dist_nm
-                )
+                self._make_vectors(render_range_x, render_range_y, default_line_dist_nm)
             )
             self.default_line_thickness_nm = self._edge_width(
                 self.line_thickness_value,
@@ -205,9 +205,8 @@ class GridPlaneRenderer:
         if z_pos is not None:
             vectors = self.grid_plane_layer.data
             if self.render_config.zdim:
-                self.current_grid_plane_z_pos = (
-                    render_range_z[0]
-                    + z_pos / 100 * (render_range_z[1] - render_range_z[0])
+                self.current_grid_plane_z_pos = render_range_z[0] + z_pos / 100 * (
+                    render_range_z[1] - render_range_z[0]
                 )
                 vectors[:, 0, 0] = self.current_grid_plane_z_pos
             else:
@@ -223,9 +222,7 @@ class GridPlaneRenderer:
                 y_span,
                 num_of_lines_x,
                 num_of_lines_y,
-            ) = self._grid_metrics(
-                render_range_x, render_range_y, line_distance_nm
-            )
+            ) = self._grid_metrics(render_range_x, render_range_y, line_distance_nm)
             self.grid_plane_layer.edge_width = self._edge_width(
                 line_thickness,
                 num_of_lines_x,

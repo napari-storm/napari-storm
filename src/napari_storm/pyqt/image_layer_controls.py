@@ -1,4 +1,3 @@
-import logging
 """
 Live controls panel for one reference-image napari layer.
 
@@ -6,6 +5,8 @@ Inserted at row 0 of channel_controls_widget_layout (a QFormLayout) when an
 image is imported.  Provides live pixel-size and offset spinboxes plus a
 "✕ Remove" button.
 """
+
+import logging
 
 import numpy as np
 from napari.utils.colormaps import AVAILABLE_COLORMAPS
@@ -35,9 +36,9 @@ _THIN = 1.0  # nm — collapsed spatial dimension makes the slab a visual plane
 #: Normals in the layer's ``(z, y, x)`` axis order: the plane a reference image
 #: lies in is named by the two axes it spans, so its normal is the third.
 _PLANE_NORMALS = {
-    "XY": (1.0, 0.0, 0.0),   # constant z
-    "XZ": (0.0, 1.0, 0.0),   # constant y
-    "YZ": (0.0, 0.0, 1.0),   # constant x
+    "XY": (1.0, 0.0, 0.0),  # constant z
+    "XZ": (0.0, 1.0, 0.0),  # constant y
+    "YZ": (0.0, 0.0, 1.0),  # constant x
 }
 
 
@@ -56,17 +57,11 @@ def _quarter_turn_matrix(axis, quarter_turns=1):
     c = np.cos(angle)
     s = np.sin(angle)
     if axis == "x":
-        rotation_xyz = np.array(
-            ((1, 0, 0), (0, c, -s), (0, s, c)), dtype=float
-        )
+        rotation_xyz = np.array(((1, 0, 0), (0, c, -s), (0, s, c)), dtype=float)
     elif axis == "y":
-        rotation_xyz = np.array(
-            ((c, 0, s), (0, 1, 0), (-s, 0, c)), dtype=float
-        )
+        rotation_xyz = np.array(((c, 0, s), (0, 1, 0), (-s, 0, c)), dtype=float)
     else:
-        rotation_xyz = np.array(
-            ((c, -s, 0), (s, c, 0), (0, 0, 1)), dtype=float
-        )
+        rotation_xyz = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)), dtype=float)
 
     # xyz = xyz_from_zyx @ zyx
     xyz_from_zyx = np.array(((0, 0, 1), (0, 1, 0), (1, 0, 0)))
@@ -133,16 +128,16 @@ def _expand_image(result: ImageImportResult):
 
     if o == "XY":
         # Rows are already y and columns already x; only z has to be added.
-        data = img[np.newaxis, ...]          # (1, H, W[, C])
+        data = img[np.newaxis, ...]  # (1, H, W[, C])
         scale = (_THIN, px_xy, px_xy)
     elif o == "XZ":
-        data = img[:, np.newaxis, :]         # (H, 1, W)
+        data = img[:, np.newaxis, :]  # (H, 1, W)
         scale = (px_z, _THIN, px_xy)
     elif o == "YZ":
-        data = img[:, :, np.newaxis]         # (H, W, 1)
+        data = img[:, :, np.newaxis]  # (H, W, 1)
         scale = (px_z, px_xy, _THIN)
     elif o == "3D":
-        data = img                            # (D, H, W[, C]) already (z, y, x)
+        data = img  # (D, H, W[, C]) already (z, y, x)
         scale = (px_z, px_xy, px_xy)
     else:
         raise ValueError(f"Unknown orientation: {o!r}")
@@ -284,8 +279,7 @@ class ImageLayerControls(QWidget):
 
         self._opacity_slider = None
         has_alpha_channel = (
-            getattr(self._layer, "rgb", False)
-            and self._result.img.shape[-1] == 4
+            getattr(self._layer, "rgb", False) and self._result.img.shape[-1] == 4
         )
         if has_alpha_channel:
             self._opacity_slider = QSlider(Qt.Horizontal)
@@ -349,9 +343,7 @@ class ImageLayerControls(QWidget):
         ):
             button = QPushButton(arrow)
             button.setFixedSize(28, 22)
-            button.setToolTip(
-                f"Rotate 90° {direction} around the {axis.upper()} axis"
-            )
+            button.setToolTip(f"Rotate 90° {direction} around the {axis.upper()} axis")
             button.clicked.connect(
                 lambda _checked=False, a=axis, q=turns: self._rotate_image(a, q)
             )
@@ -365,7 +357,7 @@ class ImageLayerControls(QWidget):
     # ------------------------------------------------------------------
 
     def _sync_from_layer(self):
-        s = tuple(self._layer.scale)    # (dim0, dim1, dim2)
+        s = tuple(self._layer.scale)  # (dim0, dim1, dim2)
         t = tuple(self._layer.translate)  # (dim0, dim1, dim2)
 
         # px_xy: the non-thin spatial axis
@@ -465,7 +457,7 @@ class ImageLayerControls(QWidget):
 
     def _on_translate_changed(self):
         # Offsets are always stored as (z_off, x_off, y_off) in napari coords
-        z_nm = self._z_off_spin.value() * 1000.0   # µm → nm
+        z_nm = self._z_off_spin.value() * 1000.0  # µm → nm
         x_nm = self._x_off_spin.value() * 1000.0
         y_nm = self._y_off_spin.value() * 1000.0
         try:

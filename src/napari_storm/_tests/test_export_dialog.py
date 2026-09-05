@@ -8,15 +8,24 @@ Two of its jobs are not cosmetic and are tested as behaviour:
 * a view thinned by the render budget says so before the export runs, not
   after, since afterwards is too late to act on.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.image_export import (SCOPE_EVERYTHING, ExportOptions,
-                                       plan_from_widget)
+from napari_storm.image_export import (
+    PROJECTION_XY,
+    PROJECTION_XZ,
+    SCOPE_EVERYTHING,
+    ExportOptions,
+    plan_from_widget,
+)
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
-from napari_storm.pyqt.export_dialog import (ExportImageDialog, describe_plan,
-                                             format_size)
+from napari_storm.pyqt.export_dialog import (
+    ExportImageDialog,
+    describe_plan,
+    format_size,
+)
 
 
 def _dataset(name="ds", n=200, zdim=False):
@@ -46,7 +55,12 @@ def _dialog(make_napari_viewer, thinned=False, zdim=False):
 
 @pytest.mark.parametrize(
     "nbytes,expected",
-    [(512, "512 B"), (2048, "2.0 KB"), (5 * 1024**2, "5.0 MB"), (3 * 1024**3, "3.0 GB")],
+    [
+        (512, "512 B"),
+        (2048, "2.0 KB"),
+        (5 * 1024**2, "5.0 MB"),
+        (3 * 1024**3, "3.0 GB"),
+    ],
 )
 def test_sizes_are_readable(nbytes, expected):
     assert format_size(nbytes) == expected
@@ -154,3 +168,45 @@ def test_the_options_read_back_what_was_chosen(make_napari_viewer):
     assert options.scope == SCOPE_EVERYTHING
     assert options.z_step_nm == 33.0
     assert dialog.output_path() == "/tmp/x.ome.tif"
+
+
+# -------------------------------------------------------------- projection
+
+
+def _choose(combo, value):
+    index = combo.findData(value)
+    assert index >= 0, f"{value!r} is not offered"
+    combo.setCurrentIndex(index)
+
+
+def test_choosing_a_projection_replans_the_preview(make_napari_viewer):
+    """options() and plan() have to describe the same export.
+
+    currentIndexChanged was not connected, so the summary kept describing the
+    projection chosen before this one: the export itself was replanned on the
+    way out and came out right, while the dimensions and file size the user
+    agreed to belonged to a different image.
+    """
+    dialog, widget = _dialog(make_napari_viewer, zdim=True)
+    _choose(dialog.projection, PROJECTION_XY)
+    before = dialog.plan().grid.shape
+    summary_before = dialog.summary.text()
+
+    _choose(dialog.projection, PROJECTION_XZ)
+
+    assert dialog.options().projection == PROJECTION_XZ
+    assert dialog.plan().grid.shape != before
+    assert (
+        dialog.plan().grid.shape
+        == plan_from_widget(widget, dialog.options()).grid.shape
+    )
+    assert dialog.summary.text() != summary_before
+
+
+def test_the_preview_matches_the_plan_for_every_projection(make_napari_viewer):
+    dialog, widget = _dialog(make_napari_viewer, zdim=True)
+
+    for index in range(dialog.projection.count()):
+        dialog.projection.setCurrentIndex(index)
+        expected = plan_from_widget(widget, dialog.options())
+        assert dialog.plan().grid.shape == expected.grid.shape

@@ -15,6 +15,7 @@ render-range sliders, switch between fixed and variable Gaussian mode, change
 the Gaussian size, rotate into 3-D, toggle Z colour encoding, change a
 colormap, hide and show a channel, load a second dataset, and unload one.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,8 +43,9 @@ def main(argv=None):
     # backend afterwards has no effect, and the failure is a blank canvas
     # rather than an error, so it is done first and reported.
     if args.backend == "instanced":
-        from napari_storm.napari_particles._napari_compat import \
-            enable_instanced_backend
+        from napari_storm.napari_particles._napari_compat import (
+            enable_instanced_backend,
+        )
 
         if not enable_instanced_backend():
             print(
@@ -59,11 +61,11 @@ def main(argv=None):
 
     backends = {
         "instanced": "napari_storm.napari_particles.instanced_renderer:"
-                     "InstancedRenderer",
+        "InstancedRenderer",
         "billboards": "napari_storm.napari_particles.renderer:"
-                      "NapariParticlesRenderer",
+        "NapariParticlesRenderer",
         "points": "napari_storm.napari_particles.points_renderer:"
-                  "NapariPointsRenderer",
+        "NapariPointsRenderer",
     }
     import importlib
 
@@ -71,9 +73,7 @@ def main(argv=None):
     backend_class = getattr(importlib.import_module(module_name), class_name)
 
     viewer = napari.Viewer()
-    widget = napari_storm(
-        napari_viewer=viewer, renderer=backend_class(viewer)
-    )
+    widget = napari_storm(napari_viewer=viewer, renderer=backend_class(viewer))
     viewer.window.add_dock_widget(widget, name="napari-storm", area="right")
 
     if args.file:

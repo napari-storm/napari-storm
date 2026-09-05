@@ -1,6 +1,6 @@
 # How it Works
 
-napari-storm uses a **GPU-accelerated billboard rendering strategy** for sparse single-molecule data.  
+napari-storm uses a **GPU-accelerated billboard rendering strategy** for sparse single-molecule data.
 
 ---
 

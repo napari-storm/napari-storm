@@ -3,11 +3,13 @@ Smoke tests for the napari_storm dock widget.
 
 These require a real napari viewer and Qt event loop.
 """
+
+import h5py
 import numpy as np
 from qtpy.QtWidgets import QApplication, QScrollArea
 
-from napari_storm.FileToLocalizationDataInterface import QFileDialog
 from napari_storm._dock_widget import napari_storm
+from napari_storm.FileToLocalizationDataInterface import QFileDialog
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
 from napari_storm.render_config import RenderConfig
 
@@ -22,9 +24,7 @@ def _make_dataset_2d(n=20, name="smoke_2d"):
     locs = np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = np.linspace(0, 5000, n)
     locs["y_pos_nm"] = np.linspace(0, 5000, n)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=False
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=False)
 
 
 def test_widget_instantiation(make_napari_viewer):
@@ -211,7 +211,28 @@ def test_render_state_follows_identity_not_position(make_napari_viewer):
     widget.unload_dataset(0)
 
     # The third dataset moved from index 2 to index 1 and kept its own arrays.
-    assert (
-        widget.data_to_layer_itf.render_state[datasets[2].dataset_id] is third_state
-    )
+    assert widget.data_to_layer_itf.render_state[datasets[2].dataset_id] is third_state
     assert datasets[0].dataset_id not in widget.data_to_layer_itf.render_state
+
+
+def test_an_unreadable_hdf5_warns_instead_of_failing_silently(
+    make_napari_viewer, tmp_path, monkeypatch
+):
+    """Inline opens keep their True/False contract, but say what went wrong."""
+    viewer = make_napari_viewer()
+    widget = napari_storm(napari_viewer=viewer)
+
+    file_path = tmp_path / "something_else.hdf5"
+    with h5py.File(file_path, "w") as file:
+        file.create_dataset("mystery", data=np.zeros(3))
+
+    warnings = []
+    monkeypatch.setattr(widget, "_warn_user", warnings.append)
+
+    assert (
+        widget.open_localization_data_file_and_get_dataset(file_path=str(file_path))
+        is False
+    )
+    assert len(warnings) == 1
+    assert "molecule_set_data" in warnings[0]
+    assert widget.localization_datasets == []

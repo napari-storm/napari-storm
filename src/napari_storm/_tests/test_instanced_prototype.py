@@ -6,6 +6,7 @@ needs a GL context and VisPy's ``gl+`` backend, which has to be selected before
 any context exists — so those run in a subprocess, for the same reason the
 host-free gate does.
 """
+
 import os
 import subprocess
 import sys
@@ -15,13 +16,16 @@ import numpy as np
 import pytest
 
 from napari_storm.napari_particles.instanced import (
-    QUAD, QUAD_INDICES, InstancedBillboards, instanced_bytes_per_localization)
+    QUAD,
+    QUAD_INDICES,
+    InstancedBillboards,
+    instanced_bytes_per_localization,
+)
 
 
 def _run_gl(body):
     """Run *body* in a subprocess with VisPy's instancing backend selected."""
-    script = textwrap.dedent(
-        """
+    script = textwrap.dedent("""
         import sys, numpy as np, vispy
         vispy.use(gl="gl+")
         from vispy import app, gloo
@@ -34,8 +38,7 @@ def _run_gl(body):
         app.use_app(API_NAME.lower())
         canvas = app.Canvas(show=False, size=(128, 128))
         canvas.native
-        """
-    ) + textwrap.dedent(body)
+        """) + textwrap.dedent(body)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     return subprocess.run(
@@ -58,9 +61,7 @@ def _run_subprocess(body):
 def _billboards(n=1000):
     coords = np.zeros((n, 3), dtype=np.float32)
     coords[:, 1] = np.linspace(-0.4, 0.4, n)
-    return InstancedBillboards(
-        coords, np.ones((n, 3), "f4"), np.ones(n, "f4"), 0.1
-    )
+    return InstancedBillboards(coords, np.ones((n, 3), "f4"), np.ones(n, "f4"), 0.1)
 
 
 # --------------------------------------------------------------------- memory
@@ -122,8 +123,7 @@ def test_scalar_sigma_value_and_size_broadcast():
 @pytest.mark.slow
 def test_the_shader_compiles_and_draws_gaussians():
     """One instanced draw call, two splats, correct positions and falloff."""
-    result = _run_gl(
-        """
+    result = _run_gl("""
         with canvas:
             gloo.set_state(blend=True, blend_func=("src_alpha", "one"),
                            depth_test=False)
@@ -148,8 +148,7 @@ def test_the_shader_compiles_and_draws_gaussians():
         assert row[64] < 5, row[64]
         assert column[2, 2] < 5
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-2000:]
     assert "OK" in result.stdout
 
@@ -157,8 +156,7 @@ def test_the_shader_compiles_and_draws_gaussians():
 @pytest.mark.slow
 def test_the_profile_is_actually_gaussian():
     """The quality claim.  A disc would pass the test above; this it would not."""
-    result = _run_gl(
-        """
+    result = _run_gl("""
         with canvas:
             gloo.set_state(blend=True, blend_func=("src_alpha", "one"),
                            depth_test=False)
@@ -197,8 +195,7 @@ def test_the_profile_is_actually_gaussian():
         profile = row[centre : centre + 40]
         assert np.all(np.diff(profile) <= 1e-6), profile
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-2000:]
     assert "OK" in result.stdout
 
@@ -220,8 +217,7 @@ def test_instancing_needs_the_gl_plus_backend():
     built a viewer the process is already on ``gl+`` and the check would prove
     nothing.
     """
-    result = _run_subprocess(
-        """
+    result = _run_subprocess("""
         from vispy.gloo import gl
         from vispy.gloo.gl import gl2, glplus
 
@@ -242,8 +238,7 @@ def test_instancing_needs_the_gl_plus_backend():
         finally:
             viewer.close()
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-2000:]
     assert "OK" in result.stdout
 
@@ -259,8 +254,8 @@ def _run_backend(body):
     test, it is too late to switch, and the instanced renderer refuses to
     construct rather than draw nothing.
     """
-    script = textwrap.dedent(
-        """
+    script = (
+        textwrap.dedent("""
         import numpy as np
         from napari_storm.napari_particles._napari_compat import (
             enable_instanced_backend)
@@ -285,12 +280,12 @@ def _run_backend(body):
         widget = napari_storm(
             napari_viewer=viewer, renderer=InstancedRenderer(viewer)
         )
-        """
-    ) + textwrap.dedent(body) + textwrap.dedent(
-        """
+        """)
+        + textwrap.dedent(body)
+        + textwrap.dedent("""
         viewer.close()
         print("OK")
-        """
+        """)
     )
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
@@ -302,8 +297,7 @@ def _run_backend(body):
 @pytest.mark.slow
 def test_the_plugin_runs_on_the_instanced_backend():
     """The checkpoint: load, draw, filter, all through the real widget."""
-    result = _run_backend(
-        """
+    result = _run_backend("""
         widget.get_dataset_from_test_mode([dataset(5000)])
         data = widget.localization_datasets[0]
         renderer = widget.data_to_layer_itf.renderer
@@ -323,8 +317,7 @@ def test_the_plugin_runs_on_the_instanced_backend():
         assert renderer.layer(data.dataset_id) is layer
         assert layer.n_instances < 5000
         assert len(layer.data[0]) == 4
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-3000:]
     assert "OK" in result.stdout
 
@@ -332,8 +325,7 @@ def test_the_plugin_runs_on_the_instanced_backend():
 @pytest.mark.slow
 def test_the_camera_frames_the_data_not_the_quad():
     """Without an _extent_data override napari frames a quad at the origin."""
-    result = _run_backend(
-        """
+    result = _run_backend("""
         widget.get_dataset_from_test_mode([dataset(1000)])
         data = widget.localization_datasets[0]
         layer = widget.data_to_layer_itf.renderer.layer(data.dataset_id)
@@ -344,16 +336,14 @@ def test_the_camera_frames_the_data_not_the_quad():
         assert extent[1][2] > 11_900, extent
         assert extent[0][1] < 40_100, extent
         assert extent[1][1] > 49_900, extent
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-3000:]
     assert "OK" in result.stdout
 
 
 @pytest.mark.slow
 def test_appearance_and_unloading_work_on_the_instanced_backend():
-    result = _run_backend(
-        """
+    result = _run_backend("""
         widget.get_dataset_from_test_mode([dataset(1000, "a"), dataset(1000, "b")])
         first, second = widget.localization_datasets
         renderer = widget.data_to_layer_itf.renderer
@@ -364,8 +354,7 @@ def test_appearance_and_unloading_work_on_the_instanced_backend():
         widget.unload_dataset(0)
         assert not renderer.is_open(first.dataset_id)
         assert renderer.is_open(second.dataset_id)
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr[-3000:]
     assert "OK" in result.stdout
 
@@ -381,8 +370,6 @@ def test_the_backend_refuses_to_construct_without_instancing(
     """
     from napari_storm.napari_particles import instanced_renderer
 
-    monkeypatch.setattr(
-        instanced_renderer, "instancing_available", lambda: False
-    )
+    monkeypatch.setattr(instanced_renderer, "instancing_available", lambda: False)
     with pytest.raises(RuntimeError, match="gl\\+"):
         instanced_renderer.InstancedRenderer(make_napari_viewer())

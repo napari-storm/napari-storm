@@ -8,6 +8,7 @@ The invariant these must not break is the one §3.5 was about: a transform moves
 what is *drawn*, never the measurements, and moving one dataset must not move
 another.
 """
+
 import numpy as np
 import pytest
 
@@ -68,11 +69,15 @@ def test_each_axis_moves_only_its_own(make_napari_viewer):
     widget, _ = _widget(make_napari_viewer)
     dataset = widget.localization_datasets[0]
     # (z, y, x): y is the middle column, so shifting x must leave it alone.
-    y_before = widget.data_to_layer_itf.layer_for(dataset).localization_coords[:, 1].min()
+    y_before = (
+        widget.data_to_layer_itf.layer_for(dataset).localization_coords[:, 1].min()
+    )
 
     _controls(widget)._shift_spins["x"].setValue(3.0)
 
-    y_after = widget.data_to_layer_itf.layer_for(dataset).localization_coords[:, 1].min()
+    y_after = (
+        widget.data_to_layer_itf.layer_for(dataset).localization_coords[:, 1].min()
+    )
     assert y_after == pytest.approx(y_before, abs=1.0)
 
 
@@ -130,7 +135,8 @@ def test_moving_one_dataset_does_not_move_another(make_napari_viewer):
     _controls(widget, 0)._shift_spins["x"].setValue(6.0)
 
     assert _drawn_x(widget, second).min() == pytest.approx(other_before, abs=1.0)
-    assert (
-        widget.dataset_store.state(second.dataset_id).transform.translation_nm
-        == (0.0, 0.0, 0.0)
+    assert widget.dataset_store.state(second.dataset_id).transform.translation_nm == (
+        0.0,
+        0.0,
+        0.0,
     )

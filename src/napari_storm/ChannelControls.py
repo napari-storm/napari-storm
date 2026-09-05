@@ -3,8 +3,17 @@ import math
 from qtpy import QtCore
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
-from qtpy.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout,
-                            QHBoxLayout, QLabel, QPushButton, QSlider, QWidget)
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QWidget,
+)
 from superqt import QDoubleRangeSlider
 
 from .CustomErrors import ParentError, StaticAttributeError
@@ -102,8 +111,8 @@ class ChannelControls(QWidget):
         self.cutoff_spin.valueChanged.connect(self._on_cutoff_spin_changed)
 
         # factor spinbox (log scale)
-        min_factor = 10 ** -self.LOG_RANGE
-        max_factor = 10 ** self.LOG_RANGE
+        min_factor = 10**-self.LOG_RANGE
+        max_factor = 10**self.LOG_RANGE
         self.factor_spin = QDoubleSpinBox(self)
         self.factor_spin.setRange(min_factor, max_factor)
         self.factor_spin.setSingleStep(0.1)
@@ -218,7 +227,7 @@ class ChannelControls(QWidget):
 
         cutoff = data_min + s_cutoff * self._orig_span
         logv = -self.LOG_RANGE + s_logpos * (2 * self.LOG_RANGE)
-        factor = 10 ** logv
+        factor = 10**logv
         maxval = data_min + factor * self._orig_span
         if cutoff > maxval:
             cutoff = maxval

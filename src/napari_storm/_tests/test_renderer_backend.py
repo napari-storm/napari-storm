@@ -4,13 +4,18 @@ Level 3 requires prototyping a second renderer "on the same fixtures before
 selecting the production backend", which needs a contract both implementations
 satisfy. These tests pin that contract, and check the napari backend against it.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.core.renderer import (Changed, LayerAppearance,
-                                        LocalizationRenderer, NullRenderer,
-                                        RenderRequest)
+from napari_storm.core.renderer import (
+    Changed,
+    LayerAppearance,
+    LocalizationRenderer,
+    NullRenderer,
+    RenderRequest,
+)
 from napari_storm.napari_particles.instanced_renderer import InstancedRenderer
 from napari_storm.napari_particles.points_renderer import NapariPointsRenderer
 from napari_storm.napari_particles.renderer import NapariParticlesRenderer
@@ -241,9 +246,7 @@ def test_the_fallback_warns_through_napari(make_napari_viewer, monkeypatch):
 
     monkeypatch.setattr(selection, "instancing_available", lambda: False)
     warnings = []
-    monkeypatch.setattr(
-        "napari.utils.notifications.show_warning", warnings.append
-    )
+    monkeypatch.setattr("napari.utils.notifications.show_warning", warnings.append)
 
     selection.select_renderer(make_napari_viewer())
 
@@ -298,7 +301,9 @@ def test_a_layer_the_user_deletes_stops_being_open(make_napari_viewer, backend_c
 
 
 @pytest.mark.parametrize("backend_class", BACKENDS)
-def test_our_own_close_does_not_look_like_a_user_deletion(make_napari_viewer, backend_class):
+def test_our_own_close_does_not_look_like_a_user_deletion(
+    make_napari_viewer, backend_class
+):
     """close() removes the layer too; that must not re-enter as a host event."""
     viewer = make_napari_viewer()
     renderer = backend_class(viewer)

@@ -7,19 +7,44 @@ from qtpy.QtCore import Qt
 
 from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
-from .core import DatasetStore, LayerAppearance, Scene, WorldTransform
-from .CustomErrors import DimensionError, StaticAttributeError
+from .core import DatasetStore, LayerAppearance, WorldTransform
+from .CustomErrors import (
+    DimensionError,
+    StaticAttributeError,
+    UnknownFileLayoutError,
+)
 from .DataAdjustment import DataAdjustmentInterface
 from .DataFilter import DataFilterInterface
-from .DataToLayerInterface import DataToLayerInterface
+from .DataToLayerInterface import DataToLayerInterface, look_at_plane
 from .Exp_Controls import custom_keys_and_scalebar
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .GUI import NapariStormGUI
 from .localization_dataset_types import LocalizationDataBaseClass, StormDataClass
 from .napari_particles._napari_compat import guard_camera_drag_state
-from .ns_constants import (FWHM_TO_SIGMA, MAX_FWHM_NM, MIN_FWHM_NM,
-                           standard_colors, standard_colormaps)
+from .ns_constants import (
+    DEFAULT_AXIS_VIEW,
+    FWHM_TO_SIGMA,
+    MAX_FWHM_NM,
+    MIN_FWHM_NM,
+    standard_colormaps,
+    standard_colors,
+)
 from .render_config import RenderConfig
+
+
+def _non_negative_number(text):
+    """Parse *text* as a float of zero or more, or return None.
+
+    Same contract as :func:`_positive_number`, for the controls where zero is
+    a real setting rather than a rejected one.
+    """
+    try:
+        value = float(str(text).strip())
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value < 0:
+        return None
+    return value
 
 
 def _positive_number(text):
@@ -106,7 +131,9 @@ class napari_storm(NapariStormGUI):
 
         self.active_render_range_box_color = standard_colormaps[0]
         self.render_range_box_opacity = 0.25
-        self._render_range_preview = None  # single shared Surface layer for range-box feedback
+        self._render_range_preview = (
+            None  # single shared Surface layer for range-box feedback
+        )
 
         self.pixelsize_nm = []
         self.channel = []
@@ -359,6 +386,14 @@ class napari_storm(NapariStormGUI):
     def grid_plane_line_distance_um(self, value):
         self.render_config.grid_plane_line_distance_um = value
 
+    @property
+    def grid_plane_margin_percent(self):
+        return self.render_config.grid_plane_margin_percent
+
+    @grid_plane_margin_percent.setter
+    def grid_plane_margin_percent(self, value):
+        self.render_config.grid_plane_margin_percent = value
+
     def update_render_range_box_opacity(self):
         self.render_range_box_opacity = self.Srender_range_box_opacity.value() / 100
 
@@ -382,9 +417,24 @@ class napari_storm(NapariStormGUI):
         self.grid_plane_line_distance_um = value
         self.data_to_layer_itf.update_grid_plane(line_distance_nm=1000 * value)
 
+    def update_grid_plane_margin(self):
+        """Issue #38: how far past the data the grid is allowed to run.
+
+        Rebuilt through the line-distance path because that is the one that
+        remakes the vectors, and the geometry is what a margin changes.
+        """
+        value = _non_negative_number(self.Egrid_margin.text())
+        if value is None:
+            return
+        self.grid_plane_margin_percent = value
+        self.data_to_layer_itf.update_grid_plane(
+            line_distance_nm=self.grid_plane_line_distance_um * 1000
+        )
+
     def grid_plane(self):
         if self.Cgrid_plane.isChecked():
             self.Egrid_line_distance.show()
+            self.Egrid_margin.show()
             self.Sgrid_line_thickness.show()
             self.Sgrid_z_pos.show()
             self.Bgrid_plane_color.show()
@@ -392,6 +442,7 @@ class napari_storm(NapariStormGUI):
 
         else:
             self.Egrid_line_distance.hide()
+            self.Egrid_margin.hide()
             self.Sgrid_line_thickness.hide()
             self.Sgrid_z_pos.hide()
             self.grid_plane_enabled = 0
@@ -538,6 +589,7 @@ class napari_storm(NapariStormGUI):
             self.render_range_slider_y_percent = values
         else:
             self.render_range_slider_z_percent = values
+            self._refresh_z_colorbar()
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
@@ -546,10 +598,7 @@ class napari_storm(NapariStormGUI):
 
     def move_camera_center_to_render_range_center(self):
         itf = self.data_to_layer_itf
-        if not (
-            itf.render_range_x[1] == -np.inf
-            or itf.render_range_y[1] == -np.inf
-        ):
+        if not (itf.render_range_x[1] == -np.inf or itf.render_range_y[1] == -np.inf):
             # Midpoint of the selected percentage window, mapped onto the true
             # nanometre extent of each axis.  This used to multiply the axis
             # maximum alone, which was only correct while the auto-offset forced
@@ -574,16 +623,13 @@ class napari_storm(NapariStormGUI):
             else:
                 # 2-D localization layers live in the z=1 plane.
                 tmp_z_center_nm = 1.0
-            self.data_to_layer_itf.camera[1] = (
-                tmp_z_center_nm,
-                tmp_x_center_nm,
-                tmp_y_center_nm,
-            )
-            self.viewer.camera.center = (
-                tmp_z_center_nm,
-                tmp_x_center_nm,
-                tmp_y_center_nm,
-            )
+            # (z, y, x), which is the order napari reads a camera centre in.
+            # Written as (z, x, y), recentring after a render-range change put
+            # the camera at a point with x and y interchanged -- square fields
+            # of view hid it, and anything else drifted off target.
+            centre_nm = (tmp_z_center_nm, tmp_y_center_nm, tmp_x_center_nm)
+            self.data_to_layer_itf.camera[1] = centre_nm
+            self.viewer.camera.center = centre_nm
 
     def add_channel(self, name="Channel"):
         """Adds a Channel in the visual controls"""
@@ -591,6 +637,26 @@ class napari_storm(NapariStormGUI):
             ChannelControls(parent=self, name=name, channel_index=len(self.channel))
         )
         self.channel_controls_widget_layout.addRow(self.channel[-1])
+        # A second dataset changes both the z extent and whether one pair of
+        # numbers can speak for the scene at all.
+        self._refresh_z_colorbar()
+
+    def _refresh_z_colorbar(self):
+        """Label the z colour bar with the interval it currently encodes.
+
+        The planner normalizes each dataset against its own z extent, so the
+        numbers only describe the whole scene while one dataset is loaded;
+        past that the bar says so rather than picking a channel to speak for.
+        """
+        itf = getattr(self, "data_to_layer_itf", None)
+        if itf is None:
+            return
+        low, high = itf.percent_to_absolute(
+            itf.render_range_z, self.render_config.range_z_percent
+        )
+        self.Lcolor_encoding_bar.set_range(
+            low, high, shared=len(self.localization_datasets) <= 1
+        )
 
     def colorcoding(self):
         """Check if Colorcoding is choosen"""
@@ -607,6 +673,7 @@ class napari_storm(NapariStormGUI):
                     self.data_to_layer_itf.colormap_icons[-1]
                 )
                 self.Lcolor_encoding_bar.show()
+            self._refresh_z_colorbar()
         else:
             for i in range(len(self.channel)):
                 self.channel[i].Colormap_selector.show()
@@ -660,18 +727,12 @@ class napari_storm(NapariStormGUI):
     def _start_typing_timer(self, timer):
         timer.start(500)
 
-    def change_camera(self, set_view_to="XY"):
+    def change_camera(self, set_view_to=DEFAULT_AXIS_VIEW):
+        """Look at the named plane, keeping the current centre and zoom."""
         v = napari.current_viewer()
-        values = {}
-        if set_view_to == "XY":
-            v.camera.angles = (90, 0, -90)
-        elif set_view_to == "XZ":
-            v.camera.angles = (-180, 90, 180)
-        else:
-            v.camera.angles = (-180, 0, -180)
+        look_at_plane(v.camera, set_view_to)
         v.camera.center = self.data_to_layer_itf.camera[1]
         v.camera.zoom = self.zoom
-        v.camera.update(values)
 
     @staticmethod
     def _read_fwhm(field, current_sigma_nm):
@@ -753,18 +814,29 @@ class napari_storm(NapariStormGUI):
             )
         # File selection and import happen before touching the current session.
         # Closing a dialog is therefore a no-op instead of an accidental clear.
-        datasets = self._file_to_data_itf.open_localization_data_file_and_get_dataset(
-            file_path=file_path,
-            file_type_recognizer=file_recognition,
-            custom_import=custom_import,
-        )
+        try:
+            datasets = (
+                self._file_to_data_itf.open_localization_data_file_and_get_dataset(
+                    file_path=file_path,
+                    file_type_recognizer=file_recognition,
+                    custom_import=custom_import,
+                )
+            )
+        except (FileNotFoundError, UnknownFileLayoutError) as error:
+            # The background path reports these through its own error callback.
+            # Inline callers -- the napari reader hook, the tests -- rely on a
+            # True/False return, so the message is surfaced here rather than
+            # raised into napari's reader machinery as a traceback.
+            self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
+            self._warn_user(
+                f"could not open {file_path or 'the selected file'}: {error}"
+            )
+            return False
         if not datasets:
             return False
         return self._apply_loaded_datasets(datasets, merge=merge)
 
-    def _open_in_background(
-        self, merge, file_path, file_recognition, custom_import
-    ):
+    def _open_in_background(self, merge, file_path, file_recognition, custom_import):
         """Read a localization file on a worker, then apply it on the GUI thread.
 
         Picking the file stays here: a modal file dialog belongs to the gesture
@@ -1064,7 +1136,9 @@ class napari_storm(NapariStormGUI):
         try:
             from napari.utils.notifications import show_info
 
-            show_info(f"napari-storm: wrote {path} ({plan.n_localizations:,} localizations)")
+            show_info(
+                f"napari-storm: wrote {path} ({plan.n_localizations:,} localizations)"
+            )
         except Exception:
             logging.getLogger(__name__).info("napari-storm: wrote %s", path)
 
@@ -1119,7 +1193,6 @@ class napari_storm(NapariStormGUI):
         except Exception as exc:
             self._warn_user(f"could not add image layer: {exc}")
             return
-
         # Place beneath localisation layers
         try:
             self.viewer.layers.move(len(self.viewer.layers) - 1, 0)
@@ -1127,9 +1200,7 @@ class napari_storm(NapariStormGUI):
             pass
 
         # Create live controls and insert at top of channel-controls section
-        controls = ImageLayerControls(
-            layer=layer, result=result, dock_widget=self
-        )
+        controls = ImageLayerControls(layer=layer, result=result, dock_widget=self)
         self.image_layer_controls.append(controls)
         self.channel_controls_widget_layout.insertRow(0, controls)
 

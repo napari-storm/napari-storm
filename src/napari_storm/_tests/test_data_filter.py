@@ -5,6 +5,7 @@ near-identical and untested; they are now one helper, and this pins the
 behaviour they had. It also covers the move of the per-dataset record from a
 position-indexed list to a dict keyed by stable dataset id.
 """
+
 import numpy as np
 
 from napari_storm._dock_widget import napari_storm

@@ -3,17 +3,31 @@ from dataclasses import dataclass
 import numpy as np
 
 from .colormap_factory import make_colormaps
+from .core import (
+    ACTIVE,
+    IDENTITY,
+    AppearanceChanged,
+    DatasetClosed,
+    DatasetTraits,
+    GaussianSettings,
+    MaskChanged,
+    RenderPlanner,
+    StoreCleared,
+    TransformChanged,
+)
+from .core.renderer import Changed, LayerAppearance
 from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
-from .core import (ACTIVE, IDENTITY, AppearanceChanged, DatasetClosed,
-                   DatasetTraits, GaussianSettings, MaskChanged,
-                   RenderPlanner, StoreCleared, TransformChanged)
 from .memory_budget import max_localizations_for_budget, render_bytes_for
-from .ns_constants import FLAT_DATA_Z_NM
-from .core.renderer import Changed, LayerAppearance
-from .napari_particles.renderer import NapariParticlesRenderer
 from .napari_particles.selection import select_renderer
+from .ns_constants import AXIS_VIEWS, DEFAULT_AXIS_VIEW, FLAT_DATA_Z_NM
 from .scalebar_renderer import ScalebarRenderer
+
+
+def look_at_plane(camera, plane=DEFAULT_AXIS_VIEW):
+    """Point *camera* at the named plane of the (z, y, x) world."""
+    view_direction, up_direction = AXIS_VIEWS[plane]
+    camera.set_view_direction(view_direction=view_direction, up_direction=up_direction)
 
 
 @dataclass
@@ -184,9 +198,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def _channel_index_of(self, dataset):
         datasets = self.parent.localization_datasets
-        return next(
-            (i for i, other in enumerate(datasets) if other is dataset), -1
-        )
+        return next((i for i, other in enumerate(datasets) if other is dataset), -1)
 
     def _report_repaired_column(self, column, n_repaired, n_total):
         """The planner found unusable uncertainty or photon values."""
@@ -432,16 +444,14 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # actual choice immediately after the layer is created.
         self.renderer.open(
             dataset.dataset_id,
-            self._render_request(
-                dataset, name=layer_name, colormap=self.colormap[-1]
-            ),
+            self._render_request(dataset, name=layer_name, colormap=self.colormap[-1]),
         )
 
         # add_layer already frames a newly inserted layer.  Camera recentering
         # after range/filter changes is handled explicitly by the widget using
         # normalized (x, y, z) render ranges.
         self.viewer.camera.perspective = 50
-        self.viewer.camera.angles = (90, 0, -90)
+        look_at_plane(self.viewer.camera)
         self.camera = [
             self.viewer.camera.zoom,
             self.viewer.camera.center,
@@ -471,9 +481,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # per-localization array; an appearance-only refresh does not move any
         # localization, so the positions are unchanged.
         changed = (
-            Changed.EVERYTHING
-            if extend_range
-            else (Changed.SIGMAS | Changed.VALUES)
+            Changed.EVERYTHING if extend_range else (Changed.SIGMAS | Changed.VALUES)
         )
         self.renderer.update(
             dataset.dataset_id, self._render_request(dataset, changed=changed)
@@ -489,9 +497,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         broad signalling the plan set out to remove.
         """
         self.update_data_range(dataset)
-        self._refresh_layer(
-            dataset, self._channel_index_of(dataset), extend_range=True
-        )
+        self._refresh_layer(dataset, self._channel_index_of(dataset), extend_range=True)
 
     def update_layers(self, aas=0, layer_name="SMLM Data"):
         """Re-apply the render range and parameter filters to every layer.
@@ -565,9 +571,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         if store is not None and store.state_of(dataset) is not None:
             store.set_appearance(dataset.dataset_id, **fields)
         elif self.renderer.is_open(dataset.dataset_id):
-            self.renderer.set_appearance(
-                dataset.dataset_id, LayerAppearance(**fields)
-            )
+            self.renderer.set_appearance(dataset.dataset_id, LayerAppearance(**fields))
 
     def appearance_of(self, dataset):
         """The appearance recorded for *dataset*, or None."""
@@ -617,7 +621,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             axis_mask = dataset.get_mask_of_specified_prop_all(
                 prop=f"{axis}_pos_nm", l_val=low, u_val=high
             )
-            render_mask = axis_mask if render_mask is None else (render_mask & axis_mask)
+            render_mask = (
+                axis_mask if render_mask is None else (render_mask & axis_mask)
+            )
 
         param_indices = self.parent.data_filter_itf.indices_for(dataset)
         dataset.apply_filters(render_mask, param_indices)
@@ -655,9 +661,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         return DatasetTraits(
             zdim_present=bool(dataset.zdim_present),
             sigma_present=bool(getattr(dataset, "sigma_present", False)),
-            photon_count_present=bool(
-                getattr(dataset, "photon_count_present", False)
-            ),
+            photon_count_present=bool(getattr(dataset, "photon_count_present", False)),
             pixel_size_nm=float(getattr(dataset, "pixelsize_nm", None) or 1.0),
         )
 

@@ -19,6 +19,7 @@ every piece of *state* was correct in each case -- the layer dutifully reported
 the opacity and the contrast limits it had been given while drawing something
 that ignored both.
 """
+
 import colorsys
 
 import numpy as np
@@ -198,9 +199,7 @@ def test_the_contrast_window_selects_which_values_are_coloured(
         lit = image[image.sum(axis=2) > 40]
         if len(lit) < 20:
             return np.array([0.0])
-        return np.array(
-            [colorsys.rgb_to_hsv(*(p / 255.0))[0] for p in lit[::17]]
-        )
+        return np.array([colorsys.rgb_to_hsv(*(p / 255.0))[0] for p in lit[::17]])
 
     # A window over the top quarter spans less of the colour circle than the
     # whole range does.

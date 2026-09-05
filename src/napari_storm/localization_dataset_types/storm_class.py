@@ -9,11 +9,96 @@ import h5py
 import numpy as np
 import yaml
 
-from ..core import (DATA_IN_NM, PHOTON_COUNT_PRESENT, PIXEL_SIZE_NM,
-                    SIGMA_PRESENT, ZDIM_PRESENT, MetadataProvider)
+from ..core import (
+    DATA_IN_NM,
+    PHOTON_COUNT_PRESENT,
+    PIXEL_SIZE_NM,
+    SIGMA_PRESENT,
+    ZDIM_PRESENT,
+    MetadataProvider,
+)
 from ..CustomErrors import PixelSizeIsNecessaryError
 from .base_class import LocalizationDataBaseClass
 from .data_formats import storm_data_dtype
+
+#: Root members that tell the two unrelated HDF5 layouts apart.  Picasso writes
+#: a single ``locs`` table; daxview writes a ``molecule_set_data`` group.
+#: Neither format owns an extension -- both turn up as .h5 and as .hdf5 -- so
+#: the file itself has to be asked which one it is.
+PICASSO_LOCS_KEY = "locs"
+MOLECULE_SET_KEY = "molecule_set_data"
+
+#: Picasso records its metadata in a sibling .yaml, and current versions also
+#: embed the same documents as JSON under this key so the .hdf5 stands alone.
+PICASSO_METADATA_KEY = "metadata"
+
+#: The camera pixel size in nm, which Picasso's format *requires* that metadata
+#: to carry.  Asking the user for a number the file is obliged to state was
+#: only ever a consequence of loading the metadata and then discarding it.
+PICASSO_PIXELSIZE_KEY = "Pixelsize"
+
+
+def hdf5_layout(path):
+    """Return ``"picasso"``, ``"molecule_set"`` or ``None`` for *path*."""
+    try:
+        with h5py.File(path, "r") as file:
+            if MOLECULE_SET_KEY in file:
+                return "molecule_set"
+            if PICASSO_LOCS_KEY in file:
+                return "picasso"
+    except FileNotFoundError:
+        raise
+    except OSError:
+        # Not HDF5 at all, or unreadable.  That is the caller's story to tell,
+        # in its own words, rather than h5py's.
+        return None
+    return None
+
+
+def info_from_hdf5(path):
+    """Read the metadata documents Picasso embeds in the .hdf5 itself."""
+    try:
+        with h5py.File(path, "r") as file:
+            if PICASSO_METADATA_KEY not in file:
+                return []
+            payload = file[PICASSO_METADATA_KEY][()]
+    except OSError:
+        return []
+    if isinstance(payload, bytes):
+        payload = payload.decode()
+    try:
+        info = json.loads(payload)
+    except (TypeError, ValueError):
+        return []
+    return info if isinstance(info, list) else [info]
+
+
+def pixelsize_from_info(info):
+    """The pixel size [nm] recorded in Picasso metadata, or None.
+
+    Each document describes a later processing step than the one before it, so
+    the last one to state a pixel size is the one that applies.
+    """
+    for entry in reversed(list(info or [])):
+        if not isinstance(entry, dict) or PICASSO_PIXELSIZE_KEY not in entry:
+            continue
+        try:
+            return float(entry[PICASSO_PIXELSIZE_KEY])
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _normalized_csv_header(field):
+    """Reduce one CSV header field to a stable lookup key.
+
+    ThunderSTORM quotes every field it writes, other exporters do not, and a
+    file that has been through a spreadsheet picks up stray spaces around the
+    unit.  Matching the raw text meant one branch per spelling: `"x [nm]"` and
+    `x [nm]` were two cases of the same column, and `x  [nm]` -- reported in
+    issue #17 -- matched neither.
+    """
+    return " ".join(field.strip().strip("\"'").split()).lower()
 
 
 class StormDatasetCollection:
@@ -292,15 +377,19 @@ class StormDataClass(LocalizationDataBaseClass):
         )
 
     def load_info(self, path):
-        """Loads Infos from Picassos .yaml"""
+        """Loads Infos from Picassos .yaml, or from inside the .hdf5 itself"""
         path_base, path_extension = os.path.splitext(path)
         filename = path_base + ".yaml"
         try:
             with open(filename) as info_file:
                 info = list(yaml.load_all(info_file, Loader=yaml.FullLoader))
         except FileNotFoundError:
-            logging.warning("Could not find metadata file: %s", filename)
-            info = []
+            # A missing sidecar is not the end of it: current Picasso embeds
+            # the same documents in the file and falls back to them exactly
+            # like this, so a file Picasso can open opens here too.
+            info = info_from_hdf5(path)
+            if not info:
+                logging.warning("Could not find metadata file: %s", filename)
         return info
 
     def load_locs(self, path):
@@ -317,12 +406,17 @@ class StormDataClass(LocalizationDataBaseClass):
         """Wrapper for load_locs and load_infos -> picassos hdf5"""
         provider = metadata_provider or MetadataProvider()
         locs, info = self.load_locs(file_path)
-        if hasattr(locs, "pixelsize"):
-            pixelsize = locs.pixelsize_nm
-        else:
-            pixelsize = provider.ask_text(
-                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
-            )
+        # The metadata was already being read and then dropped on the floor,
+        # leaving every well-formed Picasso file to ask its user for a number
+        # the format requires it to carry.
+        pixelsize = pixelsize_from_info(info)
+        if pixelsize is None and hasattr(locs, "pixelsize"):
+            # A file that states it per localization.  This branch used to test
+            # for ``pixelsize`` and then read ``pixelsize_nm``, so on the only
+            # files it applied to it raised AttributeError instead.
+            pixelsize = np.asarray(locs.pixelsize).ravel()[0]
+        if pixelsize is None:
+            pixelsize = provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
             if pixelsize is None:
                 raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)
@@ -346,7 +440,7 @@ class StormDataClass(LocalizationDataBaseClass):
         if hasattr(locs, "lpz") and zdim:
             uncertainty_z_pixels = locs.lpz
         else:
-            uncertainty_z_pixels = 2 * np.sqrt(locs.lpx ** 2 + locs.lpy ** 2)
+            uncertainty_z_pixels = 2 * np.sqrt(locs.lpx**2 + locs.lpy**2)
 
         if hasattr(locs, "photons"):
             intensity_photons = locs.photons
@@ -377,84 +471,76 @@ class StormDataClass(LocalizationDataBaseClass):
 
     def load_csv(self, file_path, name):
         """Loads Thunderstorm .csv files"""
-        data = {}
-        photon_count_present = False
         sigma_present = False
 
         with open(file_path) as infile:
-            header = infile.readline()
-            header = header.replace("\n", "")
-            header = header.split(",")
-            data_list = np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
-        for i in range(len(header)):
-            data[header[i]] = data_list[:, i]
+            header = [
+                _normalized_csv_header(field)
+                for field in infile.readline().rstrip("\n").split(",")
+            ]
+            # atleast_2d so a file holding a single localization still reads as
+            # one row of columns rather than as one column of rows.
+            data_list = np.atleast_2d(
+                np.loadtxt(file_path, delimiter=",", skiprows=1, dtype=float)
+            )
+        data = dict(zip(header, data_list.T))
         pixelsize = 1
 
-        if '"x [nm]"' in header:
-            locs_pos_x_nm = data['"x [nm]"']
-            locs_pos_y_nm = data['"y [nm]"']
-        elif "x [nm]" in header:
-            locs_pos_x_nm = data["x [nm]"]
-            locs_pos_y_nm = data["y [nm]"]
-        else:
+        locs_pos_x_nm = data.get("x [nm]")
+        locs_pos_y_nm = data.get("y [nm]")
+        if locs_pos_x_nm is None or locs_pos_y_nm is None:
+            # Only x used to be checked and y was read blind, so a file
+            # carrying one without the other raised KeyError rather than this.
             raise ImportError("Localisation Position in X or Y not found in header")
+        count = len(locs_pos_x_nm)
 
-        if '"z [nm]"' in header:
-            locs_pos_z_nm = data['"z [nm]"']
-            zdim = True
-        elif "z [nm]" in header:
-            locs_pos_z_nm = data["z [nm]"]
-            zdim = True
-        else:
-            locs_pos_z_nm = np.ones(len(locs_pos_x_nm))
-            zdim = False
+        locs_pos_z_nm = data.get("z [nm]")
+        zdim = locs_pos_z_nm is not None
+        if not zdim:
+            locs_pos_z_nm = np.ones(count)
 
-        # Check if frame number info is present in file
-        if '"frame"' in header:
-            frame_numbers = data['"frame"']
-        elif "frame" in header:
-            frame_numbers = data["frame"]
-        else:
-            frame_numbers = np.ones(len(locs_pos_x_nm))
+        frame_numbers = data.get("frame")
+        if frame_numbers is None:
+            frame_numbers = np.ones(count)
 
-        # Check if uncertainty info is present in file
-        if "uncertainty_xy [nm]" in header:
-            uncertainty_x_nm = data["uncertainty_xy [nm]"]
-            uncertainty_y_nm = data["uncertainty_xy [nm]"]
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+        # ThunderSTORM writes photon counts *alongside* uncertainties, and this
+        # was an elif behind them, so the column was discarded for every file
+        # that had both.  Reading it unconditionally does not change what gets
+        # rendered -- variable-Gaussian mode still prefers sigma when both are
+        # present -- it gives the photon-count filter something to work on.
+        intensity_photons = data.get("intensity [photon]")
+        photon_count_present = intensity_photons is not None
+        if not photon_count_present:
+            intensity_photons = np.ones(count)
+
+        uncertainty_xy_nm = data.get("uncertainty_xy [nm]")
+        uncertainty_x_nm = data.get("uncertainty_x [nm]")
+        uncertainty_y_nm = data.get("uncertainty_y [nm]")
+        uncertainty_z_nm = data.get("uncertainty_z [nm]")
+
+        if uncertainty_xy_nm is not None:
+            uncertainty_x_nm = uncertainty_xy_nm
+            uncertainty_y_nm = uncertainty_xy_nm
             sigma_present = True
-            if zdim:
-                uncertainty_z_nm = data["uncertainty_z [nm]"]
-            else:
-                uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif "uncertainty_x [nm]" in header:
-            uncertainty_x_nm = data["uncertainty_x [nm]"]
-            uncertainty_y_nm = data["uncertainty_y [nm]"]
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+        elif uncertainty_x_nm is not None:
+            if uncertainty_y_nm is None:
+                # Read blind before, so x-without-y raised KeyError.  A single
+                # measured lateral uncertainty describes both axes.
+                uncertainty_y_nm = uncertainty_x_nm
             sigma_present = True
-            if zdim and "uncertainty_z [nm]" in header:
-                uncertainty_z_nm = data["uncertainty_z [nm]"]
-            else:
-                uncertainty_z_nm = 2 * np.sqrt(
-                    uncertainty_x_nm ** 2 + uncertainty_y_nm ** 2
-                )
-        elif '"intensity [photon]"' in header:
-            photon_count_present = True
-            intensity_photons = data['"intensity [photon]"']
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-        elif "intensity [photon]" in header:
-            photon_count_present = True
-            intensity_photons = data["intensity [photon]"]
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
         else:
-            uncertainty_x_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_y_nm = np.ones(len(locs_pos_x_nm))
-            uncertainty_z_nm = np.ones(len(locs_pos_x_nm))
-            intensity_photons = np.ones(len(locs_pos_x_nm))
+            uncertainty_x_nm = np.ones(count)
+            uncertainty_y_nm = np.ones(count)
+
+        if not (zdim and sigma_present):
+            # A flat dataset has no z extent to describe, and with no lateral
+            # uncertainty there is nothing to derive a z uncertainty from.
+            uncertainty_z_nm = np.ones(count)
+        elif uncertainty_z_nm is None:
+            # Was an unguarded lookup in the uncertainty_xy branch: a 3D file
+            # with lateral uncertainties but no z column raised KeyError.
+            uncertainty_z_nm = 2 * np.sqrt(uncertainty_x_nm**2 + uncertainty_y_nm**2)
+
         locs = np.rec.array(
             (
                 frame_numbers,
@@ -595,9 +681,7 @@ class StormDataClass(LocalizationDataBaseClass):
         try:
             pixelsize = prop["pixelsize"]
         except KeyError:
-            pixelsize = provider.ask_text(
-                PIXEL_SIZE_NM, "Enter the pixelsize [nm]"
-            )
+            pixelsize = provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
             if pixelsize is None:
                 raise PixelSizeIsNecessaryError("Pixelsize is mandatory")
         pixelsize = float(pixelsize)

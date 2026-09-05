@@ -2,8 +2,7 @@ import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as Canvas
 from matplotlib.figure import Figure
 from qtpy import QtCore
-from qtpy.QtWidgets import (QComboBox, QFormLayout, QPushButton, QSpinBox,
-                            QWidget)
+from qtpy.QtWidgets import QComboBox, QFormLayout, QPushButton, QSpinBox, QWidget
 
 from .core import DatasetClosed, StoreCleared
 from .CustomErrors import ParentError

@@ -18,6 +18,7 @@ Usage:
 Requires a working Qt/OpenGL environment; on a headless Linux box run it under
 xvfb-run.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -112,8 +113,9 @@ def _backend_class(name):
     import importlib
 
     if name == "instanced":
-        from napari_storm.napari_particles._napari_compat import \
-            enable_instanced_backend
+        from napari_storm.napari_particles._napari_compat import (
+            enable_instanced_backend,
+        )
 
         if not enable_instanced_backend():
             raise RuntimeError(
@@ -258,6 +260,7 @@ def render_report(rows, env):
         "| Dataset | Localizations | Open (s) | 1 update (s) | 10 updates (s) | Close (s) | Layer arrays (MB) | RSS (MB) | Render bytes/loc |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+
     def cell(row, key, spec):
         """Format a measurement, or an em dash when the scenario omits it."""
         value = row.get(key)

@@ -1,9 +1,15 @@
-import h5py
 import os
 
+import h5py
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QLineEdit,
-                            QPushButton, QWidget)
+from qtpy.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 from .CustomErrors import ParentError
 from .localization_dataset_types import StormDataClass

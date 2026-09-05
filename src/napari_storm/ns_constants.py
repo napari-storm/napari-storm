@@ -1,8 +1,5 @@
-from ._data_constants import (
-    MINFLUX_Z_CORRECTION_FACTOR as MINFLUX_Z_CORRECTION_FACTOR,
-)
+from ._data_constants import MINFLUX_Z_CORRECTION_FACTOR as MINFLUX_Z_CORRECTION_FACTOR
 from ._data_constants import STORM_DATA_DTYPE
-
 
 FWHM_TO_SIGMA = 2.354
 
@@ -37,14 +34,54 @@ MAX_FWHM_NM = 100_000.0
 # the single source of truth shared with data_formats.py.
 LOCS_DTYPE = STORM_DATA_DTYPE
 
+#: Which way the camera faces for each named view, as (view_direction,
+#: up_direction) in napari's own (z, y, x) world order.
+#:
+#: Directions rather than Euler angles, because an angle triple only means
+#: something against a coordinate convention.  These replace triples tuned when
+#: the planner emitted coordinates as (z, x, y); the planner emits (z, y, x)
+#: now, and the triples went on selecting the same *angles* and therefore a
+#: different pair of data axes -- which is how every one of the three view
+#: buttons came to be labelled with a view it does not show.
+#:
+#: Each view puts the first axis of its name to the right and the second one
+#: downward, so XY agrees with what napari's own 2-D display draws.
+AXIS_VIEWS = {
+    "XY": ((1, 0, 0), (0, -1, 0)),  # down +z; x right, y down
+    "XZ": ((0, -1, 0), (-1, 0, 0)),  # along -y; x right, z down
+    "YZ": ((0, 0, 1), (-1, 0, 0)),  # along +x; y right, z down
+}
+
+#: What a dataset opens in.  Looking down the optical axis is what "the image"
+#: means for a localization dataset; the side views are something you ask for.
+DEFAULT_AXIS_VIEW = "XY"
+
+#: The extensions an HDF5 localization file turns up under.  Which reader one
+#: needs is decided by looking inside it, not by which of these it happens to
+#: carry: Picasso tables and daxview molecule sets use them interchangeably.
+HDF5_EXTENSIONS = ("h5", "hdf5", "hdf")
+
+#: Every suffix `open_known_filetype_and_import_dataset` will dispatch on, and
+#: the single source of truth for what napari is told this plugin reads.  The
+#: manifest is checked against this list by a test, because a format the
+#: dispatcher handles but the manifest omits is one that File -> Open and
+#: drag-and-drop cannot find -- which is what happened to .mat, .pmx and .mfx.
+#:
+#: Deliberately absent: tif/tiff/dat/raw, which the dispatcher recognizes only
+#: in order to explain that raw movies are not what this plugin renders.
 list_of_recognized_file_formats = [
     "h5",
     "hdf5",
+    "hdf",
     "yaml",
     "csv",
     "smlm",
     "npy",
     "json",
+    "mfx",
+    "mat",
+    "pmx",
+    "ns",
     "test",
 ]
 

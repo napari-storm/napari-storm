@@ -8,14 +8,18 @@ imposed on the screen.
 Round-trips go through tifffile's reader rather than through our own writer's
 idea of what it wrote, so a metadata key that no reader honours fails here.
 """
+
 import numpy as np
 import pytest
 import tifffile
 
-from napari_storm.core.ome_export import (ExportChannel, ExportWarning,
-                                          plan_export, tile_count,
-                                          write_ome_tiff)
-from napari_storm.core.raster import GaussianGrid
+from napari_storm.core.ome_export import (
+    ExportChannel,
+    ExportWarning,
+    plan_export,
+    tile_count,
+    write_ome_tiff,
+)
 
 
 def _channel(name="ch", n=4, span=1000.0, n_displayed=None, colormap=None):
@@ -269,7 +273,9 @@ def test_progress_is_reported_per_tile(tmp_path):
     plan = plan_export([_channel(span=4000.0)], _bounds(4000.0), pixel_size_nm=2.0)
     seen = []
 
-    write_ome_tiff(tmp_path / "out.ome.tif", plan, progress=lambda d, t: seen.append((d, t)))
+    write_ome_tiff(
+        tmp_path / "out.ome.tif", plan, progress=lambda d, t: seen.append((d, t))
+    )
 
     assert seen
     assert seen[-1] == (tile_count(plan), tile_count(plan))
@@ -307,7 +313,9 @@ def test_the_world_position_is_written_with_its_unit(tmp_path):
     of at the render range it was cut from -- and §7.4 asks that an exported
     OME-TIFF re-import "at its original scale and position".
     """
-    plan = plan_export([_channel()], ((0.0, 0.0), (500.0, 1500.0), (200.0, 1200.0)), 10.0)
+    plan = plan_export(
+        [_channel()], ((0.0, 0.0), (500.0, 1500.0), (200.0, 1200.0)), 10.0
+    )
     path = tmp_path / "placed.ome.tif"
 
     write_ome_tiff(path, plan)
@@ -322,7 +330,9 @@ def test_the_world_position_is_written_with_its_unit(tmp_path):
 
 
 def test_the_position_matches_the_grid_origin_exactly(tmp_path):
-    plan = plan_export([_channel()], ((0.0, 0.0), (500.0, 1500.0), (200.0, 1200.0)), 10.0)
+    plan = plan_export(
+        [_channel()], ((0.0, 0.0), (500.0, 1500.0), (200.0, 1200.0)), 10.0
+    )
     path = tmp_path / "placed.ome.tif"
 
     write_ome_tiff(path, plan)

@@ -14,6 +14,7 @@ answer than an honest scale-and-shift that everything can.
 The identity transform is the default and costs nothing: :meth:`apply` returns
 its input unchanged rather than multiplying by ones.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,9 +42,10 @@ class WorldTransform:
 
     @property
     def is_identity(self):
-        return (
-            tuple(self.scale) == (1.0, 1.0, 1.0)
-            and tuple(self.translation_nm) == (0.0, 0.0, 0.0)
+        return tuple(self.scale) == (1.0, 1.0, 1.0) and tuple(self.translation_nm) == (
+            0.0,
+            0.0,
+            0.0,
         )
 
     def _index(self, axis):

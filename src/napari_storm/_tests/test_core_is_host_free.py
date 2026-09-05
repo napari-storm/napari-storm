@@ -6,6 +6,7 @@ test rather than as a convention. Adding a Qt or napari import anywhere under
 unimportable — checking ``sys.modules`` in-process would not work, since pytest
 has already imported all of them for the widget tests.
 """
+
 import os
 import subprocess
 import sys
@@ -58,8 +59,7 @@ def _run_headless(body):
 
 
 def test_core_imports_without_a_host():
-    result = _run_headless(
-        """
+    result = _run_headless("""
         import napari_storm.core as core
 
         assert core.LocalizationTable is not None
@@ -118,16 +118,14 @@ def test_core_imports_without_a_host():
             core.DatasetClosed(dataset.dataset_id),
         ]
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
 
 
 def test_core_filters_and_converts_without_a_host():
     """Not just importable — the actual science runs with no host present."""
-    result = _run_headless(
-        """
+    result = _run_headless("""
         import numpy as np
         from napari_storm.core import LocalizationTable
 
@@ -151,8 +149,7 @@ def test_core_filters_and_converts_without_a_host():
         table.reset()
         assert table.n_active == 10
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
 
@@ -164,24 +161,21 @@ def test_the_dataset_classes_import_without_a_host():
     The application still opens dialogs — it just does so on the reader's behalf,
     through a MetadataProvider it injects.
     """
-    result = _run_headless(
-        """
+    result = _run_headless("""
         from napari_storm.localization_dataset_types import (
             LocalizationDataBaseClass, MinfluxDataBaseClass, StormDataClass,
         )
 
         assert StormDataClass is not None
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
 
 
 def test_a_reader_can_be_answered_without_a_dialog():
     """The questions a format cannot answer are supplied, not prompted for."""
-    result = _run_headless(
-        """
+    result = _run_headless("""
         import numpy as np
         from napari_storm.core import (PIXEL_SIZE_NM, ZDIM_PRESENT,
                                        MetadataProvider,
@@ -217,8 +211,7 @@ def test_a_reader_can_be_answered_without_a_dialog():
         else:
             raise AssertionError("an unanswerable import should not succeed")
         print("OK")
-        """
-    )
+        """)
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
 

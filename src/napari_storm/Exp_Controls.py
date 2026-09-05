@@ -1,9 +1,9 @@
 import logging
+import warnings
 
 import napari
 import numpy as np
 from qtpy.QtWidgets import QWidget
-
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +14,7 @@ def custom_keys_and_scalebar(self):
     # a and d to rotate view
     v = napari.current_viewer()
     try:
+
         @v.bind_key("w")
         def fly_ahead(v):
             v.camera.zoom *= 1.1
@@ -77,12 +78,31 @@ def custom_keys_and_scalebar(self):
             for layer in v.layers:
                 if layer.name != "scalebar":
                     layer.translate += [0, 0, 50]
+
     except Exception as exc:
         # Reinitializing a dock can encounter keys already bound by the prior
         # instance.  Report it through logging rather than writing to stdout.
         logger.warning("Could not install custom key bindings: %s", exc)
 
     v.scale_bar.visible = True
+    # Localizations are placed in world coordinates measured in nanometres,
+    # and nothing said so, so the scale bar named the one thing they are not:
+    # pixels.  One world unit is one nanometre; given that, napari picks a
+    # readable multiple itself.
+    #
+    # Deliberately not `Layer.units`, which is where napari 0.8 wants this and
+    # which emits a FutureWarning here.  Setting it rescales the world: with
+    # the two-spot fixture, `reset_view()` then framed a view that pushed both
+    # splats into the bottom-right corner, most of the data off-screen.  This
+    # spelling has no effect on geometry -- measured, same rendered frame to
+    # the pixel.  The package pins napari<0.8, where it still works; whoever
+    # lifts that pin has to move to Layer.units and re-check the framing.
+    with warnings.catch_warnings():
+        # Silenced only here, and only this one: it fires on every dataset
+        # load, and 200-odd copies of a decision already recorded above would
+        # bury the warnings worth reading.
+        warnings.simplefilter("ignore", FutureWarning)
+        v.scale_bar.unit = "nm"
 
     Panning_create_anker(parent=self, viewer=v)
 
@@ -105,7 +125,7 @@ class Panning_create_anker(QWidget):
         # on press — left button (1) + Shift
         if event.button == 1 and "Shift" in event.modifiers:
             # self.create_anker()
-            pass # currently not needed, if necessary needs to be created more efficiently.
+            pass  # currently not needed, if necessary needs to be created more efficiently.
         yield
         # on move
         while event.type == "mouse_move":

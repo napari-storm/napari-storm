@@ -35,7 +35,9 @@ class RangeSlider2(QDoubleRangeSlider):
     # ------------------------------------------------------------------
 
     def _viewer(self):
-        v = getattr(self._owner, "viewer", None) or getattr(self._owner, "_viewer", None)
+        v = getattr(self._owner, "viewer", None) or getattr(
+            self._owner, "_viewer", None
+        )
         return v if v is not None else napari.current_viewer()
 
     # ------------------------------------------------------------------
@@ -221,12 +223,18 @@ class RangeSlider2(QDoubleRangeSlider):
         # 12 triangles — 2 per face of the box
         faces = np.array(
             [
-                [0, 1, 2], [1, 2, 3],   # z = z0 face
-                [4, 5, 6], [5, 6, 7],   # z = z1 face
-                [0, 2, 4], [2, 4, 6],   # x = x0 face
-                [1, 3, 5], [3, 5, 7],   # x = x1 face
-                [0, 1, 4], [1, 4, 5],   # y = y0 face
-                [2, 3, 6], [3, 6, 7],   # y = y1 face
+                [0, 1, 2],
+                [1, 2, 3],  # z = z0 face
+                [4, 5, 6],
+                [5, 6, 7],  # z = z1 face
+                [0, 2, 4],
+                [2, 4, 6],  # x = x0 face
+                [1, 3, 5],
+                [3, 5, 7],  # x = x1 face
+                [0, 1, 4],
+                [1, 4, 5],  # y = y0 face
+                [2, 3, 6],
+                [3, 6, 7],  # y = y1 face
             ],
             dtype=int,
         )

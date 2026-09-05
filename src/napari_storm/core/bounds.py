@@ -7,6 +7,7 @@ percentage onto an axis is the same arithmetic that the auto-offset removal
 turned out to hinge on (§3.5.1), so it is worth having in one tested place
 rather than inlined at each call site.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

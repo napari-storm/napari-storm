@@ -1,10 +1,9 @@
-from qtpy.QtWidgets import (QComboBox, QDialog, QFormLayout, QLabel,
-                            QPushButton, QWidget)
+from qtpy.QtWidgets import QComboBox, QDialog, QFormLayout, QLabel, QPushButton, QWidget
 
 
 class MainWindowWrapper(QDialog):
     """Dialog wrapper for QWidget that should be shown in a dialog,
-     also has the option to return a value from said widget"""
+    also has the option to return a value from said widget"""
 
     def __init__(self, description, options, accept_function, abort_function):
         super().__init__()

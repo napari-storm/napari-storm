@@ -18,6 +18,7 @@ in place removed the rebuild, and with it the repair -- so this is a regression
 the in-place update introduced, in the *current* renderer as much as the
 instanced one, and it is tested on both.
 """
+
 import numpy as np
 import pytest
 
@@ -166,9 +167,7 @@ def test_the_points_backend_is_left_to_napari(make_napari_viewer):
     destination-preserving addition.
     """
     viewer = make_napari_viewer()
-    widget = napari_storm(
-        napari_viewer=viewer, renderer=NapariPointsRenderer(viewer)
-    )
+    widget = napari_storm(napari_viewer=viewer, renderer=NapariPointsRenderer(viewer))
     widget.get_dataset_from_test_mode([_dataset()])
     layer = widget.data_to_layer_itf.renderer.layer(
         widget.localization_datasets[0].dataset_id

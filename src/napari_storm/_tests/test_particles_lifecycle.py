@@ -4,6 +4,7 @@ Covers register items P0-02 (undisconnected viewer callbacks), P1-07 (float64
 positions and int64 indices) and P1-03 (private napari access must degrade,
 not raise) from docs/modernization-review.md.
 """
+
 import numpy as np
 import pytest
 
@@ -19,9 +20,7 @@ def _dataset_2d(n=32, name="lifecycle"):
     locs = np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = np.linspace(0, 5000, n)
     locs["y_pos_nm"] = np.linspace(0, 5000, n)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=False
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=False)
 
 
 def _dataset_3d(n=32, name="lifecycle-3d"):
@@ -32,9 +31,7 @@ def _dataset_3d(n=32, name="lifecycle-3d"):
     locs["x_pos_nm"] = np.linspace(0, 5000, n)
     locs["y_pos_nm"] = np.linspace(0, 5000, n)
     locs["z_pos_nm"] = np.linspace(-500, 500, n)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=True
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=True)
 
 
 def _billboard_widget(viewer):
@@ -226,15 +223,11 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
     widget.Bz_color_coding.setChecked(True)
 
     assert layer.colormap.name == "hsv"
-    np.testing.assert_array_equal(
-        layer._billboard_filter.texcoords, layer._texcoords
-    )
+    np.testing.assert_array_equal(layer._billboard_filter.texcoords, layer._texcoords)
     np.testing.assert_array_equal(
         layer._billboard_filter.centercoords, layer._centercoords[:, -3:]
     )
-    np.testing.assert_array_equal(
-        layer._billboard_filter.sigmas, layer._sigmas[:, -3:]
-    )
+    np.testing.assert_array_equal(layer._billboard_filter.sigmas, layer._sigmas[:, -3:])
     rainbow_values = layer.data[2].reshape(-1, 6)
     np.testing.assert_array_equal(
         rainbow_values, np.repeat(rainbow_values[:, :1], 6, axis=1)
@@ -246,15 +239,11 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
     assert layer._visual is visual
     assert layer.filter[0] is gaussian_filter
     assert layer.colormap.name == original_colormap
-    np.testing.assert_array_equal(
-        layer._billboard_filter.texcoords, layer._texcoords
-    )
+    np.testing.assert_array_equal(layer._billboard_filter.texcoords, layer._texcoords)
     np.testing.assert_array_equal(layer.data[2], np.ones_like(layer.data[2]))
 
 
-def test_empty_earlier_channel_does_not_shift_later_channel_index(
-    make_napari_viewer
-):
+def test_empty_earlier_channel_does_not_shift_later_channel_index(make_napari_viewer):
     """A filtered-out channel must not make following channels use its settings."""
     viewer = make_napari_viewer()
     widget = napari_storm(napari_viewer=viewer)
@@ -295,9 +284,7 @@ def test_repeated_load_unload_cycles_release_all_dataset_state(
     before = _forced_visual_count()
 
     for cycle in range(5):
-        widget.get_dataset_from_test_mode(
-            [_dataset_2d(name=f"lifecycle-{cycle}")]
-        )
+        widget.get_dataset_from_test_mode([_dataset_2d(name=f"lifecycle-{cycle}")])
         assert widget.data_to_layer_itf.n_layers == 1
         assert len(widget.data_to_layer_itf.render_state) == 1
 
@@ -333,9 +320,9 @@ def test_gaussian_shader_does_not_hijack_napari_shading(make_napari_viewer):
 
     layer = widget.data_to_layer_itf.layer_for(widget.localization_datasets[0])
     assert layer.shader == "gaussian"
-    assert layer.shading == "none", (
-        "napari's shading property must stay a value VisPy accepts"
-    )
+    assert (
+        layer.shading == "none"
+    ), "napari's shading property must stay a value VisPy accepts"
 
 
 def test_second_dataset_with_a_different_extent_loads(make_napari_viewer):
@@ -399,9 +386,11 @@ def test_napari_shading_control_is_left_usable(make_napari_viewer):
     combo = getattr(controls, "shadingComboBox", None)
     if combo is not None:
         entries = {combo.itemData(i) for i in range(combo.count())}
-        assert entries <= {"none", "flat", "smooth"}, (
-            f"napari's shading combo was repurposed: {entries}"
-        )
+        assert entries <= {
+            "none",
+            "flat",
+            "smooth",
+        }, f"napari's shading combo was repurposed: {entries}"
 
 
 def test_filter_update_preserves_layer_and_visual_identity(make_napari_viewer):
@@ -448,4 +437,3 @@ def test_a_filter_that_empties_a_dataset_hides_it_reversibly(make_napari_viewer)
     widget.data_to_layer_itf.update_layers()
     assert layer.visible is True
     assert layer.n_localizations == dataset.number_of_entries()
-

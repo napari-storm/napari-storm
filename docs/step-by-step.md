@@ -85,6 +85,10 @@ Activate the Grid plane in the Decorators tab, then adjust:
 
 Line distance (µm)
 
+Grid beyond data (%) — how far the plane runs past the data, as a share of each
+axis' span added at both ends. 0 stops it at the render range, which is where it
+always stopped before.
+
 Line thickness
 
 Z position
@@ -149,5 +153,3 @@ Detach tabs by dragging them out to see multiple panels at once.
 For STORM/PALM datasets, try Variable Gaussian mode to incorporate uncertainty or photon counts into rendering.
 
 Hold Shift + drag to pan the canvas smoothly.
-
-

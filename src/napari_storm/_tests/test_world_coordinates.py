@@ -6,6 +6,7 @@ overlap, but a translation common to every dataset cannot affect their relative
 alignment.  These tests pin down both halves -- overlap still holds, and loading
 one dataset no longer displaces another.
 """
+
 import numpy as np
 import pytest
 
@@ -18,9 +19,7 @@ def _channel(name, x0, x1, y0, y1, n=50):
     locs = np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
     locs["x_pos_nm"] = np.linspace(x0, x1, n)
     locs["y_pos_nm"] = np.linspace(y0, y1, n)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=False
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=False)
 
 
 def _asymmetric_channel(name="asymmetric", zdim=False):
@@ -36,9 +35,7 @@ def _asymmetric_channel(name="asymmetric", zdim=False):
     locs["y_pos_nm"] = y
     if zdim:
         locs["z_pos_nm"] = np.linspace(-500, 500, x.size)
-    return LocalizationDataBaseClass(
-        np.rec.array(locs), name=name, zdim_present=zdim
-    )
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=zdim)
 
 
 # ------------------------------------------------------------- napari's axes
@@ -60,7 +57,7 @@ def test_coordinates_are_in_napari_axis_order(make_napari_viewer):
     """
     viewer = make_napari_viewer()
     widget = napari_storm(napari_viewer=viewer)
-    ds = _asymmetric_channel()          # x spans 2_000 nm, y spans 10_000 nm
+    ds = _asymmetric_channel()  # x spans 2_000 nm, y spans 10_000 nm
     widget.get_dataset_from_test_mode([ds])
 
     coords = widget.data_to_layer_itf.get_coords_from_locs(ds)
@@ -87,19 +84,31 @@ def test_sigmas_and_coordinates_share_an_axis_order(make_napari_viewer):
     was applied along y. It stayed hidden because sigma_x and sigma_y are
     nearly equal in most real data.
     """
-    from napari_storm.core import (DatasetTraits, GaussianSettings,
-                                   LocalizationTable, RenderPlanner)
+    from napari_storm.core import (
+        DatasetTraits,
+        GaussianSettings,
+        LocalizationTable,
+        RenderPlanner,
+    )
 
     n = 100
     records = np.rec.array(
-        np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4"),
-                           ("z_pos_nm", "f4"), ("sigma_x_pixels", "f4"),
-                           ("sigma_y_pixels", "f4"), ("sigma_z_pixels", "f4")])
+        np.zeros(
+            n,
+            dtype=[
+                ("x_pos_nm", "f4"),
+                ("y_pos_nm", "f4"),
+                ("z_pos_nm", "f4"),
+                ("sigma_x_pixels", "f4"),
+                ("sigma_y_pixels", "f4"),
+                ("sigma_z_pixels", "f4"),
+            ],
+        )
     )
     records.x_pos_nm = np.linspace(0, 1_000, n)
     records.y_pos_nm = np.linspace(0, 100, n)
-    records.sigma_x_pixels = 300.0      # wide along x
-    records.sigma_y_pixels = 50.0       # narrow along y
+    records.sigma_x_pixels = 300.0  # wide along x
+    records.sigma_y_pixels = 50.0  # narrow along y
     records.sigma_z_pixels = 100.0
 
     request = RenderPlanner().plan(
@@ -213,9 +222,7 @@ def test_loading_a_second_dataset_does_not_move_the_first(make_napari_viewer):
 
 
 @pytest.mark.parametrize("zdim", [False, True], ids=["2d", "3d"])
-def test_render_ranges_and_camera_use_one_axis_convention(
-    make_napari_viewer, zdim
-):
+def test_render_ranges_and_camera_use_one_axis_convention(make_napari_viewer, zdim):
     """Asymmetric axes expose the old 2-D range and 3-D camera transpositions."""
     widget = napari_storm(napari_viewer=make_napari_viewer())
     ds = _asymmetric_channel(zdim=zdim)
@@ -228,17 +235,124 @@ def test_render_ranges_and_camera_use_one_axis_convention(
         assert itf.render_range_z == pytest.approx([-500, 500])
 
     widget.move_camera_center_to_render_range_center()
-    centre = widget.viewer.camera.center  # (z, x, y)
+    # (z, y, x).  This asserted (z, x, y) and so agreed with a centre that had
+    # x and y interchanged: napari places index 1 on y, as the check below
+    # confirms against napari itself rather than against us.
+    centre = widget.viewer.camera.center
     assert centre[0] == pytest.approx(0 if zdim else 1)
-    assert centre[1] == pytest.approx(11_000)
-    assert centre[2] == pytest.approx(45_000)
+    assert centre[1] == pytest.approx(45_000)
+    assert centre[2] == pytest.approx(11_000)
+
+
+def test_napari_reads_a_camera_centre_as_z_y_x(make_napari_viewer):
+    """The convention the test above depends on, taken from napari.
+
+    Asked of napari directly, so that the assertion above is anchored to the
+    library's behaviour rather than to a comment in this repository -- which
+    is how it came to assert the transposition it was written to catch.
+    """
+    viewer = make_napari_viewer(ndisplay=3)
+    viewer.add_points(np.array([[0.0, 0.0, 0.0], [10.0, 1_000.0, 100_000.0]]))
+    viewer.reset_view()
+
+    centre = viewer.camera.center
+    assert centre[1] == pytest.approx(500.0)  # y
+    assert centre[2] == pytest.approx(50_000.0)  # x
+
+
+# ------------------------------------------------------------- named views
+#
+# The view buttons set Euler angles chosen when the planner emitted (z, x, y).
+# The planner emits (z, y, x) now, so the same angles select a different pair
+# of axes: every button showed a view other than the one on its label, and a
+# dataset opened side-on.  Directions cannot drift that way -- these assert the
+# axis the camera looks down, which is what the label is a claim about.
+
+
+def _looks_along(camera):
+    """The world axis the camera faces, as a signed name in (z, y, x)."""
+    direction = np.asarray(camera.view_direction, dtype=float)
+    axis = int(np.argmax(np.abs(direction)))
+    return f"{'-' if direction[axis] < 0 else '+'}{'zyx'[axis]}"
+
+
+def _points_up(camera):
+    up = np.asarray(camera.up_direction, dtype=float)
+    axis = int(np.argmax(np.abs(up)))
+    return f"{'-' if up[axis] < 0 else '+'}{'zyx'[axis]}"
+
+
+@pytest.mark.parametrize(
+    "view, along, up",
+    [("XY", "+z", "-y"), ("XZ", "-y", "-z"), ("YZ", "+x", "-z")],
+)
+def test_each_view_button_looks_down_the_axis_it_names(
+    make_napari_viewer, view, along, up
+):
+    """A view of the XY plane is the one looking down z, and so on."""
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+    widget.viewer.dims.ndisplay = 3
+    widget.get_dataset_from_test_mode([_asymmetric_channel(zdim=True)])
+
+    widget.change_camera(set_view_to=view)
+
+    assert _looks_along(widget.viewer.camera) == along
+    assert _points_up(widget.viewer.camera) == up
+
+
+def test_a_dataset_opens_looking_at_the_xy_plane(make_napari_viewer):
+    """Not side-on: the image is what you see first, the sections on request."""
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+    widget.viewer.dims.ndisplay = 3
+    widget.get_dataset_from_test_mode([_asymmetric_channel(zdim=True)])
+
+    assert _looks_along(widget.viewer.camera) == "+z"
+    assert _points_up(widget.viewer.camera) == "-y"
+
+
+def test_the_named_views_are_three_distinct_directions(make_napari_viewer):
+    """Two buttons showing the same view is the shape the old bug took."""
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+    widget.viewer.dims.ndisplay = 3
+    widget.get_dataset_from_test_mode([_asymmetric_channel(zdim=True)])
+
+    seen = set()
+    for view in ("XY", "XZ", "YZ"):
+        widget.change_camera(set_view_to=view)
+        seen.add(_looks_along(widget.viewer.camera).lstrip("+-"))
+    assert seen == {"x", "y", "z"}
+
+
+def test_the_scale_bar_is_labelled_in_nanometres(make_napari_viewer):
+    """Unlabelled, napari's scale bar could only call these coordinates px."""
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+
+    assert widget.viewer.scale_bar.unit == "nm"
+
+
+def test_labelling_the_scale_bar_does_not_move_the_data(make_napari_viewer):
+    """The reason this is not `Layer.units`, which napari 0.8 will want.
+
+    Setting units per layer rescales the world: `reset_view` then framed the
+    two-spot fixture with most of it off-screen.  Whoever lifts the napari<0.8
+    pin will have to move to Layer.units, and this is the check that says
+    whether the move is safe.
+    """
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+    widget.get_dataset_from_test_mode([_asymmetric_channel(zdim=True)])
+    widget.viewer.reset_view()
+    framed = (widget.viewer.camera.zoom, tuple(widget.viewer.camera.center))
+
+    widget.viewer.scale_bar.unit = "nm"
+    widget.viewer.reset_view()
+
+    assert widget.viewer.camera.zoom == pytest.approx(framed[0])
+    assert tuple(widget.viewer.camera.center) == pytest.approx(framed[1])
 
 
 @pytest.mark.parametrize("zdim", [False, True], ids=["2d", "3d"])
 @pytest.mark.parametrize("axis", ["x", "y"])
-def test_range_filter_changes_only_the_selected_axis(
-    make_napari_viewer, zdim, axis
-):
+def test_range_filter_changes_only_the_selected_axis(make_napari_viewer, zdim, axis):
     """Range sliders must filter the named property in both dimensionalities."""
     widget = napari_storm(napari_viewer=make_napari_viewer())
     ds = _asymmetric_channel(zdim=zdim)
@@ -302,5 +416,5 @@ def test_reference_image_frame_matches_localization_frame(make_napari_viewer):
     coords = widget.data_to_layer_itf.get_coords_from_locs(ds)
     # translate is (z, y, x); the image origin must coincide with the data
     # origin now that neither carries a hidden shift.
-    assert translate[1] == pytest.approx(coords[:, 1].min(), abs=1)   # y
-    assert translate[2] == pytest.approx(coords[:, 2].min(), abs=1)   # x
+    assert translate[1] == pytest.approx(coords[:, 1].min(), abs=1)  # y
+    assert translate[2] == pytest.approx(coords[:, 2].min(), abs=1)  # x

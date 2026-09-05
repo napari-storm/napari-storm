@@ -20,3 +20,7 @@ class PixelSizeIsNecessaryError(ValueError):
 
 class FileImportAbortedError(ImportError):
     """Raise this error when the user aborts the import of a file"""
+
+
+class UnknownFileLayoutError(ImportError):
+    """Raise when a file's extension is recognized but its contents are not"""

@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
-from .memory_budget import (MAX_SPLAT_FRACTION_OF_FOV,
-                            default_render_budget_mb)
+from .memory_budget import MAX_SPLAT_FRACTION_OF_FOV, default_render_budget_mb
 from .ns_constants import (
     DEFAULT_FIXED_FWHM_XY_NM,
     DEFAULT_FIXED_FWHM_Z_NM,
@@ -45,21 +43,19 @@ class RenderConfig:
     z_color_encoding: int = 0
 
     # Dimensionality
-    zdim: Optional[bool] = None
+    zdim: bool | None = None
 
     # Render range sliders (percent, 2-element arrays)
-    range_x_percent: np.ndarray = field(
-        default_factory=lambda: np.arange(2) * 100
-    )
-    range_y_percent: np.ndarray = field(
-        default_factory=lambda: np.arange(2) * 100
-    )
-    range_z_percent: np.ndarray = field(
-        default_factory=lambda: np.arange(2) * 100
-    )
+    range_x_percent: np.ndarray = field(default_factory=lambda: np.arange(2) * 100)
+    range_y_percent: np.ndarray = field(default_factory=lambda: np.arange(2) * 100)
+    range_z_percent: np.ndarray = field(default_factory=lambda: np.arange(2) * 100)
 
     # Grid plane
     grid_plane_line_distance_um: float = DEFAULT_GRID_LINE_DISTANCE_UM
+    # Issue #38: how far past the data the grid is allowed to run, as a
+    # percentage of each axis' span, added at both ends.  0 keeps the old
+    # behaviour of stopping exactly at the render range.
+    grid_plane_margin_percent: float = 0.0
 
     # Scalebar
     scalebar_size_nm: int = DEFAULT_SCALEBAR_NM

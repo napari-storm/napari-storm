@@ -16,9 +16,7 @@ def test_defaults():
     assert rc.fixed_sigma_xy_nm == pytest.approx(
         DEFAULT_FIXED_FWHM_XY_NM / FWHM_TO_SIGMA
     )
-    assert rc.fixed_sigma_z_nm == pytest.approx(
-        DEFAULT_FIXED_FWHM_Z_NM / FWHM_TO_SIGMA
-    )
+    assert rc.fixed_sigma_z_nm == pytest.approx(DEFAULT_FIXED_FWHM_Z_NM / FWHM_TO_SIGMA)
     assert rc.z_color_encoding == 0
     assert rc.zdim is None
     assert rc.scalebar_enabled is False

@@ -1,17 +1,35 @@
-import h5py
-import numpy as np
 import os.path as _ospath
 
-import napari_storm.localization_dataset_types as dataset_classes
+import h5py
+import numpy as np
 from qtpy.QtWidgets import QFileDialog
 
+import napari_storm.localization_dataset_types as dataset_classes
+
 from .background_loading import run_on_main_thread
-from .CustomErrors import FileImportAbortedError, ParentError
+from .CustomErrors import (
+    FileImportAbortedError,
+    ParentError,
+    UnknownFileLayoutError,
+)
 from .file_and_data_recognition import file_and_data_recognition
 from .localization_dataset_types.Custom_Import import custom_import_function
 from .localization_dataset_types.Minflux_class import MinfluxDataAIIterationClass
-from .localization_dataset_types.storm_class import StormDataClass, StormDatasetCollection
-from .ns_constants import LOCS_DTYPE
+from .localization_dataset_types.minflux_v2 import (
+    LAYOUT_V1,
+    LAYOUT_V2,
+    MinfluxDataV2Class,
+    file_layout,
+    zarr_store_root,
+)
+from .localization_dataset_types.storm_class import (
+    MOLECULE_SET_KEY,
+    PICASSO_LOCS_KEY,
+    StormDataClass,
+    StormDatasetCollection,
+    hdf5_layout,
+)
+from .ns_constants import HDF5_EXTENSIONS, LOCS_DTYPE
 from .pyqt.prompts import QtMetadataProvider
 
 
@@ -78,14 +96,18 @@ class FileToLocalizationDataInterface:
             else:
                 datasets = self.open_known_filetype_and_import_dataset(file_path)
 
-        except (FileImportAbortedError, FileNotFoundError):
+        except FileImportAbortedError:
+            # A deliberate abort is the one silent outcome: whoever aborted
+            # already knows why nothing was loaded.
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             return None
         except Exception:
             # Importers currently register names while loading.  Roll that
             # bookkeeping back if an importer fails part-way through, while
-            # still surfacing unexpected errors to the caller.
+            # still surfacing unexpected errors to the caller.  A missing
+            # Picasso .yaml arrives here as a FileNotFoundError whose message
+            # is the entire diagnosis, so it must not be mistaken for a cancel.
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             raise
@@ -100,35 +122,34 @@ class FileToLocalizationDataInterface:
             # starts building layers on the GUI thread.
             handle.checkpoint(f"Preparing {len(datasets)} dataset(s)…")
 
-        self.sync_dataset_entries(
-            [*self.parent.localization_datasets, *datasets]
-        )
+        self.sync_dataset_entries([*self.parent.localization_datasets, *datasets])
         return datasets
 
     def open_known_filetype_and_import_dataset(self, file_path):
         """Find out dataset type by ending or other clues and try to import the known dataset type directly"""
+        # A Zarr MINFLUX dataset is a directory, not a file, so it has no
+        # extension to dispatch on -- and a plain file dialog cannot select a
+        # folder, so anything *inside* the store routes there too.
+        if zarr_store_root(file_path) is not None:
+            return self.load_mfx_v2(file_path)
         filetype = file_path.split(".")[-1]
-        if filetype == "hdf5":
-            if _ospath.isfile(file_path[: -(len(filetype))] + "yaml"):
-                return self.load_hdf5(file_path)
-            else:
-                raise FileNotFoundError(
-                    "Assuming .hdf5 is a picasso file, the correspoding "
-                    ".yaml file couldn t be found in same directory"
-                )
+        if filetype in HDF5_EXTENSIONS:
+            return self.load_hdf5_by_layout(file_path)
         elif filetype == "yaml":
-            file_path = file_path[: -(len(filetype))] + "hdf5"
-            if _ospath.isfile(file_path):
-                return self.load_hdf5(file_path)
+            # Picked the sidecar rather than the data: open what it describes.
+            sidecar_of = self.hdf5_beside(file_path)
+            if sidecar_of is not None:
+                return self.load_hdf5_by_layout(sidecar_of)
+            raise FileNotFoundError(
+                f"{_ospath.basename(file_path)} is metadata, and no data file "
+                "with the same name is in the same directory"
+            )
         # Thunderstorm csv
         elif filetype == "csv":
             return self.load_csv(file_path)
         # SMLM File
         elif filetype == "smlm":
             return self.load_smlm(file_path)
-        # h5 -> special type of hdf5
-        elif filetype == "h5":
-            return self.load_h5(file_path)
         # MINFLUX files
         elif filetype == "json":
             return self.load_mfx_json(file_path)
@@ -136,6 +157,11 @@ class FileToLocalizationDataInterface:
             return self.load_mfx_npy(file_path)
         elif filetype == "mfx":
             return self.load_mfx(file_path)
+        # Imspector >= 24.10 also writes MINFLUX data as Matlab and as
+        # pyMINFLUX's own .pmx; neither has an older-layout counterpart, so
+        # they route straight to the new reader.
+        elif filetype in ("mat", "pmx"):
+            return self.load_mfx_v2(file_path)
         elif filetype == "ns":
             return self.load_ns(file_path)
         elif filetype in ["tif", "tiff", "dat", "raw"]:
@@ -161,8 +187,7 @@ class FileToLocalizationDataInterface:
 
         def conflicts(candidate):
             return any(
-                existing == candidate
-                or existing.startswith(candidate + " Channel ")
+                existing == candidate or existing.startswith(candidate + " Channel ")
                 for existing in existing_names
             )
 
@@ -190,6 +215,22 @@ class FileToLocalizationDataInterface:
         self.dataset_names.append(dataset.name)
         return [dataset]
 
+    @staticmethod
+    def reject_unknown_minflux_layout(file_path):
+        """Refuse a file that is neither MINFLUX layout, by name.
+
+        Neither reader can say anything useful about a file that is not a
+        MINFLUX export at all, and the old one was the default for everything
+        that was not recognized as new -- so an unrelated .json was reported as
+        a broken MINFLUX file rather than as the wrong file.
+        """
+        if file_layout(file_path) not in (LAYOUT_V1, LAYOUT_V2):
+            raise UnknownFileLayoutError(
+                f"{_ospath.basename(file_path)} is not a MINFLUX export: it "
+                "carries neither the new layout's markers nor the old "
+                "layout's nested 'itr' iterations."
+            )
+
     def load_mfx(self, file_path):
         """wrapper to load .mfx files"""
         filename = file_path.split("/")[-1]
@@ -198,6 +239,38 @@ class FileToLocalizationDataInterface:
         return [
             MinfluxDataAIIterationClass().load_mfx(file_path=file_path, name=filename)
         ]
+
+    @staticmethod
+    def hdf5_beside(yaml_path):
+        """The data file a Picasso .yaml describes, if it is there."""
+        path_base = yaml_path[: -len("yaml")]
+        for extension in HDF5_EXTENSIONS:
+            candidate = path_base + extension
+            if _ospath.isfile(candidate):
+                return candidate
+        return None
+
+    def load_hdf5_by_layout(self, file_path):
+        """Route an HDF5 file to the reader for the layout it actually has.
+
+        Picasso localization tables and daxview molecule sets are unrelated
+        formats that both ship as .h5 and as .hdf5, so the extension cannot
+        decide this.  It used to be decided by whether a .yaml sat next to the
+        file, which answered a different question entirely: it said nothing
+        about the contents, and Picasso files whose metadata lives inside the
+        .hdf5 -- which Picasso itself reads -- were turned away for it.
+        """
+        layout = hdf5_layout(file_path)
+        if layout == "picasso":
+            return self.load_hdf5(file_path)
+        if layout == "molecule_set":
+            return self.load_h5(file_path)
+        raise UnknownFileLayoutError(
+            f"{_ospath.basename(file_path)} is neither a Picasso localization "
+            f"table (a '{PICASSO_LOCS_KEY}' dataset) nor a molecule set (a "
+            f"'{MOLECULE_SET_KEY}' group). Try the file recognition import, "
+            "which can read any HDF5 layout."
+        )
 
     def load_hdf5(self, file_path):
         """wrapper to load .hdf5 files in the picasso format"""
@@ -222,8 +295,22 @@ class FileToLocalizationDataInterface:
         )
         return dataset_collection.list_of_datasets
 
+    def load_mfx_v2(self, file_path, itr=-1):
+        """loads localizations from the Imspector >= 24.10 MINFLUX layout"""
+        # Name a Zarr dataset after its store, not after whichever file inside
+        # it the user had to click to select the thing.
+        root = zarr_store_root(file_path)
+        source = str(root) if root is not None else file_path
+        filename = _ospath.basename(source.rstrip("/\\").replace("\\", "/"))
+        filename = self.check_namespace(filename)
+        self.dataset_names.append(filename)
+        return [MinfluxDataV2Class().load(file_path=file_path, name=filename, itr=itr)]
+
     def load_mfx_json(self, file_path, itr=-1):
-        """loads localizations from AIs json format"""
+        """loads localizations from AIs json format, in either layout"""
+        self.reject_unknown_minflux_layout(file_path)
+        if file_layout(file_path) == LAYOUT_V2:
+            return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
@@ -233,7 +320,14 @@ class FileToLocalizationDataInterface:
         return [dataset]
 
     def load_mfx_npy(self, file_path, itr=-1):
-        """loads localizations from AIs npy format"""
+        """loads localizations from AIs npy format, in either layout
+
+        Which layout is decided from the file's header alone, so routing a
+        multi-gigabyte export costs no more than opening it.
+        """
+        self.reject_unknown_minflux_layout(file_path)
+        if file_layout(file_path) == LAYOUT_V2:
+            return self.load_mfx_v2(file_path, itr=itr)
         filename = file_path.split("/")[-1]
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)

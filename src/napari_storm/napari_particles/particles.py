@@ -19,7 +19,6 @@ from ._napari_compat import (
 from .filters import ShaderFilter
 from .utils import generate_billboards_2d
 
-
 _DEFAULT_FILTER = object()
 
 
@@ -27,16 +26,13 @@ class BillboardsFilter(Filter):
     """Billboard geometry filter (transforms vertices to always face camera)"""
 
     def __init__(self, antialias=0):
-        vmat_inv = Function(
-            """
+        vmat_inv = Function("""
             mat2 inverse(mat2 m) {
                 return mat2(m[1][1],-m[0][1],-m[1][0], m[0][0]) / (m[0][0]*m[1][1] - m[0][1]*m[1][0]);
             }
-        """
-        )
+        """)
 
-        vfunc = Function(
-            """
+        vfunc = Function("""
         varying float v_z_center;
         varying float v_scale_intensity;
         varying mat2 covariance_inv;
@@ -113,11 +109,9 @@ class BillboardsFilter(Filter):
 
             $v_texcoords = vec2(tex.y, tex.x);
             }
-        """
-        )
+        """)
 
-        ffunc = Function(
-            """
+        ffunc = Function("""
         varying float v_scale_intensity;
         varying float v_z_center;
 
@@ -125,8 +119,7 @@ class BillboardsFilter(Filter):
             gl_FragDepth = v_z_center;
             $texcoords;
         }
-        """
-        )
+        """)
 
         self._texcoord_varying = Varying("v_texcoord", "vec2")
         vfunc["inverse"] = vmat_inv
@@ -297,15 +290,9 @@ class Particles(Surface):
                 [np.zeros((len(coords), 1), dtype=np.float32), coords], axis=-1
             )
 
-        size = np.broadcast_to(
-            np.asarray(size, dtype=np.float32), len(coords)
-        )
-        sigmas = np.broadcast_to(
-            np.asarray(sigmas, dtype=np.float32), (len(coords), 3)
-        )
-        values = np.broadcast_to(
-            np.asarray(values, dtype=np.float32), len(coords)
-        )
+        size = np.broadcast_to(np.asarray(size, dtype=np.float32), len(coords))
+        sigmas = np.broadcast_to(np.asarray(sigmas, dtype=np.float32), (len(coords), 3))
+        values = np.broadcast_to(np.asarray(values, dtype=np.float32), len(coords))
 
         vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
         vertices_per_particle = 6

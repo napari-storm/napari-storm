@@ -14,9 +14,10 @@ committing the error, pairing the two column-wise all along. Both are now
 ``(z, y, x)``, napari's order and this exporter's, so a channel is built by
 reading the request rather than by rearranging it.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -29,6 +30,7 @@ __all__ = [
     "SCOPE_EVERYTHING",
     "ExportOptions",
     "channel_for",
+    "current_view_z_nm",
     "export_bounds_nm",
     "plan_from_widget",
 ]
@@ -40,6 +42,54 @@ SCOPE_CURRENT_VIEW = "current_view"
 #: Opt-in: a Z-stack over the whole dataset extent, ignoring the render range.
 SCOPE_EVERYTHING = "everything"
 
+#: Which plane a 2-D export projects onto.  The rasterizer always collapses
+#: axis 0 and draws axes 1 and 2, so a projection is a permutation of the
+#: ``(z, y, x)`` columns rather than a second code path: put the axis being
+#: summed over first, and the remaining two are the image, row axis first.
+PROJECTION_XY = "xy"
+PROJECTION_XZ = "xz"
+PROJECTION_YZ = "yz"
+
+_PROJECTION_AXES = {
+    PROJECTION_XY: (0, 1, 2),  # sum z, image (y, x) -- what exports did before
+    PROJECTION_XZ: (1, 0, 2),  # sum y, image (z, x)
+    PROJECTION_YZ: (2, 0, 1),  # sum x, image (z, y)
+}
+
+
+def projection_axes(projection):
+    """The ``(z, y, x)`` column order *projection* rasterizes in."""
+    try:
+        return _PROJECTION_AXES[projection]
+    except KeyError:
+        raise ValueError(
+            f"unknown projection {projection!r}; "
+            f"expected one of {sorted(_PROJECTION_AXES)}"
+        ) from None
+
+
+def project_channel(channel, projection):
+    """*channel* with its coordinates and widths permuted for *projection*.
+
+    Widths move with the coordinates because a Gaussian's extent is per axis:
+    projecting onto XZ and keeping the y width would draw the wrong shape and
+    would silently look plausible.
+    """
+    axes = projection_axes(projection)
+    if axes == (0, 1, 2):
+        return channel
+    return replace(
+        channel,
+        coords_nm=np.ascontiguousarray(channel.coords_nm[:, axes]),
+        sigmas_nm=np.ascontiguousarray(channel.sigmas_nm[:, axes]),
+    )
+
+
+def project_bounds(bounds_nm, projection):
+    """*bounds_nm* reordered to match :func:`project_channel`."""
+    axes = projection_axes(projection)
+    return tuple(tuple(bounds_nm[axis]) for axis in axes)
+
 
 @dataclass(frozen=True)
 class ExportOptions:
@@ -48,6 +98,8 @@ class ExportOptions:
     pixel_size_nm: float = 10.0
     scope: str = SCOPE_CURRENT_VIEW
     z_step_nm: float = 50.0
+    #: Only consulted for a 2-D export: a volume has every plane in it already.
+    projection: str = PROJECTION_XY
 
     @property
     def is_3d(self):
@@ -116,10 +168,13 @@ def export_bounds_nm(widget, options, channels=None):
             raise ValueError("no localizations to export")
         # Pad by the widest splat so the Gaussians are not clipped at the edge
         # of their own bounding box.
-        pad = max(
-            (float(np.max(c.sigmas_nm)) for c in channels if len(c.sigmas_nm)),
-            default=0.0,
-        ) * SIGMA_TO_SIZE_FACTOR
+        pad = (
+            max(
+                (float(np.max(c.sigmas_nm)) for c in channels if len(c.sigmas_nm)),
+                default=0.0,
+            )
+            * SIGMA_TO_SIZE_FACTOR
+        )
         low = stacked.min(axis=0) - pad
         high = stacked.max(axis=0) + pad
         return ((low[0], high[0]), (low[1], high[1]), (low[2], high[2]))
@@ -130,9 +185,26 @@ def export_bounds_nm(widget, options, channels=None):
     y0, y1 = interface.percent_to_absolute(
         interface.render_range_y, widget.render_range_slider_y_percent
     )
-    # A degenerate z range is what makes the grid one plane: the 2-D export is
-    # a projection through the current z window, not a slice at one depth.
-    return ((0.0, 0.0), (float(y0), float(y1)), (float(x0), float(x1)))
+    z0, z1 = current_view_z_nm(widget)
+    return ((float(z0), float(z1)), (float(y0), float(y1)), (float(x0), float(x1)))
+
+
+def current_view_z_nm(widget):
+    """``(z0, z1)`` for a 2-D export: the z window it projects through.
+
+    What makes the grid one plane is ``z_step_nm=None``, not a degenerate
+    interval, so this reports the real window even for XY.  It used to report
+    ``(0, 0)`` unconditionally, which XY tolerated -- the rasterizer ignores
+    the collapsed axis entirely -- and which XZ and YZ could not: a projection
+    puts z on a *visible* image axis, and an empty interval there is an image
+    one pixel high, positioned at the origin, with the data outside it.
+    """
+    interface = widget.data_to_layer_itf
+    z_range = interface.render_range_z
+    if not getattr(widget, "zdim", False) or not np.all(np.isfinite(z_range)):
+        # Genuinely flat: there is no window to project through.
+        return 0.0, 0.0
+    return interface.percent_to_absolute(z_range, widget.render_range_slider_z_percent)
 
 
 def run_export(
@@ -181,7 +253,11 @@ def run_export(
         return None
 
     dialog = QProgressDialog(
-        f"Writing {plan.shape[3]:,} x {plan.shape[2]:,} px...", "Cancel", 0, total, parent
+        f"Writing {plan.shape[3]:,} x {plan.shape[2]:,} px...",
+        "Cancel",
+        0,
+        total,
+        parent,
     )
     dialog.setWindowModality(Qt.WindowModal)
     dialog.setAutoClose(False)
@@ -241,6 +317,9 @@ def plan_from_widget(widget, options):
 
     channels = [channel_for(interface, dataset) for dataset in datasets]
     bounds = export_bounds_nm(widget, options, channels)
+    if not options.is_3d:
+        channels = [project_channel(c, options.projection) for c in channels]
+        bounds = project_bounds(bounds, options.projection)
     return plan_export(
         channels,
         bounds,

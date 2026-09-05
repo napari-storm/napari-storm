@@ -12,6 +12,7 @@ object; whoever draws hears :class:`AppearanceChanged` and acts. That is the
 inversion §4.1 asks for: a change carries what changed, rather than every
 consumer rediscovering global state.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace

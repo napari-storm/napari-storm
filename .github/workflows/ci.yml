@@ -67,6 +67,38 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix" | jq .
 
+  # Formatting was configured in 2022 and never enforced: .pre-commit-config
+  # declared black, isort and flake8, and no workflow ran any of them, so the
+  # tree drifted out of shape while the config claimed otherwise (issue #10).
+  # The first fix ran black and isort here with versions pinned in this file,
+  # which left two places to pin a formatter and four configured hooks still
+  # unenforced.  This runs the config itself, so what checks the tree is what
+  # wrote it.  One cheap job on Linux: formatting does not vary by platform.
+  lint:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Cheap, and worth its own step: this names the file and line of a
+      # whitespace error directly, which is a faster read than picking it out
+      # of a formatter's diff.  Against the empty tree, so it checks every
+      # line of every file rather than only what a shallow checkout can see.
+      - name: Check for whitespace errors
+        run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - run: python -m pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure --color=always
+
   test:
     name: ${{ matrix.platform }} py${{ matrix.python-version }}
     needs: plan

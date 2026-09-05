@@ -13,7 +13,10 @@ class MinfluxDataBaseClass(LocalizationDataBaseClass):
     Subclass of LocalizationDataBaseClass"""
 
     def __init__(
-        self, locs=None, name=None, zdim_present=False,
+        self,
+        locs=None,
+        name=None,
+        zdim_present=False,
     ):
         self.locs_dtype = []
         super().__init__(locs, name=name, zdim_present=zdim_present)
@@ -364,7 +367,11 @@ class MinfluxDataAIClass:
 
 class MinfluxDataAIIterationClass(MinfluxDataBaseClass):
     def __init__(
-        self, locs=None, itr=0, name=None, zdim_present=False,
+        self,
+        locs=None,
+        itr=0,
+        name=None,
+        zdim_present=False,
     ):
 
         if locs is not None:

@@ -3,7 +3,7 @@
 Covers register items P1-10 (no input validation) and P1-15 (Z FWHM field
 seeded from the XY value) from docs/modernization-review.md.
 """
-import numpy as np
+
 import pytest
 
 from napari_storm._dock_widget import napari_storm
@@ -71,9 +71,7 @@ def test_z_field_is_seeded_from_the_z_value(make_napari_viewer, monkeypatch):
         cfg.fixed_sigma_z_nm = 55.0 / FWHM_TO_SIGMA
         return cfg
 
-    monkeypatch.setattr(
-        "napari_storm._dock_widget.RenderConfig", _asymmetric_config
-    )
+    monkeypatch.setattr("napari_storm._dock_widget.RenderConfig", _asymmetric_config)
     widget = napari_storm(napari_viewer=make_napari_viewer())
 
     assert float(widget.Esigma_xy.text()) == pytest.approx(20.0, rel=1e-4)

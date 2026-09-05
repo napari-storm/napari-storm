@@ -7,17 +7,23 @@ derived from it, the dataset list could be appended to behind the store's back,
 adding the same dataset twice corrupted the id map, and zero-valued sigma or
 photon columns reached divisions guarded only by `assert`.
 """
+
 import numpy as np
 import pytest
 
 from napari_storm._dock_widget import napari_storm
-from napari_storm.core import (DatasetStore, InvalidLocalizationData,
-                               LocalizationTable, require_positive_maximum,
-                               sanitize_positive)
-from napari_storm.localization_dataset_types import (LocalizationDataBaseClass,
-                                                     StormDataClass)
-from napari_storm.localization_dataset_types.data_formats import \
-    storm_data_dtype
+from napari_storm.core import (
+    DatasetStore,
+    InvalidLocalizationData,
+    LocalizationTable,
+    require_positive_maximum,
+    sanitize_positive,
+)
+from napari_storm.localization_dataset_types import (
+    LocalizationDataBaseClass,
+    StormDataClass,
+)
+from napari_storm.localization_dataset_types.data_formats import storm_data_dtype
 
 PIXEL_COLUMNS = {"x": "x_pos_pixels", "y": "y_pos_pixels", "z": "z_pos_pixels"}
 

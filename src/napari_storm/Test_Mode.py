@@ -1,6 +1,13 @@
 import numpy as np
-from qtpy.QtWidgets import (QComboBox, QDialog, QFormLayout, QGridLayout,
-                            QLabel, QLineEdit, QPushButton, QWidget)
+from qtpy.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 from .LocalizationData import LocalizationData
 from .ns_constants import LOCS_DTYPE
@@ -258,14 +265,3 @@ class TestModeWindow(QWidget):
             * 2
         )
         return locs
-
-
-import sys
-
-from qtpy.QtWidgets import QApplication
-
-"""if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = TestModeWindow(parent=None)
-    window.show()
-    sys.exit(app.exec())"""

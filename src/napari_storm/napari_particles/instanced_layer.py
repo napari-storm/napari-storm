@@ -22,6 +22,7 @@ Two things make that work rather than merely compile:
 **Requires VisPy's `gl+` backend**, selected process-wide before any GL context
 exists. See `enable_instanced_backend()` in `_napari_compat`.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -68,16 +69,13 @@ class InstancedBillboardsFilter(Filter):
     """
 
     def __init__(self):
-        vmat_inv = Function(
-            """
+        vmat_inv = Function("""
             mat2 inverse(mat2 m) {
                 return mat2(m[1][1],-m[0][1],-m[1][0], m[0][0])
                        / (m[0][0]*m[1][1] - m[0][1]*m[1][0]);
             }
-        """
-        )
-        vfunc = Function(
-            """
+        """)
+        vfunc = Function("""
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 covariance_inv;
@@ -122,10 +120,8 @@ class InstancedBillboardsFilter(Filter):
             // have to agree with the drawn vertex order.
             $v_texcoords = pos.xy / $billboard_size + 0.5;
         }
-        """
-        )
-        ffunc = Function(
-            """
+        """)
+        ffunc = Function("""
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 covariance_inv;
@@ -163,8 +159,7 @@ class InstancedBillboardsFilter(Filter):
             gl_FragColor = mapped * gaussian;
             gl_FragColor.a = gaussian * layer_alpha;
         }
-        """
-        )
+        """)
 
         # A grey ramp until the real colormap is available; `set_colormap`
         # swaps in the visual's own GLSL so the two never disagree.
@@ -191,12 +186,8 @@ class InstancedBillboardsFilter(Filter):
         self._centers_buffer = VertexBuffer(
             np.zeros((1, 3), dtype=np.float32), divisor=1
         )
-        self._sigmas_buffer = VertexBuffer(
-            np.ones((1, 3), dtype=np.float32), divisor=1
-        )
-        self._values_buffer = VertexBuffer(
-            np.ones((1,), dtype=np.float32), divisor=1
-        )
+        self._sigmas_buffer = VertexBuffer(np.ones((1, 3), dtype=np.float32), divisor=1)
+        self._values_buffer = VertexBuffer(np.ones((1,), dtype=np.float32), divisor=1)
         vfunc["vertex_center"] = self._centers_buffer
         vfunc["sigmas"] = self._sigmas_buffer
         vfunc["instance_value"] = self._values_buffer
@@ -239,18 +230,14 @@ class InstancedBillboardsFilter(Filter):
         )
 
     def _attach(self, visual):
-        self.vshader["transform"] = visual.transforms.get_transform(
-            "visual", "render"
-        )
+        self.vshader["transform"] = visual.transforms.get_transform("visual", "render")
         self.vshader["transform_inv"] = visual.transforms.get_transform(
             "render", "visual"
         )
         self.vshader["camera_inv"] = visual.transforms.get_transform(
             "document", "scene"
         )
-        self.vshader["camera"] = visual.transforms.get_transform(
-            "scene", "document"
-        )
+        self.vshader["camera"] = visual.transforms.get_transform("scene", "document")
         super()._attach(visual)
 
 

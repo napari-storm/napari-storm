@@ -16,6 +16,7 @@ the check most needed on a malformed file is the one not present in an
 optimized interpreter. These raise instead, and say which column was wrong and
 how many rows.
 """
+
 from __future__ import annotations
 
 import numpy as np

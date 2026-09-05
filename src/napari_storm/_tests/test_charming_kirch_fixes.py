@@ -8,6 +8,7 @@ import pytest
 
 from napari_storm import ns_constants
 from napari_storm.core import PIXEL_SIZE_NM, StaticMetadataProvider
+from napari_storm.CustomErrors import UnknownFileLayoutError
 from napari_storm.FileToLocalizationDataInterface import (
     FileToLocalizationDataInterface,
 )
@@ -24,9 +25,7 @@ def _parent():
 
 
 def test_dataset_inputs_do_not_alias_canonical_rows():
-    locs = np.rec.array(
-        np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     dataset = LocalizationDataBaseClass(locs, zdim_present=False)
 
     locs.x_pos_nm[0] = 10
@@ -60,9 +59,7 @@ def test_shared_dtype_and_minflux_factor_have_one_value():
 
 def test_ns_loader_returns_a_list_and_applies_namespace(tmp_path):
     file_path = tmp_path / "saved.ns"
-    locs = np.rec.array(
-        np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(3, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     with h5py.File(file_path, "w") as file:
         stored = file.create_dataset("dataset", data=locs)
         stored.attrs["name"] = "saved"
@@ -86,9 +83,7 @@ def test_smlm_loader_uses_the_source_basename(monkeypatch):
 
     monkeypatch.setattr(StormDataClass, "load_smlm", fake_load)
     provider = StaticMetadataProvider({PIXEL_SIZE_NM: "100"})
-    interface = FileToLocalizationDataInterface(
-        _parent(), metadata_provider=provider
-    )
+    interface = FileToLocalizationDataInterface(_parent(), metadata_provider=provider)
     interface.load_smlm(r"C:\measurements\sample.smlm")
 
     # The reader is also handed the provider it needs for a .smlm file with no
@@ -98,3 +93,18 @@ def test_smlm_loader_uses_the_source_basename(monkeypatch):
 
 def test_missing_picasso_metadata_returns_an_empty_list(tmp_path):
     assert StormDataClass().load_info(str(tmp_path / "missing.hdf5")) == []
+
+
+def test_an_hdf5_that_cannot_be_read_reports_why_it_did_not_open(tmp_path):
+    """A file we cannot read must not be swallowed as if it were a cancel."""
+    file_path = tmp_path / "something_else.hdf5"
+    with h5py.File(file_path, "w") as file:
+        file.create_dataset("mystery", data=np.zeros(3))
+
+    interface = FileToLocalizationDataInterface(_parent())
+    with pytest.raises(UnknownFileLayoutError):
+        interface.open_localization_data_file_and_get_dataset(file_path=str(file_path))
+
+    # Nothing was registered on the way out, whichever way the caller reports it.
+    assert interface.dataset_names == []
+    assert interface.n_datasets == 0

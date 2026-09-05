@@ -1,44 +1,53 @@
+# The single source of truth for formatting and linting: CI runs exactly this
+# file, so the versions that check the tree are the versions that wrote it.
+#
+# Every hook here has been run over the whole tree.  Three that this file used
+# to declare are gone, because running them is what showed what they do:
+#
+#   * autoflake --remove-all-unused-imports emptied
+#     localization_dataset_types/__init__.py outright -- a re-export module is
+#     "unused imports" by construction -- and dropped the explicitly aliased
+#     re-export from ns_constants.py.  flake8 reports unused imports as F401
+#     and leaves the decision to a person, which is the right division of
+#     labour for a fixer that deletes code.
+#   * setup-cfg-fmt rewrites setup.cfg from scratch, discarding the comments
+#     that record why zarr is pinned below 3, why python_requires is 3.10 and
+#     why `where = src` is load-bearing.  Those comments are worth more than
+#     the ordering it imposes.
+#   * napari-plugin-checks cannot run at all: it imports `importscanner` from
+#     grimp, which grimp no longer provides.  scripts/check_plugin_manifest.py
+#     already runs in CI and checks more -- it resolves every contribution
+#     rather than only scanning imports.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.0.1
+    rev: v6.0.0
     hooks:
       - id: check-docstring-first
       - id: end-of-file-fixer
+      # No --markdown-linebreak-ext: nothing in this tree relies on the
+      # two-space hard break, and `git diff --check` in CI would flag it
+      # anyway.  A line break that a whitespace hook can delete is not one to
+      # build a document on.
       - id: trailing-whitespace
-  - repo: https://github.com/asottile/setup-cfg-fmt
-    rev: v1.20.0
-    hooks:
-      - id: setup-cfg-fmt
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
   - repo: https://github.com/PyCQA/flake8
-    rev: 4.0.1
+    rev: 7.3.0
     hooks:
       - id: flake8
-        additional_dependencies: [flake8-typing-imports==1.7.0]
-  - repo: https://github.com/myint/autoflake
-    rev: v1.4
-    hooks:
-      - id: autoflake
-        args: ["--in-place", "--remove-all-unused-imports"]
+        additional_dependencies: [flake8-typing-imports==1.15.0]
   - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
+    rev: 6.1.0
     hooks:
       - id: isort
   - repo: https://github.com/psf/black
-    rev: 21.11b1
+    rev: 26.5.1
     hooks:
       - id: black
   - repo: https://github.com/asottile/pyupgrade
-    rev: v2.29.1
+    rev: v3.21.0
     hooks:
       - id: pyupgrade
-        args: [--py37-plus, --keep-runtime-typing]
-  - repo: https://github.com/tlambert03/napari-plugin-checks
-    rev: v0.2.0
-    hooks:
-      - id: napari-plugin-checks
-  # https://mypy.readthedocs.io/en/stable/introduction.html
-  # you may wish to add this as well!
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v0.910-1
-  #   hooks:
-  #     - id: mypy
+        args: [--py310-plus, --keep-runtime-typing]

@@ -4,6 +4,7 @@ Integration tests for ScalebarRenderer.
 ScalebarRenderer calls napari.current_viewer() internally, so the viewer
 created by make_napari_viewer() must be current at call time.
 """
+
 import pytest
 
 from napari_storm.render_config import RenderConfig

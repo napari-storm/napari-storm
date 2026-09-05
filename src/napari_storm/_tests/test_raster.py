@@ -5,11 +5,16 @@ Gaussian sum, not against a screen capture." That is the point of the exporter
 existing at all -- it is the reference, and the canvas is the approximation, so
 checking it against the canvas would have the dependency backwards.
 """
+
 import numpy as np
 import pytest
 
-from napari_storm.core.raster import (SPLAT_SIGMAS, GaussianGrid,
-                                      rasterize, rasterize_tiles)
+from napari_storm.core.raster import (
+    SPLAT_SIGMAS,
+    GaussianGrid,
+    rasterize,
+    rasterize_tiles,
+)
 
 
 def _analytic(coords_nm, sigmas_nm, values, grid):
@@ -59,7 +64,9 @@ def test_a_single_splat_matches_the_closed_form_gaussian():
 
     image = rasterize(coords, sigmas, values, grid)
 
-    np.testing.assert_allclose(image, _analytic(coords, sigmas, values, grid), atol=1e-6)
+    np.testing.assert_allclose(
+        image, _analytic(coords, sigmas, values, grid), atol=1e-6
+    )
 
 
 def test_the_peak_sits_at_the_localization_and_has_the_right_amplitude():

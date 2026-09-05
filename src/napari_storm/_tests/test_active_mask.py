@@ -3,19 +3,19 @@
 Covers P1-01 (no record-array copy on a filter change) and P1-02 (coordinate
 columns are converted once and cached) from docs/modernization-review.md.
 """
+
 import numpy as np
 import pytest
 
-from napari_storm.localization_dataset_types import (LocalizationDataBaseClass,
-                                                     StormDataClass)
-from napari_storm.localization_dataset_types.data_formats import \
-    storm_data_dtype
+from napari_storm.localization_dataset_types import (
+    LocalizationDataBaseClass,
+    StormDataClass,
+)
+from napari_storm.localization_dataset_types.data_formats import storm_data_dtype
 
 
 def _base_dataset(n=10):
-    locs = np.rec.array(
-        np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")])
-    )
+    locs = np.rec.array(np.zeros(n, dtype=[("x_pos_nm", "f4"), ("y_pos_nm", "f4")]))
     locs.x_pos_nm = np.arange(n, dtype="f4")
     locs.y_pos_nm = np.arange(n, dtype="f4") * 2
     return LocalizationDataBaseClass(locs, name="base", zdim_present=False)

@@ -9,27 +9,65 @@ That boundary is enforced by a test, not by convention: see
 ``_tests/test_core_is_host_free.py``. Adding a Qt or napari import anywhere
 under ``napari_storm.core`` fails the suite.
 """
+
 from .bounds import EMPTY, Bounds
-from .dataset_state import (AppearanceChanged, DatasetState, MaskChanged,
-                            TransformChanged)
-from .dataset_store import (BatchCommitted, DatasetClosed, DatasetOpened,
-                            DatasetStore, StoreCleared)
-from .localization_table import (ACTIVE, AXES, COORDINATE_DTYPE,
-                                 DEFAULT_PHOTON_COLUMN,
-                                 DEFAULT_POSITION_COLUMNS,
-                                 DEFAULT_SIGMA_COLUMNS, FILTERED,
-                                 LocalizationTable, TableSelection)
-from .metadata import (DATA_IN_NM, PHOTON_COUNT_PRESENT, PIXEL_SIZE_NM,
-                       SIGMA_PRESENT, ZDIM_PRESENT, MetadataProvider,
-                       StaticMetadataProvider)
+from .dataset_state import (
+    AppearanceChanged,
+    DatasetState,
+    MaskChanged,
+    TransformChanged,
+)
+from .dataset_store import (
+    BatchCommitted,
+    DatasetClosed,
+    DatasetOpened,
+    DatasetStore,
+    StoreCleared,
+)
+from .localization_table import (
+    ACTIVE,
+    AXES,
+    COORDINATE_DTYPE,
+    DEFAULT_PHOTON_COLUMN,
+    DEFAULT_POSITION_COLUMNS,
+    DEFAULT_SIGMA_COLUMNS,
+    FILTERED,
+    LocalizationTable,
+    TableSelection,
+)
+from .metadata import (
+    DATA_IN_NM,
+    PHOTON_COUNT_PRESENT,
+    PIXEL_SIZE_NM,
+    SIGMA_PRESENT,
+    ZDIM_PRESENT,
+    MetadataProvider,
+    StaticMetadataProvider,
+)
 from .render_planner import DatasetTraits, GaussianSettings, RenderPlanner
-from .scene import (CameraState, DatasetEntry, ReferenceImageEntry, Scene,
-                    SceneFormatError, load_scene, save_scene)
-from .renderer import (Changed, LayerAppearance, LocalizationRenderer,
-                       NullRenderer, RenderRequest)
+from .renderer import (
+    Changed,
+    LayerAppearance,
+    LocalizationRenderer,
+    NullRenderer,
+    RenderRequest,
+)
+from .scene import (
+    CameraState,
+    DatasetEntry,
+    ReferenceImageEntry,
+    Scene,
+    SceneFormatError,
+    load_scene,
+    save_scene,
+)
+from .validation import (
+    InvalidLocalizationData,
+    non_finite_mask,
+    require_positive_maximum,
+    sanitize_positive,
+)
 from .world_transform import IDENTITY, WorldTransform
-from .validation import (InvalidLocalizationData, non_finite_mask,
-                         require_positive_maximum, sanitize_positive)
 
 __all__ = [
     "ACTIVE",
