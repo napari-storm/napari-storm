@@ -6,9 +6,10 @@
 
     napari
 
-→ Open Plugins → napari-storm.
+→ Open **Plugins → Napari STORM**.
 
-Import your dataset by drag & drop or via the Import File button. Closing the file picker without
+Import your dataset by drag & drop, or with **Import Localization File…** in the
+Data Controls tab. Closing the file picker without
 choosing a file leaves the current session unchanged.
 
 Reading the file happens in the background. The window stays usable, a progress dialog appears for
@@ -58,15 +59,32 @@ Tip: Each channel remembers its own settings; toggling Show/Hide is instant.
 
 ### 3) Pick render mode & adjust Gaussian width
 
-In the main controls, select Fixed-size Gaussian or Variable-size Gaussian (PSF). Then tune the sigma parameters:
+In Data Controls, under **Rendering options:**, choose **Fixed-size gaussian** or
+**Variable-size gaussian**. Four entry fields sit beneath it:
 
-Fixed-size: render_fixed_gauss_sigma_xy_nm, render_fixed_gauss_sigma_z_nm
+| Field | Fixed-size gaussian | Variable-size gaussian |
+|---|---|---|
+| **FWHM in XY [nm]:** | the width every localization is drawn at | the PSF width the fitted uncertainty is scaled against |
+| **FWHM in Z [nm]:** | as above, axially | as above, axially |
+| **Min. FWHM in XY [nm]:** | unused | floor, so a tiny fitted width cannot vanish |
+| **Min. FWHM in Z [nm]:** | unused | floor, axially |
 
-Variable-size (PSF): render_var_gauss_PSF_sigma_xy_nm, render_var_gauss_PSF_sigma_z_nm (with min clamps)
+!!! note "These fields are FWHM, not σ"
 
-Variable-size mode disables Z color encoding (by design), while Fixed-size allows it.
+    Every one of these four entries is a **full width at half maximum** in
+    nanometres, as the labels say. The renderer works in σ and converts on your
+    behalf (σ = FWHM / 2.354). Typing the σ you have in mind draws the point
+    about 2.35× wider than you intended, so convert first: a 30 nm σ is a
+    70.6 nm FWHM.
 
-Under the hood, particles are rendered with Gaussian shading via the napari-particles pipeline.
+**Variable-size gaussian** needs a fitted uncertainty or photon count in the
+data to scale each localization by; on a dataset that has neither, every point
+falls back to the floor. Selecting it also hides the Z colour-encoding button
+and switches the encoding off, because depth is already spoken for. Fixed-size
+allows it.
+
+Under the hood, particles are rendered with Gaussian shading through the
+renderer described in [How it works](how-it-works.md).
 
 **Size safety cap.** A Gaussian is drawn as a camera-facing quad, and the cost of drawing it grows
 with the area it covers — independently of how many localizations you have. A single splat spanning
@@ -77,29 +95,33 @@ change the shape of anything you can actually resolve.
 
 ### 4) (Optional) Enable Z color encoding
 
-For 3D datasets in Fixed-size Gaussian mode, toggle Z color encoding to map depth to color. If you switch to Variable-size, Z color encoding is automatically turned off.
+For 3D datasets in **Fixed-size gaussian** mode, press **Activate Rainbow
+colorcoding in Z** to map depth to colour. The button is hidden in
+Variable-size mode and the encoding is turned off with it.
 
 ### 5) Add a decorator layer (Grid plane) & scalebar
 
-Activate the Grid plane in the Decorators tab, then adjust:
+Tick **Grid plane activated?** in the Decorators tab, then adjust:
 
-Line distance (µm)
+* **Grid line distance [µm]:**
+* **Grid beyond data [%]:** — how far the plane runs past the data, as a share
+  of each axis' span added at both ends. 0 stops it at the render range, which
+  is where it always stopped before.
+* **Grid line thickness:**
+* **Z Pos:**
+* **Grid line color:** and **Grid plane opacity:**
 
-Grid beyond data (%) — how far the plane runs past the data, as a share of each
-axis' span added at both ends. 0 stops it at the render range, which is where it
-always stopped before.
-
-Line thickness
-
-Z position
-
-Color & opacity
-
-The grid is created as a vectors layer and updates with your render ranges and view. You can also toggle the Scalebar from the same area.
+The grid is created as a vectors layer and updates with your render ranges and
+view. **Render Range Box** draws the render-range bounds in the same tab, and
+the **Scalebar** checkbox and its **Size of Scalebar [nm]:** field are in Data
+Controls.
 
 ### 6) Adjust the render range & view
 
-Use the Render Range sliders (X/Y/Z) to restrict what part of the dataset is drawn. The camera can be centered to the selected range; switching views (XY/YZ/XZ) is available in the controls.
+Use the **Render range** sliders — **X-range**, **Y-range**, **Z-range** — to
+restrict what part of the dataset is drawn, and **Reset Render Range** to put
+them back. **Reset view:** offers **XY**, **YZ** and **XZ**, each of which
+looks at the plane its label names, keeping the current centre and zoom.
 
 The interface computes global min/max in true nanometre world coordinates so localization channels
 and calibrated reference images share one stable frame.
@@ -134,17 +156,36 @@ remove it:
 NAPARI_STORM_RENDER_BUDGET_MB=8192 napari
 ```
 
-### 8) Adjust values (offset / rescale) & export
+### 8) Adjust values (offset / rescale)
 
-In Data Adjustment:
+In the **Data adjustment** tab, select a parameter and apply an offset or a
+rescale; the view refreshes automatically. The adjusted dataset can be written
+back out as a `.ns` file from the same tab.
 
-Select a parameter and apply add offset or rescale; the view refreshes automatically.
+### 9) Export an image
 
-Use Export current dataset as .ns to save your adjusted data.
+**Export OME-TIFF…** in Data Controls rasterizes the reconstruction at a pixel
+size you choose and writes that calibration into the file. Two things are worth
+knowing:
 
-### 9) Save or export processed datasets
+* **It never downsamples to fit.** The pixel size you ask for is the pixel size
+  you get, so a small one on a large field of view makes a large file. The
+  dialog shows the resulting dimensions, the file size and any warnings, and
+  updates them as you change the pixel size — all before anything is written.
+* **It exports what your filters left active**, not what the renderer happens
+  to be showing. If a large dataset is being displayed as a subsample to stay
+  within the memory budget, the export still contains every localization that
+  passed your filters.
 
-After filtering/adjustment, save your results from the respective panels (e.g., the .ns export).
+### 10) Save the scene
+
+**Save Scene…** writes this session's *decisions* — alignment, colours, render
+settings, reference-image placement, camera — as a small JSON file. The
+localizations are not copied into it; the scene points at the files it came
+from, so it stays small and does not duplicate your data.
+
+**Load Scene…** re-applies a saved scene to the datasets that are loaded now. It
+does not open files: which data is loaded stays your choice.
 
 Tips
 

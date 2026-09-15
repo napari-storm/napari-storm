@@ -5,8 +5,11 @@ napari-storm can render localizations inside any modern napari session
 a notebook — supplies the data and drives the lifecycle; the plugin supplies
 the Gaussian model and the renderer.
 
-Every example below is executed by `_tests/test_embedding.py`. The code you copy
-is the code CI runs, so it cannot quietly stop working.
+Every example below is executed by the test suite, so the code you copy is the
+code CI runs and it cannot quietly stop working. The lifecycle examples come
+from `_tests/test_embedding.py`; the column-declaration example from
+`_tests/test_declared_columns.py`, and the export example from
+`_tests/test_ome_export.py`.
 
 ## The whole of it
 
