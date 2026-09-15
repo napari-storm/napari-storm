@@ -19,7 +19,7 @@ from .DataToLayerInterface import DataToLayerInterface, look_at_plane
 from .Exp_Controls import custom_keys_and_scalebar
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
 from .GUI import NapariStormGUI
-from .localization_dataset_types import LocalizationDataBaseClass, StormDataClass
+from .localization_dataset_types import StormDataClass
 from .napari_particles._napari_compat import guard_camera_drag_state
 from .ns_constants import (
     DEFAULT_AXIS_VIEW,
@@ -776,15 +776,6 @@ class napari_storm(NapariStormGUI):
                 self.Esigma_min_z, self.render_var_gauss_sigma_min_z_nm
             )
         self.data_to_layer_itf.update_layer_appearance()
-
-    def allow_variable_gaussian_mode_for_storm_datasets(self):
-        only_storm_datasets = True
-        for dataset in self.localization_datasets:
-            if not isinstance(dataset, LocalizationDataBaseClass):
-                only_storm_datasets = False
-
-        if not only_storm_datasets:
-            self.Brenderoptions.removeItem(1)
 
     def open_localization_data_file_and_get_dataset(
         self,
