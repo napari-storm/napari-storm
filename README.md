@@ -85,15 +85,21 @@ one of the apply buttons.
 - hold shift and drag the mouse for panning
 
 ## Documentation
-There is a custom Q&A GPT for this repo specifically, available at
+
+Full documentation is at **https://napari-storm.readthedocs.io/** — a
+step-by-step tutorial, how the renderer works, and the embedding API for
+driving napari-storm from another application.
+
+There is also a custom Q&A GPT for this repo specifically, available at
 https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
 
-To access the documentation install the following packages (once):
+To build the docs locally, install the pinned toolchain (once):
+
 ```bash
-pip install mkdocs mkdocs-material mkdocstrings[python] pymdown-extensions
+pip install -r docs/requirements.txt
 ```
 
-Then build and serve the docs:
+Then serve them with live reload:
 
 ```bash
 mkdocs serve

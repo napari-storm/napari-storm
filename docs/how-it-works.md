@@ -1,11 +1,17 @@
 # How it Works
 
-napari-storm uses a **GPU-accelerated billboard rendering strategy** for sparse single-molecule data.
+napari-storm uses a **GPU-accelerated billboard rendering strategy** for sparse
+single-molecule data.
 
 ---
 
 ## Core Idea
-Instead of voxelizing the space (where most voxels are empty for the typical SMLM dataset), each localization is drawn as a **billboarded Gaussian** (two triangles always facing the camera). This:
+
+Instead of voxelizing the space — where most voxels are empty for the typical
+SMLM dataset — each localization is drawn as a **billboarded Gaussian**: two
+triangles that always face the camera, shaded so their footprint is the
+point spread function rather than a flat disc. This:
+
 - Reduces memory usage
 - Minimizes GPU fill cost
 - Retains accurate point footprints
@@ -13,6 +19,42 @@ Instead of voxelizing the space (where most voxels are empty for the typical SML
 
 ---
 
+## Deciding and drawing are separate
+
+The two halves of the plugin are split on purpose:
+
+* **The planner** decides *what* to draw — Gaussian widths, intensity
+  weighting, coordinates in nanometres. It is plain numpy, with no napari, no
+  Qt and no VisPy, and a test enforces that in a subprocess where all three are
+  made unimportable. This is the part that is science rather than presentation,
+  and it is testable without a viewer.
+* **A backend** decides *how*, and owns the GPU resources.
+
+That split is what lets a host application drive napari-storm without adopting
+the dock widget — see [Embedding](embedding.md).
+
+---
+
+## Two backends, one contract
+
+The quads are drawn by **instancing**: one quad is uploaded once and reused for
+every localization, with only centre, width and value stored per point. Where a
+GL session cannot instance, an older path that builds six real vertices per
+localization takes over, with a warning. Both satisfy the same renderer
+contract and every contract test runs against both — the image is the same, and
+the difference is roughly 12× in memory.
+
+| Backend | Bytes/localization | 5M update |
+|---|---:|---:|
+| Instanced | 28 | 0.16 s |
+| Billboard (fallback) | 352 | 2.47 s |
+
+`select_renderer(viewer)` makes the choice; in practice the fast path is the one
+you get, because instancing needs VisPy's `gl+`, which napari already selects
+for its own Points layer.
+
+---
+
 ## Architecture Overview
 
-![image](res/napari_storm_flowchart_linear.png)
+![napari-storm architecture flowchart](res/napari_storm_flowchart_linear.png)
