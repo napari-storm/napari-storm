@@ -41,7 +41,6 @@ nav:
   - How it works: how-it-works.md
   - Step-by-step tutorial: step-by-step.md
   - Embedding: embedding.md
-  - ImSwitch2 integration: imswitch-integration.md
   - API reference: api.md
 
 # mkdocstrings was configured here for a long time without a single `:::`

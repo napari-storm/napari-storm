@@ -10,4 +10,4 @@ live in `docs/`.
 
 | File | What it is |
 |---|---|
-| `imswitch-integration-log.md` | Rounds 1–5 of the napari-storm ↔ ImSwitch2 interface negotiation. The settled contract is written up in `docs/imswitch-integration.md`; this is how it was arrived at, including the two bugs the exercise found. |
+| `imswitch-integration-log.md` | Rounds 1–5 of the napari-storm ↔ ImSwitch2 interface negotiation. The outcome is summarised as a worked example under *Worked examples* in `docs/embedding.md`; this is how it was arrived at, including the two bugs the exercise found. |
