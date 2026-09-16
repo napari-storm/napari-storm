@@ -59,13 +59,14 @@ pick any file inside it and the whole dataset opens.
 If your file is not covered:
 
 
-- one can either write a custom import function by following the instructions in the src/napari_storm/Custom_Import.py
-- try the (experimental) file recognition import button, which will try to extract the headers of your file
-and lets you assign your data. This should work for any .hdf5, .csv or npy. file.
+- one can either write a custom import function by following the instructions in
+  `src/napari_storm/localization_dataset_types/Custom_Import.py`, then run it with the **Custom** button
+- try the (experimental) **Auto-detect Format** button, which will try to extract the headers of your file
+and lets you assign your data. This should work for any .hdf5, .csv or .npy file.
 
 ### Basic usage
-When a dataset is imported you should be able to see 4 tabs in the widget: Data Controls, File Infos, Decorators and
-Data Filter. In the data controls tab you can change the render range, load
+When a dataset is imported you should be able to see five tabs in the widget: Data Controls, File Infos, Decorators,
+Data Filter and Data adjustment. In the data controls tab you can change the render range, load
 a new file, merge the currently open dataset with another that from another file and change your view.
 There is also the option to change the colormap, adjust the contrast with the slider beneath the colormap picking as well
 as adding a scalebar or active rainbow colorcoding (for 3D datasets).
@@ -81,19 +82,25 @@ one of the apply buttons.
 
 ### Tips
 - Double click or drag the tabs anywhere to detach them from the window. This way you have an overview over all of them at the same time
-- For STORM/PALM ... datasets, it is possible to change the rendering options in the data controls tab to "variabel gaussian mode", to include the uncertainty values or photon counts for the rendering
+- For STORM/PALM ... datasets, it is possible to change the rendering options in the data controls tab to **Variable-size gaussian**, to include the uncertainty values or photon counts for the rendering
 - hold shift and drag the mouse for panning
 
 ## Documentation
-There is a custom Q&A GPT for this repo specifically, available at
+
+Full documentation is at **https://napari-storm.readthedocs.io/** — a
+step-by-step tutorial, how the renderer works, and the embedding API for
+driving napari-storm from another application.
+
+There is also a custom Q&A GPT for this repo specifically, available at
 https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
 
-To access the documentation install the following packages (once):
+To build the docs locally, install the pinned toolchain (once):
+
 ```bash
-pip install mkdocs mkdocs-material mkdocstrings[python] pymdown-extensions
+pip install -r docs/requirements.txt
 ```
 
-Then build and serve the docs:
+Then serve them with live reload:
 
 ```bash
 mkdocs serve

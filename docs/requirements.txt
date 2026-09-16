@@ -1,0 +1,6 @@
+# Documentation toolchain, pinned so a Read the Docs build and a local
+# `mkdocs serve` produce the same site.  Nothing here is needed to run
+# napari-storm; see setup.cfg for that.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==12.0

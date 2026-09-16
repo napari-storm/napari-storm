@@ -85,7 +85,7 @@ The contract between deciding and drawing:
 `open` · `update` · `set_visible` · `set_appearance` · `appearance` ·
 `value_range` · `close` · `close_all` · `is_open` · `host_bytes`
 
-Three implementations satisfy it, and every contract test runs against all
+Three drawing backends satisfy it, and every contract test runs against all
 three. The measured comparison that chose the default:
 
 | Backend | Bytes/localization | 5M update | Notes |
@@ -97,6 +97,10 @@ three. The measured comparison that chose the default:
 `napari_particles.selection.select_renderer(viewer)` picks between the first two
 based on what the GL session can actually do, and warns through napari when it
 has to fall back.
+
+A fourth implementation, **`NullRenderer`**, satisfies the same contract and
+draws nothing. It is exported from `napari_storm.core`, needs no GL context,
+and is what an embedding host should test against in CI.
 
 ### `DatasetStore`
 
@@ -126,7 +130,7 @@ closed-form Gaussian sum, not against a screen capture.
 ### `napari_storm`
 
 The dock widget. Owns the store, the interfaces and the tabs (Data Controls,
-File Infos, Decorators, Data Filter, Data Adjustment).
+File Infos, Decorators, Data Filter, Data adjustment).
 
 ### `DataToLayerInterface`
 
@@ -169,3 +173,7 @@ In `localization_dataset_types/`:
 * **`StormDataClass`** — pixel units plus photon counts and uncertainty.
 * **`MinfluxDataBaseClass` / `MinfluxDataAIClass`** — MINFLUX with trace ids or
   AI JSON.
+* **`MinfluxDataV2Class`** — the flat layout Imspector writes from 24.10
+  onwards, in every container it and pyMINFLUX produce (`.npy`, `.json`,
+  `.mat`, `.zarr`, `.pmx`). Which layout a file uses is determined from the
+  file, so nothing has to be selected.

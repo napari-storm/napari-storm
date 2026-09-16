@@ -37,7 +37,7 @@ __all__ = [
 RENDER_BYTES_PER_LOCALIZATION = 352
 
 #: Default ceiling on host-side render arrays across all loaded datasets.
-#: 2 GB is roughly 6.1M localizations, which is above the largest benchmark
+#: 2 GB is roughly 5.8M localizations, which is above the largest benchmark
 #: fixture and below what a 16 GB machine will tolerate alongside napari itself.
 DEFAULT_RENDER_BUDGET_MB = 2048.0
 

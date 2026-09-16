@@ -5,8 +5,11 @@ napari-storm can render localizations inside any modern napari session
 a notebook — supplies the data and drives the lifecycle; the plugin supplies
 the Gaussian model and the renderer.
 
-Every example below is executed by `_tests/test_embedding.py`. The code you copy
-is the code CI runs, so it cannot quietly stop working.
+Every example below is executed by the test suite, so the code you copy is the
+code CI runs and it cannot quietly stop working. The lifecycle examples come
+from `_tests/test_embedding.py`; the column-declaration example from
+`_tests/test_declared_columns.py`, and the export example from
+`_tests/test_ome_export.py`.
 
 ## The whole of it
 
@@ -139,7 +142,13 @@ for dataset_id, colour in ((7, "red"), (9, "green")):
     ))
 ```
 
-## Two things that will catch you
+## Things that will catch you
+
+**The renderer is main-thread and same-process.** Planning runs anywhere —
+`LocalizationTable`, `RenderPlanner`, filtering, coordinate conversion and
+export are all host-free. Everything from `renderer.open` onward must be on the
+Qt GUI thread, and building the geometry is the larger cost on big datasets, so
+it cannot be moved off it.
 
 **3-D data needs `ndisplay = 3`.** napari's canvas defaults to 2-D, where it
 shows a single slice. The dock widget sets this for you; a host must do it
@@ -150,6 +159,53 @@ is hard to get wrong — but if you pass `None` explicitly, napari assigns an
 arbitrary unnamed colormap and the instanced backend, which samples the
 colormap in its own shader, can resolve it to black. Every piece of state then
 reports itself healthy while the canvas stays empty.
+
+**The memory budget is yours to apply.** The dock widget applies it; a host
+driving the core directly does not get it for free:
+
+```python
+from napari_storm.memory_budget import (default_render_budget_mb,
+                                        max_localizations_for_budget)
+table.limit_active_to(max_localizations_for_budget(default_render_budget_mb()))
+```
+
+!!! danger "Two masks, and the distinction is load-bearing"
+
+    `filter_mask` is what the user selected; the display limit above it is what
+    the GPU can afford; `active_mask` is the intersection.
+
+    **Anything leaving the process — an export, a saved file, a reported count
+    — must read the filter set**, via `plan(..., selection=FILTERED)`. Only the
+    renderer sees the display set. Collapsing the two writes a subsample of
+    someone's data to disk because their graphics card was busy.
+
+## Axis order
+
+`RenderPlanner.coordinates` and `RenderPlanner.sigmas` both return `(z, y, x)`,
+which is napari's order, and a test pins the result against a real napari Points
+layer rather than against a convention of ours.
+
+This matters to a host because a reconstruction shares its viewer with ordinary
+napari layers — ROI shapes, points overlays, a widefield image. If the orders
+disagree the reconstruction is *misregistered* against all of them, and the
+error is self-consistent inside the plugin, so only a host ever sees it. A
+transposition check against a plain napari layer is worth keeping in your own
+test suite.
+
+`WorldTransform` is keyed by axis *name*, so placement code is unaffected by
+array column order.
+
+## Testing without a GL context
+
+`NullRenderer` satisfies the same contract and draws nothing:
+
+```python
+from napari_storm.core import NullRenderer
+renderer = NullRenderer()
+```
+
+It needs no viewer and no GL session, so an integration can be covered in CI on
+a headless runner.
 
 ## Exporting
 
@@ -178,6 +234,43 @@ streamed, so peak memory is one 1024² tile whatever the size of the file.
   means replacing the records and replanning; `set_records` resets the
   selection, so a host that filters must re-apply its mask afterwards.
 
-For a worked integration against a specific host, including the questions a
-host has to answer before the shape can be chosen, see
-[`imswitch-integration.md`](imswitch-integration.md).
+## Worked examples
+
+### ImSwitch2
+
+[ImSwitch2](https://github.com/openUC2/ImSwitch)'s ImProcess is a desktop Qt
+application that owns its own napari viewer, so it embeds in-process: it hands
+the viewer over rather than having one created for it. Its localizations are
+already a nanometre recarray (`frame`, `x/y/z_nm`, `sigma_x/y/z_nm`, `photons`),
+so the whole data contract is one `LocalizationTable` call with
+`sigma_columns` and `photon_column` declared.
+
+The part worth copying is the lifecycle mapping. ImProcess has an explicit
+results list, so it announces openings and closings rather than being watched:
+
+| Host event | napari-storm call |
+|---|---|
+| result created | nothing (lazy) |
+| result selected, first time | `open(next_id, request)` |
+| result selected, already open | set layer visible |
+| result deselected | set layer hidden — **not** `close` |
+| result changed in place | `update(id, request)` |
+| result removed | `close(id)`, id retired forever |
+| viewer torn down | `close_all()` |
+
+Hide-rather-than-close is where a host's architecture is most likely to collide
+with this one. A display path that rebuilds every managed layer from a spec on
+each selection change would open and close on every click — the churn `update`
+exists to prevent. The fix is to keep localization layers in a **parallel
+retained channel** keyed by result identity, where only explicit removal closes
+a dataset.
+
+Two things fell out of that integration that are worth knowing. Its live
+acquisition grows a table and re-updates, which is the `set_records` pattern
+above; and because its own export reads its own records rather than the
+renderer, the display-limit hazard cannot reach a file it writes — a shape worth
+copying deliberately.
+
+The full five-round interface negotiation, including the two bugs it found in
+napari-storm, is kept in `design-notes/imswitch-integration-log.md` in the
+repository.
