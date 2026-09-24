@@ -78,8 +78,8 @@ jobs:
     name: format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -91,7 +91,7 @@ jobs:
       - name: Check for whitespace errors
         run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -108,9 +108,9 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -129,7 +129,7 @@ jobs:
       #
       # macOS needs none of it; every step in the action is gated on the OS
       # that needs it, so running it everywhere is a no-op there.
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -145,15 +145,15 @@ jobs:
     name: Build and inspect the distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       # This job imports the widget module too, by way of
       # check_plugin_manifest.py, so it needs the same Qt system libraries.
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -194,7 +194,7 @@ jobs:
       - name: Resolve every plugin contribution
         run: /tmp/clean/bin/python scripts/check_plugin_manifest.py
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: distribution
           path: dist/
