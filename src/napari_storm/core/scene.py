@@ -203,7 +203,7 @@ def _colormap_name(colormap):
 
 
 def _appearance_to_dict(appearance):
-    return {
+    raw = {
         "colormap": _colormap_name(appearance.colormap),
         "opacity": appearance.opacity,
         "contrast_limits": (
@@ -213,18 +213,31 @@ def _appearance_to_dict(appearance):
         ),
         "visible": appearance.visible,
     }
+    # Written only when set, so a scene that never used them reads exactly as
+    # it did before they existed -- and a reader that predates them ignores
+    # them, which is why they need no new format version.
+    if appearance.footprint is not None:
+        raw["footprint"] = appearance.footprint
+    if appearance.min_disc_px is not None:
+        raw["min_disc_px"] = appearance.min_disc_px
+    return raw
 
 
 def _appearance_from_dict(raw):
     if not isinstance(raw, dict):
         return LayerAppearance()
     limits = raw.get("contrast_limits")
-    return LayerAppearance(
-        colormap=raw.get("colormap"),
-        opacity=raw.get("opacity"),
-        contrast_limits=None if limits is None else tuple(limits),
-        visible=raw.get("visible"),
-    )
+    try:
+        return LayerAppearance(
+            colormap=raw.get("colormap"),
+            opacity=raw.get("opacity"),
+            contrast_limits=None if limits is None else tuple(limits),
+            visible=raw.get("visible"),
+            footprint=raw.get("footprint"),
+            min_disc_px=raw.get("min_disc_px"),
+        )
+    except ValueError as exc:
+        raise SceneFormatError(f"invalid appearance: {exc}") from None
 
 
 def _transform_from_dict(raw):

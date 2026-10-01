@@ -11,12 +11,20 @@ from vispy.gloo import VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
 
+from ..core.renderer import (
+    DEFAULT_MIN_DISC_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    validate_footprint,
+    validate_min_disc_px,
+)
 from ._napari_compat import (
-    force_additive_blending,
+    apply_footprint_blending,
     get_layer_visual,
     release_additive_blending,
 )
 from .filters import ShaderFilter
+from .instanced_layer import DISC_QUAD_SCALE
 from .utils import generate_billboards_2d
 
 _DEFAULT_FILTER = object()
@@ -36,6 +44,7 @@ class BillboardsFilter(Filter):
         varying float v_z_center;
         varying float v_scale_intensity;
         varying mat2 covariance_inv;
+        varying mat2 v_disc_inv;
 
         void apply(){
             // original world coordinates of the (constant) particle squad, e.g. [5,5] for size 5
@@ -82,6 +91,30 @@ class BillboardsFilter(Filter):
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
+            // The disc footprint, line for line as InstancedBillboardsFilter
+            // draws it: the one-sigma ellipse in units of the largest sigma,
+            // and a floor under its on-screen radius.  The corners here are
+            // offsets from the origin, so the half-edge is |pos.x|.
+            vec3 rs = camera_right * $sigmas;
+            vec3 us = camera_up * $sigmas;
+            mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
+                                 dot(rs, us), dot(us, us));
+            v_disc_inv = $inverse(disc_cov);
+            float grow = 1.0;
+            if ($min_half_px > 0.0) {
+                float half_edge = abs(pos.x) * $quad_scale;
+                vec4 c = $visual_to_canvas(vec4($vertex_center, 1.0));
+                vec4 e = $visual_to_canvas(
+                    vec4($vertex_center + camera_right * half_edge, 1.0));
+                float det = disc_cov[0][0] * disc_cov[1][1]
+                          - disc_cov[0][1] * disc_cov[1][0];
+                float radius_px = length(e.xy / e.w - c.xy / c.w)
+                                * sqrt(sqrt(max(det, 0.0)));
+                if (radius_px > 0.0 && radius_px < $min_half_px) {
+                    grow = $min_half_px / radius_px;
+                }
+            }
+
             vec4 p1 = $transform(vec4($vertex_center.xyz + camera_right*pos.x + camera_up*pos.y, 1.));
             vec4 p2 = $transform(vec4($vertex_center,1));
             float dist = length(p1.xy/p1.w-p2.xy/p2.w);
@@ -99,7 +132,9 @@ class BillboardsFilter(Filter):
                 v_scale_intensity = scale;
 
             }
-            vec3 pos_real  = $vertex_center.xyz + camera_right*pos.x + camera_up*pos.y;
+            vec3 pos_real  = $vertex_center.xyz
+                           + (camera_right*pos.x + camera_up*pos.y)
+                             * ($quad_scale * grow);
             gl_Position = $transform(vec4(pos_real, 1.));
             vec4 center = $transform(vec4($vertex_center,1));
             v_z_center = center.z/center.w;
@@ -116,7 +151,9 @@ class BillboardsFilter(Filter):
         varying float v_z_center;
 
         void apply() {
-            gl_FragDepth = v_z_center;
+            // Window-space depth; see InstancedBillboardsFilter for why it is
+            // not v_z_center itself.
+            gl_FragDepth = 0.5 * v_z_center + 0.5;
             $texcoords;
         }
         """)
@@ -129,6 +166,10 @@ class BillboardsFilter(Filter):
         self._texcoords_buffer = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
         vfunc["texcoords"] = self._texcoords_buffer
         vfunc["antialias"] = float(antialias)
+        self._antialias = float(antialias)
+        # Gaussians until `set_footprint` says otherwise.
+        vfunc["quad_scale"] = 1.0
+        vfunc["min_half_px"] = 0.0
 
         self._centercoords_buffer = VertexBuffer(np.zeros((0, 3), dtype=np.float32))
         self._sigmas_buffer = VertexBuffer(np.zeros((0, 3), dtype=np.float32))
@@ -137,6 +178,18 @@ class BillboardsFilter(Filter):
         vfunc["sigmas"] = self._sigmas_buffer
 
         super().__init__(vcode=vfunc, vhook="post", fcode=ffunc, fhook="post")
+
+    def set_footprint(self, footprint, min_disc_px=0.0):
+        """Draw Gaussians, or discs no smaller than *min_disc_px* on screen.
+
+        Antialiasing is off for discs: it keeps a far-away sprite's size by
+        shrinking its texture, which is a Gaussian's answer to the problem the
+        disc floor answers.
+        """
+        disc = footprint == FOOTPRINT_DISC
+        self.vshader["quad_scale"] = DISC_QUAD_SCALE if disc else 1.0
+        self.vshader["min_half_px"] = 0.5 * float(min_disc_px) if disc else 0.0
+        self.vshader["antialias"] = 0.0 if disc else self._antialias
 
     @property
     def centercoords(self):
@@ -195,6 +248,10 @@ class BillboardsFilter(Filter):
         )
         # inverse of it
         self.vshader["camera"] = visual.transforms.get_transform("scene", "document")
+        # canvas pixels, for the minimum on-screen size of a disc
+        self.vshader["visual_to_canvas"] = visual.transforms.get_transform(
+            "visual", "canvas"
+        )
         super()._attach(visual)
 
 
@@ -269,6 +326,8 @@ class Particles(Surface):
         self._viewer = None
         self._visual = None
         self._shader_name = shader_name
+        self._footprint = FOOTPRINT_GAUSSIAN
+        self._min_disc_px = DEFAULT_MIN_DISC_PX
         # Names of layer-list events we connected to, so close() can undo them.
         self._layer_event_connections = []
         super().__init__((vertices, faces, values), texcoords=texcoords, **kwargs)
@@ -420,6 +479,38 @@ class Particles(Surface):
         self.filter = ShaderFilter(name)
         self._attach_filter()
 
+    @property
+    def footprint(self):
+        """``"gaussian"`` or ``"disc"``; see `core.renderer.LayerAppearance`."""
+        return self._footprint
+
+    @footprint.setter
+    def footprint(self, value):
+        self._footprint = validate_footprint(value)
+        self._apply_footprint()
+
+    @property
+    def min_disc_px(self):
+        """Smallest on-screen diameter of a disc, in canvas pixels."""
+        return self._min_disc_px
+
+    @min_disc_px.setter
+    def min_disc_px(self, value):
+        self._min_disc_px = validate_min_disc_px(value)
+        self._apply_footprint()
+
+    def _apply_footprint(self):
+        self._billboard_filter.set_footprint(self._footprint, self._min_disc_px)
+        # The shader is swapped only into and out of "disc", so a layer built
+        # with a filter of its own keeps it while it stays a Gaussian one.
+        if self._footprint == FOOTPRINT_DISC and self._shader_name != "disc":
+            self.shader = "disc"
+        elif self._footprint == FOOTPRINT_GAUSSIAN and self._shader_name == "disc":
+            self.shader = "gaussian"
+        self._apply_blend_state()
+        if self._visual is not None:
+            self._visual.update()
+
     def _detach_filter(self):
         if self._visual is None:
             return
@@ -436,18 +527,18 @@ class Particles(Surface):
         return get_layer_visual(viewer, self)
 
     def _apply_blend_state(self, event=None):
-        """Force true additive blending, and keep it forced.
+        """Keep the blend state the footprint needs, and keep it kept.
 
-        Until P0-01 additive blending was repaired by accident -- every update
-        destroyed and rebuilt the layer, and `add_to_viewer` set the state again
-        on the way back in.  Updating in place removed the rebuild and with it
-        the repair, so it has to be asserted deliberately.  See
-        `force_additive_blending` for why it is asserted by wrapping the setter
-        rather than from event handlers.
+        Gaussians need true additive blending, forced.  Until P0-01 additive
+        blending was repaired by accident -- every update destroyed and rebuilt
+        the layer, and `add_to_viewer` set the state again on the way back in.
+        Updating in place removed the rebuild and with it the repair, so it has
+        to be asserted deliberately.  See `force_additive_blending` for why it
+        is asserted by wrapping the setter rather than from event handlers.
+        Discs need napari's opaque preset instead; see
+        `apply_footprint_blending`.
         """
-        if self._visual is None:
-            return
-        force_additive_blending(self._visual)
+        apply_footprint_blending(self, self._visual, self._footprint)
 
     def add_to_viewer(self, viewer):
         self._viewer = viewer

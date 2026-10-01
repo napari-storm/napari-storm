@@ -103,6 +103,20 @@ _shader_functions = {
                 return vec4(1,1,1,1);
             }
             """,
+    # The point-cloud footprint (`core.renderer.FOOTPRINT_DISC`): the one-sigma
+    # ellipse, flat.  Every entry here returns a factor for the incoming
+    # colour, so alpha is divided back out -- a disc is opaque, and napari
+    # blends the bottom-most layer with the canvas at whatever alpha arrives.
+    # Opacity 0 still hides the layer.
+    "disc": """
+            varying mat2 v_disc_inv;
+
+            vec4 func(vec2 x){
+                if (gl_FragColor.a <= 0.0 || dot(x, v_disc_inv*x) > 1.0)
+                    discard;
+                return vec4(1.0, 1.0, 1.0, 1.0 / gl_FragColor.a);
+            }
+            """,
     "bubble": """
             vec4 func(vec2 x){
                 float r = length(x);

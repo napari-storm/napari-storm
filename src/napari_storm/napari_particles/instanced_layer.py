@@ -31,8 +31,16 @@ from vispy.gloo import VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
 
+from ..core.render_planner import SIGMA_TO_SIZE_FACTOR
+from ..core.renderer import (
+    DEFAULT_MIN_DISC_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    validate_footprint,
+    validate_min_disc_px,
+)
 from ._napari_compat import (
-    force_additive_blending,
+    apply_footprint_blending,
     get_layer_visual,
     release_additive_blending,
 )
@@ -44,6 +52,12 @@ QUAD_XY = np.array(
     [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=np.float32
 )
 QUAD_FACES = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
+
+#: A disc quad, as a fraction of the Gaussian billboard.  The billboard edge is
+#: `SIGMA_TO_SIZE_FACTOR` largest sigmas, room for a Gaussian's tails; a disc is
+#: the one-sigma outline, so its quad needs a half-edge of one largest sigma.
+#: Drawing discs on the full billboard would discard seven fragments in eight.
+DISC_QUAD_SCALE = 2.0 / SIGMA_TO_SIZE_FACTOR
 
 # There is deliberately no texture-coordinate buffer here.  A per-vertex
 # attribute has to be in the order the vertices are *drawn*, and that is not the
@@ -79,6 +93,7 @@ class InstancedBillboardsFilter(Filter):
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 covariance_inv;
+        varying mat2 v_disc_inv;
 
         void apply(){
             // The quad corner, in world units, recovered the same way the
@@ -107,8 +122,47 @@ class InstancedBillboardsFilter(Filter):
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
+            // The disc footprint is the one-sigma ellipse, filled.  Its
+            // covariance in the screen basis is the marginal of the
+            // axis-aligned diag(sigma^2) -- what an orthographic projection
+            // of the 3-D ellipsoid looks like -- in units of the largest
+            // sigma, which is the half-edge of a disc quad.  Computed for
+            // Gaussians as well and not used there: one branch in the
+            // fragment shader is cheaper than a second program to keep in
+            // step with this one.
+            vec3 rs = camera_right * $sigmas;
+            vec3 us = camera_up * $sigmas;
+            mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
+                                 dot(rs, us), dot(us, us));
+            v_disc_inv = $inverse(disc_cov);
+
+            // A disc smaller on screen than $min_half_px (a radius, in canvas
+            // pixels) is enlarged to it, so a point cloud stays visible when
+            // zoomed out.  Measured on the ellipse's equal-area radius, the
+            // square root of its semi-axes' product.  Zero for Gaussians,
+            // which are never enlarged: their summed intensity is the
+            // measurement.
+            float grow = 1.0;
+            if ($min_half_px > 0.0) {
+                float half_edge = 0.5 * $billboard_size * $quad_scale;
+                vec4 c = $visual_to_canvas(vec4($vertex_center, 1.0));
+                vec4 e = $visual_to_canvas(
+                    vec4($vertex_center + camera_right * half_edge, 1.0));
+                float det = disc_cov[0][0] * disc_cov[1][1]
+                          - disc_cov[0][1] * disc_cov[1][0];
+                float radius_px = length(e.xy / e.w - c.xy / c.w)
+                                * sqrt(sqrt(max(det, 0.0)));
+                if (radius_px > 0.0 && radius_px < $min_half_px) {
+                    grow = $min_half_px / radius_px;
+                }
+            }
+
+            // $quad_scale shrinks a disc's quad to its bounding square; the
+            // quad coordinate below is taken before scaling, so it still runs
+            // -1 to 1 across whatever is drawn.
             vec3 pos_real = $vertex_center.xyz
-                          + camera_right*pos.x + camera_up*pos.y;
+                          + (camera_right*pos.x + camera_up*pos.y)
+                            * ($quad_scale * grow);
             gl_Position = $transform(vec4(pos_real, 1.));
 
             vec4 center = $transform(vec4($vertex_center,1));
@@ -125,11 +179,18 @@ class InstancedBillboardsFilter(Filter):
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 covariance_inv;
+        varying mat2 v_disc_inv;
 
         void apply() {
-            gl_FragDepth = v_z_center;
+            // Window-space depth, which is what the depth test compares: NDC
+            // mapped onto the default depth range [0, 1], which neither VisPy
+            // nor napari changes.  This used to write v_z_center itself -- NDC,
+            // -1 to 1 -- and it went unnoticed only because Gaussians are
+            // drawn with the depth test off.  Under one, everything nearer
+            // than the middle of the depth range clamped to the same depth and
+            // occlusion followed draw order.
+            gl_FragDepth = 0.5 * v_z_center + 0.5;
             vec2 x = 2.0*($texcoords - 0.5);
-            float gaussian = exp(-2.0*dot(x, covariance_inv*x));
             // napari puts the layer's opacity in the incoming alpha, and under
             // additive blending alpha is the *only* thing scaling what this
             // layer contributes.  Overwriting it -- which this shader used to
@@ -154,10 +215,22 @@ class InstancedBillboardsFilter(Filter):
                 (v_instance_value - $clim_low) / $clim_range, 0.0, 1.0
             );
             vec4 mapped = $cmap(t);
-            // The falloff goes in alpha as well as colour so additive blending
-            // squares it, matching the shader this replaces.
-            gl_FragColor = mapped * gaussian;
-            gl_FragColor.a = gaussian * layer_alpha;
+            if ($footprint > 0.5) {
+                // A disc: flat colour inside the one-sigma ellipse, nothing
+                // outside.  Alpha is 1 because a disc is opaque: napari
+                // blends the bottom-most layer with the canvas even under
+                // its "opaque" preset, at whatever alpha arrives.
+                if (layer_alpha <= 0.0 || dot(x, v_disc_inv*x) > 1.0) {
+                    discard;
+                }
+                gl_FragColor = vec4(mapped.rgb, 1.0);
+            } else {
+                float gaussian = exp(-2.0*dot(x, covariance_inv*x));
+                // The falloff goes in alpha as well as colour so additive
+                // blending squares it, matching the shader this replaces.
+                gl_FragColor = mapped * gaussian;
+                gl_FragColor.a = gaussian * layer_alpha;
+            }
         }
         """)
 
@@ -170,6 +243,10 @@ class InstancedBillboardsFilter(Filter):
         # Identity window until the layer says otherwise.
         ffunc["clim_low"] = 0.0
         ffunc["clim_range"] = 1.0
+        # Gaussians until `set_footprint` says otherwise.
+        ffunc["footprint"] = 0.0
+        vfunc["quad_scale"] = 1.0
+        vfunc["min_half_px"] = 0.0
 
         self._texcoord_varying = Varying("v_texcoord", "vec2")
         vfunc["inverse"] = vmat_inv
@@ -217,6 +294,13 @@ class InstancedBillboardsFilter(Filter):
         """The quad edge, needed to recover the quad coordinate in the shader."""
         self.vshader["billboard_size"] = float(size)
 
+    def set_footprint(self, footprint, min_disc_px=0.0):
+        """Draw Gaussians, or discs no smaller than *min_disc_px* on screen."""
+        disc = footprint == FOOTPRINT_DISC
+        self.fshader["footprint"] = 1.0 if disc else 0.0
+        self.vshader["quad_scale"] = DISC_QUAD_SCALE if disc else 1.0
+        self.vshader["min_half_px"] = 0.5 * float(min_disc_px) if disc else 0.0
+
     def set_instances(self, centers, sigmas, values):
         """Upload one row per localization."""
         self._centers_buffer.set_data(
@@ -238,6 +322,11 @@ class InstancedBillboardsFilter(Filter):
             "document", "scene"
         )
         self.vshader["camera"] = visual.transforms.get_transform("scene", "document")
+        # Canvas pixels, for the minimum on-screen size of a disc: logical
+        # pixels, so the floor reads the same on a high-density display.
+        self.vshader["visual_to_canvas"] = visual.transforms.get_transform(
+            "visual", "canvas"
+        )
         super()._attach(visual)
 
 
@@ -264,12 +353,44 @@ class InstancedParticles(Surface):
         self._billboard_size = float(np.max(size))
 
         self._billboard_filter = InstancedBillboardsFilter()
+        self._footprint = FOOTPRINT_GAUSSIAN
+        self._min_disc_px = DEFAULT_MIN_DISC_PX
         self._viewer = None
         self._visual = None
         self._layer_event_connections = []
 
         vertices, faces, values4 = self._quad_mesh()
         super().__init__((vertices, faces, values4), **kwargs)
+
+    # ------------------------------------------------------------------
+    # Footprint
+    # ------------------------------------------------------------------
+
+    @property
+    def footprint(self):
+        """``"gaussian"`` or ``"disc"``; see `core.renderer.LayerAppearance`."""
+        return self._footprint
+
+    @footprint.setter
+    def footprint(self, value):
+        self._footprint = validate_footprint(value)
+        self._apply_footprint()
+
+    @property
+    def min_disc_px(self):
+        """Smallest on-screen diameter of a disc, in canvas pixels."""
+        return self._min_disc_px
+
+    @min_disc_px.setter
+    def min_disc_px(self, value):
+        self._min_disc_px = validate_min_disc_px(value)
+        self._apply_footprint()
+
+    def _apply_footprint(self):
+        self._billboard_filter.set_footprint(self._footprint, self._min_disc_px)
+        self._apply_blend_state()
+        if self._visual is not None:
+            self._visual.update()
 
     # ------------------------------------------------------------------
     # Geometry
@@ -413,18 +534,18 @@ class InstancedParticles(Surface):
         self._apply_blend_state()
 
     def _apply_blend_state(self, event=None):
-        """Force true additive blending, and keep it forced.
+        """Keep the blend state the footprint needs, and keep it kept.
 
-        Until P0-01 additive blending was repaired by accident -- every update
-        destroyed and rebuilt the layer, and `add_to_viewer` set the state again
-        on the way back in.  Updating in place removed the rebuild and with it
-        the repair, so it has to be asserted deliberately.  See
-        `force_additive_blending` for why it is asserted by wrapping the setter
-        rather than from event handlers.
+        Gaussians need true additive blending, forced.  Until P0-01 additive
+        blending was repaired by accident -- every update destroyed and rebuilt
+        the layer, and `add_to_viewer` set the state again on the way back in.
+        Updating in place removed the rebuild and with it the repair, so it has
+        to be asserted deliberately.  See `force_additive_blending` for why it
+        is asserted by wrapping the setter rather than from event handlers.
+        Discs need napari's opaque preset instead; see
+        `apply_footprint_blending`.
         """
-        if self._visual is None:
-            return
-        force_additive_blending(self._visual)
+        apply_footprint_blending(self, self._visual, self._footprint)
 
     def _apply_colormap(self, event=None):
         """Hand the visual's colormap to the shader that samples it."""

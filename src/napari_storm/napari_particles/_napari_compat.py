@@ -16,9 +16,12 @@ FutureWarning from 0.6 onward and is slated for removal in 0.8, so
 import warnings
 import weakref
 
+from ..core.renderer import FOOTPRINT_DISC
+
 __all__ = [
     "NapariInternalsChanged",
     "ADDITIVE_BLEND_STATE",
+    "apply_footprint_blending",
     "get_qt_viewer",
     "get_layer_visual",
     "get_layer_controls",
@@ -147,6 +150,32 @@ def release_additive_blending(visual):
         visual.set_gl_state = original
     except (AttributeError, TypeError):
         pass
+
+
+def apply_footprint_blending(layer, visual, footprint):
+    """Give *layer*'s *visual* the blend state its *footprint* needs.
+
+    Gaussians are summed, so their blending is forced additive -- see
+    :func:`force_additive_blending` for why it is forced rather than set.  Discs
+    occlude: the force is released and napari's own ``opaque`` preset applies,
+    depth test on, which also keeps it applied across napari's re-orderings.
+    The layer's ``blending`` property is moved with it, so what napari's
+    controls report is what is drawn.
+    """
+    if visual is None:
+        return
+    if footprint == FOOTPRINT_DISC:
+        release_additive_blending(visual)
+        if layer.blending != "opaque":
+            layer.blending = "opaque"
+        else:
+            # Same value, so no event: re-apply the preset over whatever the
+            # released wrapper last set.
+            layer.events.blending()
+    else:
+        if layer.blending != "additive":
+            layer.blending = "additive"
+        force_additive_blending(visual)
 
 
 def get_layer_controls(viewer, layer):

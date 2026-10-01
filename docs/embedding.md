@@ -142,6 +142,45 @@ for dataset_id, colour in ((7, "red"), (9, "green")):
     ))
 ```
 
+## A point cloud instead of Gaussians
+
+The dock widget always draws Gaussians, summed: the reconstruction. A host that
+wants a point cloud -- the scatter plot many localization tools draw -- can ask
+for discs instead:
+
+```python
+from napari_storm.core import FOOTPRINT_DISC, LayerAppearance
+
+renderer.open(1, RenderPlanner().plan(
+    table, GaussianSettings(fixed_sigma_xy_nm=10.0, fixed_sigma_z_nm=10.0),
+    traits, name="points",
+))
+renderer.set_appearance(1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=3.0))
+```
+
+Each localization is then a flat, opaque disc, and a few things follow:
+
+* **The disc is the one-sigma outline, filled.** Its radius is the width the
+  planner computed, so `fixed_sigma_xy_nm` is the point size in nanometres. In
+  variable mode each disc is as wide as its own uncertainty.
+* **Discs are depth-tested.** A nearer disc hides a farther one whatever order
+  they were drawn in, across datasets as well. Gaussians add up instead, which
+  is right for a reconstruction and why overlapping ones turn white.
+* **Discs are opaque.** Opacity between 0 and 1 has no effect: translucent
+  points have to be depth-sorted to be drawn correctly, and drawing them
+  unsorted is the defect a point cloud is wanted to avoid. Opacity 0 still
+  hides the dataset.
+* **`min_disc_px` keeps them visible zoomed out.** It is the smallest diameter
+  a disc is drawn at, in screen pixels, 2 unless you say otherwise. Gaussians
+  are never enlarged: their summed intensity is the measurement.
+* **It is appearance, not data.** Switching costs no upload and survives
+  `update`; `open` starts every dataset as Gaussians, so set it after opening.
+
+Colour works as for Gaussians: the request's values through the colormap and
+contrast limits. The dock widget does not offer discs, and the exporter always
+writes Gaussians. `NapariPointsRenderer`, the comparison backend, approximates
+the size floor through napari's own marker limits.
+
 ## Things that will catch you
 
 **The renderer is main-thread and same-process.** Planning runs anywhere —
