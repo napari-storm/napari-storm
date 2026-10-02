@@ -4,9 +4,10 @@
 
 ### 0) Launch napari-storm and import a dataset:
 
-    napari
+    napari-storm
 
-→ Open **Plugins → Napari STORM**.
+opens napari with the dock already docked. Alternatively start `napari` and open
+**Plugins → Napari STORM**.
 
 Import your dataset by drag & drop, or with **Import Localization File…** in the
 Data Controls tab. Closing the file picker without

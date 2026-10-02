@@ -1,32 +1,12 @@
-import warnings
+"""Start napari with the napari-storm dock from a source checkout.
 
-import napari
+Installed, the same launcher is the ``napari-storm`` command; it lives in
+``src/napari_storm/__main__.py`` so that it ships with the package.
+"""
 
-warnings.simplefilter(action="ignore", category=FutureWarning)
-# After the filter above, deliberately: importing napari_storm pulls in
-# napari, which is what emits the FutureWarnings being silenced.
-from napari_storm import napari_storm  # noqa: E402
+import sys
 
-
-def main():
-    from napari_storm.napari_particles._napari_compat import enable_instanced_backend
-
-    if not enable_instanced_backend():
-        print(
-            "instanced rendering is unavailable: VisPy's 'gl+' backend "
-            "could not be selected. Is PyOpenGL installed?"
-        )
-        return 2
-    print("GL backend: gl+ (instancing available)")
-    v = napari.Viewer()
-    widget = napari_storm(v)
-    v.window.qt_viewer.dockLayerControls.setVisible(False)
-    v.window.qt_viewer.dockLayerList.setVisible(False)
-    v.window.add_dock_widget(widget, area="right", name="napari-STORM")
-
-    napari.run()
-    return 0
-
+from napari_storm.__main__ import main
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

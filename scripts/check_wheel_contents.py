@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import configparser
 import sys
 import zipfile
 from pathlib import Path
@@ -20,6 +21,7 @@ from pathlib import Path
 # Files that must be present for the plugin to work once installed.
 REQUIRED_FILES = [
     "napari_storm/__init__.py",
+    "napari_storm/__main__.py",
     "napari_storm/_dock_widget.py",
     "napari_storm/_reader.py",
     "napari_storm/napari.yaml",
@@ -30,6 +32,11 @@ REQUIRED_SUBPACKAGES = [
     "napari_storm/localization_dataset_types/",
     "napari_storm/napari_particles/",
     "napari_storm/pyqt/",
+]
+
+# The `napari-storm` command: (group, name, target) in entry_points.txt.
+REQUIRED_ENTRY_POINTS = [
+    ("console_scripts", "napari-storm", "napari_storm.__main__:main"),
 ]
 
 # Tests must not ship inside the distribution.
@@ -49,8 +56,17 @@ def main(argv: list[str]) -> int:
 
     with zipfile.ZipFile(wheel_path) as zf:
         names = zf.namelist()
+        entry_points = configparser.ConfigParser()
+        for name in names:
+            if name.endswith(".dist-info/entry_points.txt"):
+                entry_points.read_string(zf.read(name).decode())
 
     problems: list[str] = []
+
+    for group, name, target in REQUIRED_ENTRY_POINTS:
+        found = entry_points.get(group, name, fallback=None)
+        if found is None or found.strip() != target:
+            problems.append(f"entry point {group}: {name} = {target} is {found!r}")
 
     for required in REQUIRED_FILES:
         if required not in names:
