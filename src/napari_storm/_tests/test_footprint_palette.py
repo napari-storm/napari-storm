@@ -166,11 +166,17 @@ def test_the_floor_lifts_every_visualisation_but_never_the_gaussian(
         _request(sigma_nm=1.0),
         min_size_px=12.0,
     )
-    lit = np.count_nonzero(_lit(image))
     if footprint_named(name).reconstruction:
+        lit = np.count_nonzero(_lit(image))
         assert lit <= 4 * scale * scale, lit
     else:
-        assert lit >= 20, lit
+        # Anything drawn counts, and in device pixels.  Glow is a bright core
+        # in a faint halo: its core alone is 4 pixels at scale 1 and 24 at
+        # scale 2, so a bright-pixel count passed on Retina displays and
+        # failed on every CI runner.  Drawn at all, it covers 800.  Without
+        # the floor every footprint draws 0 or 1 pixel.
+        lit = np.count_nonzero(_lit(image, threshold=1))
+        assert lit >= 20 * scale * scale, lit
 
 
 # ----------------------------------------------------------------- the dock
