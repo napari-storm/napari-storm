@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use napari-storm, please cite it as below."
+title: "napari-storm: interactive visualization of single-molecule localization microscopy data in napari"
+type: software
+version: 3.0.0
+date-released: 2026-10-02
+license: BSD-3-Clause
+repository-code: "https://github.com/napari-storm/napari-storm"
+url: "https://github.com/napari-storm/napari-storm"
+authors:
+  - family-names: Reinkensmeier
+    given-names: Lenny
+keywords:
+  - single-molecule localization microscopy
+  - SMLM
+  - MINFLUX
+  - napari
+  - visualization
+  - GPU rendering
+references:
+  - type: software
+    title: napari-particles
+    authors:
+      - family-names: Weigert
+        given-names: Martin
+    repository-code: "https://github.com/maweigert/napari-particles"
+    license: BSD-3-Clause
+    notes: "The experimental Particles layer this plugin's renderer descends from."
