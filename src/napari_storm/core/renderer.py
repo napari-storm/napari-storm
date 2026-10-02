@@ -99,6 +99,15 @@ class LayerAppearance:
             outline, in screen pixels, so it does not vanish when zoomed out.
             The scientific Gaussian is never enlarged: its summed intensity is
             the measurement.
+        summed_contrast: apply ``contrast_limits`` to the summed image of an
+            additive footprint rather than to each localization.  The limits
+            are then in units of summed weight -- with fixed-size Gaussians,
+            the number of localizations overlapping on screen -- so the lower
+            one hides sparse regions and keeps dense ones, as on any image.
+            Opaque footprints have no sum and are always windowed per
+            localization; so is Z colour coding, which turns it off because
+            its values are depths, not weights.  On unless set otherwise, on
+            backends that can; see `LocalizationRenderer.contrast_is_summed`.
     """
 
     colormap: Any = None
@@ -107,6 +116,7 @@ class LayerAppearance:
     visible: bool = None
     footprint: str = None
     min_size_px: float = None
+    summed_contrast: bool = None
 
     def __post_init__(self):
         if self.footprint is not None:
@@ -218,6 +228,16 @@ class LocalizationRenderer:
         application, which would make it untestable as a substitute.
         """
         raise NotImplementedError
+
+    def contrast_is_summed(self, dataset_id):
+        """Whether *dataset_id*'s contrast window acts on the summed image now.
+
+        Decides what a contrast control's numbers mean: summed weight when
+        True, the per-localization value when False.  Not abstract: a backend
+        that windows every localization on its own -- all of them, before
+        summed contrast existed -- is right to inherit False.
+        """
+        return False
 
     def close(self, dataset_id):
         """Release everything owned for *dataset_id*.  Safe if nothing is open."""

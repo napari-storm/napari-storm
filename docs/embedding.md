@@ -123,6 +123,17 @@ renderer.set_appearance(1, LayerAppearance(colormap="green", opacity=0.5))
 Fields left as `None` mean "leave this as it is", so a control that owns one
 slider can send only what it changed.
 
+**Contrast acts on the summed image.** For the Gaussian and every other
+additive footprint, `contrast_limits` window the sum of the splats, not each
+localization: the layer is drawn into a 32-bit float target first, and the
+window and colormap are applied once, to the total. The limits are in units of
+summed weight -- each localization's value times its footprint -- so with values
+of 1 they count overlapping localizations, and the lower limit hides sparse
+regions while keeping dense ones. `renderer.contrast_is_summed(dataset_id)`
+says which model is in effect. Set `LayerAppearance(summed_contrast=False)` when
+the values are not weights -- the dock does for Z colour coding, where they are
+depths -- to window each localization on its own instead.
+
 **Closing** releases the layer and everything behind it:
 
 ```python
@@ -190,8 +201,8 @@ A few things follow:
   `update`; `open` starts every dataset as the Gaussian, so set it after
   opening.
 
-Colour works as for Gaussians: the request's values through the colormap and
-contrast limits. `NapariPointsRenderer`, the comparison backend, draws each
+Colour is per marker: each localization's own value through the colormap and
+contrast limits, since an opaque footprint has no sum to window. `NapariPointsRenderer`, the comparison backend, draws each
 opaque footprint as napari's nearest marker and approximates the size floor
 through napari's own marker limits.
 

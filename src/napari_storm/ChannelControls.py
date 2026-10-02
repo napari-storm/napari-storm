@@ -120,6 +120,15 @@ class ChannelControls(QWidget):
         self.factor_spin.setValue(1.0)
         self.factor_spin.valueChanged.connect(self._on_factor_spin_changed)
 
+        # Which contrast model the backend is in decides what the left handle
+        # means: a linear cutoff on each localization's value, or -- when the
+        # window acts on the summed image -- a threshold on the sum, on the
+        # same log axis as the right handle.  Each model keeps its own handle
+        # positions, so switching footprint does not reinterpret them.
+        self._summed = self.data_to_layer_itf.contrast_is_summed(self.dataset)
+        self._slider_positions = {False: (0.0, 0.5), True: (0.0, 0.5)}
+        self._configure_cutoff_spin()
+
         # ── Opacity slider ──
         self.Slider_opacity = QSlider(Qt.Horizontal)
         self.Slider_opacity.setRange(0, 100)
@@ -220,12 +229,69 @@ class ChannelControls(QWidget):
     def _unload_dataset(self):
         self._parent.unload_dataset(self.dataset)
 
+    def _cutoff_from_slider(self, s_cutoff):
+        """The left handle's position as a value, in the current model."""
+        if not self._summed:
+            return self._orig_min + s_cutoff * self._orig_span
+        if s_cutoff <= 0.0:
+            return self._orig_min
+        logv = -self.LOG_RANGE + s_cutoff * (2 * self.LOG_RANGE)
+        return self._orig_min + 10**logv * self._orig_span
+
+    def _slider_from_cutoff(self, cutoff):
+        """The inverse of `_cutoff_from_slider`, clipped to the slider."""
+        if not self._summed:
+            return (cutoff - self._orig_min) / self._orig_span
+        relative = (cutoff - self._orig_min) / self._orig_span
+        if relative <= 10**-self.LOG_RANGE:
+            return 0.0
+        position = (math.log10(relative) + self.LOG_RANGE) / (2 * self.LOG_RANGE)
+        return min(max(position, 0.0), 1.0)
+
+    def _configure_cutoff_spin(self):
+        """Give the cutoff box the range and meaning of the current model."""
+        self.cutoff_spin.blockSignals(True)
+        if self._summed:
+            top = self._orig_min + 10**self.LOG_RANGE * self._orig_span
+            self.cutoff_spin.setRange(self._orig_min, top)
+            self.cutoff_spin.setSingleStep(0.1 * self._orig_span)
+            self.cutoff_spin.setToolTip(
+                "Hide everything where the summed image is below this. With "
+                "fixed-size Gaussians it counts overlapping localizations."
+            )
+        else:
+            self.cutoff_spin.setRange(self._orig_min, self._orig_max)
+            self.cutoff_spin.setSingleStep(self._orig_span / 100.0)
+            self.cutoff_spin.setToolTip(
+                "The value below which each localization is drawn at the "
+                "bottom of the colormap."
+            )
+        self.cutoff_spin.blockSignals(False)
+
+    def sync_contrast_model(self):
+        """Follow the backend into the other contrast model, if it moved.
+
+        Called whenever something that decides the model may have changed:
+        the footprint, Z colour coding, or a rebuilt layer.
+        """
+        summed = self.data_to_layer_itf.contrast_is_summed(self.dataset)
+        if summed == self._summed:
+            return
+        self._slider_positions[self._summed] = self.Slider_colormap_range.value()
+        self._summed = summed
+        self._configure_cutoff_spin()
+        positions = self._slider_positions[summed]
+        self.Slider_colormap_range.blockSignals(True)
+        self.Slider_colormap_range.setValue(positions)
+        self.Slider_colormap_range.blockSignals(False)
+        self._on_contrast_slider_changed(self.Slider_colormap_range.value())
+
     def _on_contrast_slider_changed(self, vals):
         """Slider moved: compute/apply cutoff & max, then sync spins."""
         s_cutoff, s_logpos = vals
         data_min = self._orig_min
 
-        cutoff = data_min + s_cutoff * self._orig_span
+        cutoff = self._cutoff_from_slider(s_cutoff)
         logv = -self.LOG_RANGE + s_logpos * (2 * self.LOG_RANGE)
         factor = 10**logv
         maxval = data_min + factor * self._orig_span
@@ -246,7 +312,7 @@ class ChannelControls(QWidget):
 
     def _on_cutoff_spin_changed(self, val):
         """User edited cutoff: update slider & reapply."""
-        s_cut = (val - self._orig_min) / self._orig_span
+        s_cut = self._slider_from_cutoff(val)
         lo, hi = self.Slider_colormap_range.value()
         self.Slider_colormap_range.blockSignals(True)
         self.Slider_colormap_range.setValue((s_cut, hi))
@@ -273,7 +339,11 @@ class ChannelControls(QWidget):
                 if self.z_color_encoding_mode
                 else self.data_to_layer_itf.colormap[idx]
             ),
+            # Z colour coding windows each localization's depth; everything
+            # else windows the summed image where the footprint has one.
+            summed_contrast=not self.z_color_encoding_mode,
         )
+        self.sync_contrast_model()
 
     def adjust_z_color_encoding_opacity(self):
         self.data_to_layer_itf.set_appearance(
