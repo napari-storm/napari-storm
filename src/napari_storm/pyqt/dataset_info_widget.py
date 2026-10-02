@@ -9,13 +9,13 @@ from qtpy.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
-    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from ..CustomErrors import ParentError
+from .vertical_scroll_area import VerticalScrollArea
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -211,9 +211,7 @@ class DatasetInfoPanel(QWidget):
         outer.addWidget(self._placeholder)
 
         # Scroll area for cards
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll = VerticalScrollArea()
         self._scroll.setStyleSheet("QScrollArea { border: none; }")
         self._scroll.hide()
 

@@ -245,9 +245,29 @@ def test_the_dock_opens_wide_enough_to_read(make_napari_viewer):
     """Otherwise every session starts by dragging the dock wider."""
     widget = napari_storm(napari_viewer=make_napari_viewer())
 
-    assert widget.minimumWidth() >= widget.PREFERRED_WIDTH_PX
+    # The floor is in the size hint the dock honours, not an explicit
+    # minimumWidth: an explicit one would stop the dock growing past it when
+    # a dataset's controls need more; see the next test.
+    assert widget.minimumSizeHint().width() >= widget.PREFERRED_WIDTH_PX
     # A minimum, not a fixed width: the dock must still be resizable.
     assert widget.maximumWidth() > widget.PREFERRED_WIDTH_PX
+
+
+def test_the_dock_grows_to_fit_a_loaded_dataset(make_napari_viewer):
+    """A dataset's channel controls need more than the empty dock had.
+
+    The scroll area around them kept their width to itself, and with no
+    horizontal scrollbar the right-hand side was simply cut off.
+    """
+    from qtpy.QtWidgets import QApplication
+
+    widget = napari_storm(napari_viewer=make_napari_viewer())
+    widget.get_dataset_from_test_mode([_dataset(zdim=True)])
+    # Qt passes a changed minimum up the widget tree in posted events.
+    QApplication.processEvents()
+
+    needed = widget.data_controls_content.minimumSizeHint().width()
+    assert widget.minimumSizeHint().width() >= needed
 
 
 # ------------------------------------------------------- 2-D display mode

@@ -35,12 +35,15 @@ To work on napari-storm itself, install from a clone instead:
 ## Usage
 
 ### Starting napari-storm
-To start the program, run the napari_start.py, e.g. by navigating in your anaconda prompt to the location of the
-napri_start.py (root) and run it with:
+With the environment active -- an Anaconda Prompt after `conda activate napari-storm`, for
+example -- run:
 
-    python.exe napari_start.py
+    napari-storm
 
-Or simply start the napari version that was just installed into your environment, e.g. again using the conda prompt:
+This opens napari with the napari-storm dock already docked on the right. `python -m napari_storm`
+does the same, and from a clone so does `python napari_start.py`.
+
+Or start napari itself and open the dock from the Plugins menu:
 
     napari
 

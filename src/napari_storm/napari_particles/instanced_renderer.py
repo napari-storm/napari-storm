@@ -119,6 +119,8 @@ class InstancedRenderer(LocalizationRenderer):
             layer.opacity = float(appearance.opacity)
         if appearance.contrast_limits is not None:
             layer.contrast_limits = list(appearance.contrast_limits)
+        if appearance.summed_contrast is not None:
+            layer.summed_contrast = appearance.summed_contrast
         if appearance.visible is not None:
             layer.visible = bool(appearance.visible)
         if appearance.min_size_px is not None:
@@ -138,11 +140,16 @@ class InstancedRenderer(LocalizationRenderer):
             visible=layer.visible,
             footprint=layer.footprint,
             min_size_px=layer.min_size_px,
+            summed_contrast=layer.summed_contrast,
         )
 
     def value_range(self, dataset_id):
         layer = self._layers.get(dataset_id)
         return None if layer is None else tuple(layer.contrast_limits_range)
+
+    def contrast_is_summed(self, dataset_id):
+        layer = self._layers.get(dataset_id)
+        return layer is not None and layer.contrast_is_summed
 
     def close(self, dataset_id):
         layer = self._layers.pop(dataset_id, None)

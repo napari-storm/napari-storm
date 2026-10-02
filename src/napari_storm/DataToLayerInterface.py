@@ -615,6 +615,17 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # something to build its slider from.
         return (0.0, 1.0) if value_range is None else value_range
 
+    def contrast_is_summed(self, dataset):
+        """Whether *dataset*'s contrast window acts on the summed image.
+
+        What a contrast control's numbers mean -- summed weight or the value of
+        each localization -- so it is asked of the backend that draws, not
+        worked out from the footprint: the billboard fallback windows per
+        localization whatever the footprint.
+        """
+        query = getattr(self.renderer, "contrast_is_summed", None)
+        return bool(query(dataset.dataset_id)) if query is not None else False
+
     def layer_for(self, dataset):
         """The host layer drawing *dataset*, or None.
 

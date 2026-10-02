@@ -48,5 +48,6 @@ cd napari-storm
 pip install -e ".[dev,pyqt6]"
 ```
 
-Start napari and open **Plugins → napari-storm**; the
+Run `napari-storm` in that environment to open napari with the dock already
+docked, or start `napari` and open **Plugins → napari-storm**; the
 [step-by-step tutorial](step-by-step.md) takes it from there.

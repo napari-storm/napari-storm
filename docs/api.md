@@ -78,6 +78,9 @@ picks what every localization is drawn as from `core.footprints.PALETTE` --
 the scientific Gaussian or an alternative visualisation -- with `min_size_px`
 as the smallest on-screen size; see
 [alternative visualisations](embedding.md#alternative-visualisations).
+`summed_contrast` says whether an additive footprint's `contrast_limits` window
+the summed image (the default) or each localization; a backend reports what is
+in effect through `contrast_is_summed(dataset_id)`.
 
 `Changed` is a flag set saying which parts of a request differ from the last
 one, so a backend can update only those buffers.

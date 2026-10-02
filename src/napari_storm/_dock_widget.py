@@ -812,6 +812,10 @@ class napari_storm(NapariStormGUI):
                 footprint=self.render_config.footprint,
                 min_size_px=self.render_config.min_size_px,
             )
+        # Between an additive footprint and an opaque one the contrast window
+        # moves between the summed image and each localization.
+        for channel in self.channel:
+            channel.sync_contrast_model()
 
     def _start_typing_timer(self, timer):
         timer.start(500)

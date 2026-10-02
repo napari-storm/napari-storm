@@ -44,6 +44,7 @@ from ._napari_compat import (
     release_additive_blending,
 )
 from .footprint_shaders import is_opaque, quad_scale, shape_function
+from .summed_contrast import SummedContrastPass
 
 __all__ = ["InstancedParticles", "InstancedBillboardsFilter"]
 
@@ -220,13 +221,26 @@ class InstancedBillboardsFilter(Filter):
             if ($opaque > 0.5 && layer_alpha <= 0.0) {
                 discard;
             }
-            vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
-                                dot(x, covariance_inv*x),
-                                vec4(mapped.rgb, layer_alpha));
-            if ($opaque > 0.5) {
-                drawn.a = 1.0;
+            if ($accumulate > 0.5) {
+                // Summed contrast (see summed_contrast.py): write only what
+                // this localization adds here -- its value times the falloff,
+                // squared exactly as additive blending squares it below -- at
+                // alpha 1.  The window, colormap and opacity are applied once,
+                // to the sum.
+                vec4 weight = $shape(x, dot(x, v_disc_inv*x),
+                                     dot(x, covariance_inv*x), vec4(1.0));
+                gl_FragColor = vec4(
+                    v_instance_value * weight.r * weight.a, 0.0, 0.0, 1.0
+                );
+            } else {
+                vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
+                                    dot(x, covariance_inv*x),
+                                    vec4(mapped.rgb, layer_alpha));
+                if ($opaque > 0.5) {
+                    drawn.a = 1.0;
+                }
+                gl_FragColor = drawn;
             }
-            gl_FragColor = drawn;
         }
         """)
 
@@ -242,6 +256,8 @@ class InstancedBillboardsFilter(Filter):
         # The scientific Gaussian until `set_footprint` says otherwise.
         ffunc["shape"] = shape_function(FOOTPRINT_GAUSSIAN)
         ffunc["opaque"] = 0.0
+        # Colours, until the layer hands the sum to a SummedContrastPass.
+        ffunc["accumulate"] = 0.0
         vfunc["quad_scale"] = 1.0
         vfunc["extent_sigmas"] = footprint_named(FOOTPRINT_GAUSSIAN).extent_sigmas
         vfunc["min_half_px"] = 0.0
@@ -287,6 +303,10 @@ class InstancedBillboardsFilter(Filter):
         low, high = float(low), float(high)
         self.fshader["clim_low"] = low
         self.fshader["clim_range"] = max(high - low, 1e-8)
+
+    def set_accumulate(self, accumulate):
+        """Write summed weights (True) or windowed colours (False)."""
+        self.fshader["accumulate"] = 1.0 if accumulate else 0.0
 
     def set_billboard_size(self, size):
         """The quad edge, needed to recover the quad coordinate in the shader."""
@@ -360,6 +380,8 @@ class InstancedParticles(Surface):
         self._billboard_filter = InstancedBillboardsFilter()
         self._footprint = FOOTPRINT_GAUSSIAN
         self._min_size_px = DEFAULT_MIN_SIZE_PX
+        self._summed_contrast = True
+        self._summed_pass = None
         self._viewer = None
         self._visual = None
         self._layer_event_connections = []
@@ -394,6 +416,42 @@ class InstancedParticles(Surface):
     def _apply_footprint(self):
         self._billboard_filter.set_footprint(self._footprint, self._min_size_px)
         self._apply_blend_state()
+        self._apply_contrast_model()
+
+    # ------------------------------------------------------------------
+    # Contrast model
+    # ------------------------------------------------------------------
+
+    @property
+    def summed_contrast(self):
+        """Whether an additive footprint's window applies to the sum.
+
+        See `LayerAppearance.summed_contrast`.  Off, every localization is
+        windowed and colormapped on its own, which is what Z colour coding
+        needs: there the value is a depth, not a weight.
+        """
+        return self._summed_contrast
+
+    @summed_contrast.setter
+    def summed_contrast(self, value):
+        self._summed_contrast = bool(value)
+        self._apply_contrast_model()
+
+    @property
+    def contrast_is_summed(self):
+        """Whether the window is being applied to the summed image right now.
+
+        Only an additive footprint has a sum; an opaque one keeps the nearest
+        marker and nothing else, so it is always windowed per localization.
+        """
+        return self._summed_contrast and not is_opaque(self._footprint)
+
+    def _apply_contrast_model(self):
+        """Switch the shader and the resolve pass together, never apart."""
+        summed = self.contrast_is_summed
+        self._billboard_filter.set_accumulate(summed)
+        if self._summed_pass is not None:
+            self._summed_pass.enabled = summed
         if self._visual is not None:
             self._visual.update()
 
@@ -531,12 +589,16 @@ class InstancedParticles(Surface):
         viewer.add_layer(self)
         self._visual = get_layer_visual(viewer, self)
         self._visual.attach(self._billboard_filter)
+        self._summed_pass = SummedContrastPass(self._visual)
         self._upload_instances()
         self._apply_colormap()
         self._apply_contrast_limits()
+        self._apply_opacity()
         self.events.colormap.connect(self._apply_colormap)
         self.events.contrast_limits.connect(self._apply_contrast_limits)
+        self.events.opacity.connect(self._apply_opacity)
         self._apply_blend_state()
+        self._apply_contrast_model()
 
     def _apply_blend_state(self, event=None):
         """Keep the blend state the footprint needs, and keep it kept.
@@ -559,23 +621,36 @@ class InstancedParticles(Surface):
         colormap = getattr(self._visual, "cmap", None)
         if colormap is not None:
             self._billboard_filter.set_colormap(colormap)
+            if self._summed_pass is not None:
+                self._summed_pass.set_colormap(colormap)
 
     def _apply_contrast_limits(self, event=None):
         """Push the layer's contrast window into the shader that uses it."""
         limits = getattr(self, "contrast_limits", None)
         if limits is not None and len(limits) == 2:
             self._billboard_filter.set_contrast_limits(limits[0], limits[1])
+            if self._summed_pass is not None:
+                self._summed_pass.set_contrast_limits(limits[0], limits[1])
+
+    def _apply_opacity(self, event=None):
+        """The resolve pass applies opacity itself; the splats no longer see it."""
+        if self._summed_pass is not None:
+            self._summed_pass.opacity = float(self.opacity)
 
     def close(self):
         self._layer_event_connections = []
         for emitter, handler in (
             ("colormap", self._apply_colormap),
             ("contrast_limits", self._apply_contrast_limits),
+            ("opacity", self._apply_opacity),
         ):
             try:
                 getattr(self.events, emitter).disconnect(handler)
             except (ValueError, TypeError, RuntimeError):
                 pass
+        if self._summed_pass is not None:
+            self._summed_pass.release()
+            self._summed_pass = None
         if self._visual is not None:
             release_additive_blending(self._visual)
             try:

@@ -4,9 +4,10 @@
 
 ### 0) Launch napari-storm and import a dataset:
 
-    napari
+    napari-storm
 
-→ Open **Plugins → Napari STORM**.
+opens napari with the dock already docked. Alternatively start `napari` and open
+**Plugins → Napari STORM**.
 
 Import your dataset by drag & drop, or with **Import Localization File…** in the
 Data Controls tab. Closing the file picker without
@@ -48,12 +49,23 @@ channels are open.
 
 ### 2) Adjust contrast
 
-Still in Channel Controls, use the two-handle contrast slider:
+Still in Channel Controls, use the two-handle contrast slider. It acts on the
+reconstruction itself -- the Gaussians summed where they overlap -- so with
+fixed-size Gaussians its numbers count overlapping localizations:
 
-Left handle = absolute cutoff (min intensity shown)
+Left handle = **Cutoff**: everything where fewer localizations overlap than this
+is hidden. Raise it to 1.5 and lone localizations disappear while clusters stay.
 
-Right handle = log-scaled max (expands/compresses the top range)
-You can also type exact values in the numeric spin boxes next to the slider.
+Right handle = the top of the range: where at least this many overlap is drawn
+at full brightness. The default, 1, saturates the peak of a single Gaussian.
+
+Both handles sit on the same logarithmic scale, from 0.01 to 100, and you can
+type exact values in the spin boxes next to the slider. With variable-size
+Gaussians each localization counts by its precision instead of as one.
+
+Opaque point-cloud styles from the Decorators tab have no sum to act on; with
+them the slider maps each marker's own value onto the colormap, and keeps its
+own handle positions for when you switch back.
 
 Tip: Each channel remembers its own settings; toggling Show/Hide is instant.
 
