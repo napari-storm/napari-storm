@@ -15,7 +15,6 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QListWidget,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSlider,
     QSpinBox,
@@ -35,6 +34,7 @@ from napari_storm.pyqt.dataset_info_widget import DatasetInfoPanel
 from napari_storm.pyqt.GridPlaneSlider import GridPlaneSlider
 from napari_storm.pyqt.PyQTvisuals import QHSeperationLine
 from napari_storm.pyqt.RenderRangeSlider import RangeSlider2
+from napari_storm.pyqt.vertical_scroll_area import VerticalScrollArea
 
 from .DataAdjustment import DataAdjustmentWindow
 from .DataFilter import DataFilterWindow
@@ -45,10 +45,10 @@ _LOG = logging.getLogger(__name__)
 
 
 class NapariStormGUI(QWidget):
-    #: Width the controls actually need.  The widest rows are the two-button
-    #: pairs and the render-range sliders; below this Qt clips their labels and
-    #: the dock has to be dragged wider before anything can be read.  It is a
-    #: minimum rather than a fixed width, so the dock stays resizable.
+    #: Width the controls need before anything is loaded.  The widest rows are
+    #: the two-button pairs and the render-range sliders; below this Qt clips
+    #: their labels and the dock has to be dragged wider before anything can
+    #: be read.  A floor, not a width: see `minimumSizeHint`.
     PREFERRED_WIDTH_PX = 420
 
     def __init__(self):
@@ -56,7 +56,6 @@ class NapariStormGUI(QWidget):
 
         # GUI
         self.setAcceptDrops(True)
-        self.setMinimumWidth(self.PREFERRED_WIDTH_PX)
 
         self.tabs = DetachableTabWidget()
         # Tabs
@@ -517,16 +516,26 @@ class NapariStormGUI(QWidget):
         self.setLayout(self.layout)
         self.data_controls_tab_layout.setColumnStretch(0, 4)
 
-        self.data_controls_scroll = QScrollArea(self.data_control_tab)
+        self.data_controls_scroll = VerticalScrollArea(self.data_control_tab)
         self.data_controls_scroll.setObjectName("dataControlsScrollArea")
-        self.data_controls_scroll.setWidgetResizable(True)
-        self.data_controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.data_controls_scroll.setStyleSheet("QScrollArea { border: none; }")
         self.data_controls_scroll.setWidget(self.data_controls_content)
         data_control_outer_layout = QVBoxLayout(self.data_control_tab)
         data_control_outer_layout.setContentsMargins(0, 0, 0, 0)
         data_control_outer_layout.addWidget(self.data_controls_scroll)
         self.infos_tab.setLayout(self.infos_tab_layout)
+
+    def minimumSizeHint(self):
+        """Never narrower than PREFERRED_WIDTH_PX, nor than the controls need.
+
+        This used to be an explicit setMinimumWidth, and an explicit minimum
+        overrides what the layout computes: a loaded dataset's channel
+        controls need more than the empty dock, so they were cut off on the
+        right until the dock was dragged wider.  As a hint the floor is one
+        constraint among the others, and the dock stays resizable.
+        """
+        hint = super().minimumSizeHint()
+        return QtCore.QSize(max(hint.width(), self.PREFERRED_WIDTH_PX), hint.height())
 
     # D and D
     def _make_fwhm_validator(self):
