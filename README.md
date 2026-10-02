@@ -47,8 +47,6 @@ Or start napari itself and open the dock from the Plugins menu:
 
     napari
 
-and then opening napari-storm in the plugins tab.
-
 ### Importing data into napari-storm
 Drag & drop onto the dock widget supported file types (Picasso, ThunderSTORM, MINFLUX, etc.) directly into napari or use the import file dialog.
 
@@ -70,9 +68,11 @@ and lets you assign your data. This should work for any .hdf5, .csv or .npy file
 ### Basic usage
 When a dataset is imported you should be able to see five tabs in the widget: Data Controls, File Infos, Decorators,
 Data Filter and Data adjustment. In the data controls tab you can change the render range, load
-a new file, merge the currently open dataset with another that from another file and change your view.
-There is also the option to change the colormap, adjust the contrast with the slider beneath the colormap picking as well
-as adding a scalebar or active rainbow colorcoding (for 3D datasets).
+a new file, merge the currently open dataset with another file and change your view.
+There is also the option to change the colormap, add a scalebar or activate rainbow colour coding (for 3D datasets),
+and adjust the contrast with the slider beneath the colormap. The contrast acts on the reconstruction itself -- the
+Gaussians summed where they overlap -- so its lower handle hides sparse regions while keeping dense ones, and its upper
+handle sets how many overlapping localizations it takes to reach full brightness.
 
 The File Infos tab simply displays information on the currently opened datasets.
 
@@ -80,7 +80,7 @@ In the decorators tab you can switch the rendering style from the scientific Gau
 uncertainty ellipses and more -- activate a grid plane and customize a lot of things for the grid as well as the render range box.
 
 Last but not least is the data filter tab, which gives you the option to filter your displayed datasets by all properties available in the dataset.
-There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controlls
+There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controls
 the cut-off/cut-on of your filter. To apply the filter settings to the dataset simply press
 one of the apply buttons.
 
@@ -131,20 +131,4 @@ napari-storm builds on work by others, with thanks:
 
 If you encounter any problems, please [file an issue] along with a detailed description.
 
-[napari]: https://github.com/napari/napari
-[Cookiecutter]: https://github.com/audreyr/cookiecutter
-[@napari]: https://github.com/napari
-[MIT]: http://opensource.org/licenses/MIT
-[BSD-3]: http://opensource.org/licenses/BSD-3-Clause
-[GNU GPL v3.0]: http://www.gnu.org/licenses/gpl-3.0.txt
-[GNU LGPL v3.0]: http://www.gnu.org/licenses/lgpl-3.0.txt
-[Apache Software License 2.0]: http://www.apache.org/licenses/LICENSE-2.0
-[Mozilla Public License 2.0]: https://www.mozilla.org/media/MPL/2.0/index.txt
-[cookiecutter-napari-plugin]: https://github.com/napari/cookiecutter-napari-plugin
-
 [file an issue]: https://github.com/napari-storm/napari-storm/issues
-
-[napari]: https://github.com/napari/napari
-[tox]: https://tox.readthedocs.io/en/latest/
-[pip]: https://pypi.org/project/pip/
-[PyPI]: https://pypi.org/
