@@ -50,14 +50,29 @@ void main() {
     if (summed <= $low) {
         discard;
     }
-    vec4 mapped = $cmap(clamp((summed - $low) / $range, 0.0, 1.0));
+    float t = clamp((summed - $low) / $range, 0.0, 1.0);
+    vec3 colour = $cmap(t).rgb;
+    // The colormap's floor colour fades in from black just above the lower
+    // limit.  A colormap that does not start at black -- viridis, turbo, hsv,
+    // a host's own -- otherwise paints that colour on every pixel a splat
+    // touches, however faint, out to the edge of its quad and then cuts to
+    // black: every splat a hard-edged square.  Only cmap(0) is faded, so a
+    // colormap that starts at black is left exactly as it was.
+    float fade = smoothstep(0.0, $fade, summed - $low);
+    colour = max(colour - $cmap(0.0).rgb * (1.0 - fade), 0.0);
     // The colormap's own alpha is ignored, as the per-localization path has
     // always ignored it.  napari-storm's channel colormaps ramp alpha with
     // colour from (0, 0, 0, 0); under (src_alpha, one) that alpha would
     // multiply the colour by itself and square every faint region away.
-    gl_FragColor = vec4(mapped.rgb, $opacity);
+    gl_FragColor = vec4(colour, $opacity);
 }
 """
+
+#: Summed weight above the lower limit over which the floor colour fades in.
+#: In weight, not as a share of the window, because what it has to hide is
+#: fixed in weight: a Gaussian's quad ends where it is still exp(-4), 1.8% of
+#: its peak.  At 0.2 the floor colour there is down to 1.5% of itself.
+FADE_WEIGHT = 0.2
 
 #: The viewport, corner to corner, as a triangle strip.
 _FULL_VIEWPORT = np.array([[-1, -1], [1, -1], [-1, 1], [1, 1]], dtype=np.float32)
@@ -94,6 +109,7 @@ class SummedContrastPass:
         self._program.frag["low"] = 0.0
         self._program.frag["range"] = 1.0
         self._program.frag["opacity"] = 1.0
+        self._program.frag["fade"] = FADE_WEIGHT
         self._program.frag["target_size"] = (1.0, 1.0)
 
         self.enabled = False

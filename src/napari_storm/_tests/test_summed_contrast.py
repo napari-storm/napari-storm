@@ -127,6 +127,26 @@ def test_a_colormap_that_starts_transparent_is_not_squared(make_napari_viewer):
     assert np.abs(summed - per_localization).max() <= 3
 
 
+def test_a_colormap_that_does_not_start_at_black_has_no_hard_edge(
+    make_napari_viewer,
+):
+    """Viridis starts at purple, not black.
+
+    Unfaded, every pixel a splat touched took the lowest colour out to the
+    edge of its quad and then cut to black: each splat a hard-edged square,
+    (69, 3, 86) one pixel and (0, 0, 0) the next.
+    """
+    viewer, _renderer = _viewer(
+        make_napari_viewer,
+        _request([0.0], colormap="viridis"),
+        contrast_limits=(0.0, 3.0),
+    )
+    image = _render(viewer).max(axis=2)
+    row = image[np.unravel_index(np.argmax(image), image.shape)[0]]
+    assert row.max() > 100, "nothing was drawn to measure"
+    assert np.abs(np.diff(row)).max() <= 12
+
+
 def test_the_lower_limit_hides_sparse_regions_and_keeps_dense_ones(
     make_napari_viewer,
 ):

@@ -134,6 +134,12 @@ says which model is in effect. Set `LayerAppearance(summed_contrast=False)` when
 the values are not weights -- the dock does for Z colour coding, where they are
 depths -- to window each localization on its own instead.
 
+Below the lower limit nothing is drawn, so a channel never tints the canvas.
+A colormap that does not start at black -- viridis, turbo, hsv -- has its lowest
+colour faded in from black over the first 0.2 of summed weight above the limit;
+otherwise every splat would show that colour out to the edge of the square it
+is drawn on. Colormaps that start at black are unaffected.
+
 **Closing** releases the layer and everything behind it:
 
 ```python
