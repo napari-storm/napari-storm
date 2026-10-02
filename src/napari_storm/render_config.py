@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .core.footprints import DEFAULT_MIN_SIZE_PX, FOOTPRINT_GAUSSIAN
 from .memory_budget import MAX_SPLAT_FRACTION_OF_FOV, default_render_budget_mb
 from .ns_constants import (
     DEFAULT_FIXED_FWHM_XY_NM,
@@ -41,6 +42,12 @@ class RenderConfig:
 
     # Z color encoding: False/0 = off, True/1 = on
     z_color_encoding: int = 0
+
+    # What every localization is drawn as: a name from core.footprints.PALETTE.
+    # The scientific Gaussian, or an alternative visualisation.
+    footprint: str = FOOTPRINT_GAUSSIAN
+    # Smallest on-screen diameter of a visualisation, in screen pixels.
+    min_size_px: float = DEFAULT_MIN_SIZE_PX
 
     # Dimensionality
     zdim: bool | None = None

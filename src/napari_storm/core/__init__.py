@@ -24,6 +24,17 @@ from .dataset_store import (
     DatasetStore,
     StoreCleared,
 )
+from .footprints import (
+    BLEND_ADDITIVE,
+    BLEND_OPAQUE,
+    DEFAULT_MIN_SIZE_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    FOOTPRINTS,
+    PALETTE,
+    Footprint,
+    footprint_named,
+)
 from .localization_table import (
     ACTIVE,
     AXES,
@@ -112,6 +123,15 @@ __all__ = [
     "MaskChanged",
     "TransformChanged",
     "Changed",
+    "BLEND_ADDITIVE",
+    "BLEND_OPAQUE",
+    "DEFAULT_MIN_SIZE_PX",
+    "FOOTPRINTS",
+    "FOOTPRINT_DISC",
+    "FOOTPRINT_GAUSSIAN",
+    "Footprint",
+    "PALETTE",
+    "footprint_named",
     "LayerAppearance",
     "DatasetTraits",
     "GaussianSettings",

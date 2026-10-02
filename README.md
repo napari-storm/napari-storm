@@ -73,7 +73,8 @@ as adding a scalebar or active rainbow colorcoding (for 3D datasets).
 
 The File Infos tab simply displays information on the currently opened datasets.
 
-In the decorators tab you can activate a grid plane and customize a lot of things for the grid as well as the render range box.
+In the decorators tab you can switch the rendering style from the scientific Gaussian to an alternative visualisation -- points, spheres,
+uncertainty ellipses and more -- activate a grid plane and customize a lot of things for the grid as well as the render range box.
 
 Last but not least is the data filter tab, which gives you the option to filter your displayed datasets by all properties available in the dataset.
 There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controlls

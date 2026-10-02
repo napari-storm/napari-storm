@@ -5,6 +5,8 @@ from vispy.gloo import Texture2D
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function
 
+from .footprint_shaders import LEGACY_NAMES, SHAPES, is_opaque, shape_function
+
 
 # TODO: Add mipmapping
 class TextureFilter(Filter):
@@ -34,152 +36,46 @@ class TextureFilter(Filter):
 
 
 # ShaderFilters
-
-_shader_functions = {
-    "gaussian": """
-            varying mat2 covariance_inv;
-
-            vec4 func(vec2 x){
-                float val = exp(-2*dot(x,covariance_inv*x));
-                //val = 0*val+x.x
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "gaussian2": """
-            varying mat2 covariance_inv;
-            vec4 func(vec2 x){
-                float u = dot(x,covariance_inv*x);
-                float y = -2*u;
-
-                float val = (120+y*(120+y*(60+y*(20+y*(5+y)))))*0.0083333333f;
-                val = clamp(val,0.f,1.f);
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "particle": """
-            vec4 func(vec2 x){
-                float r = length(x);
-                float val = .05/((max(r,.01)-0.01)+0.05);
-
-
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "airy": """
-            vec4 func(vec2 x){
-                float r = 8*length(x);
-                float val = abs(sin(r)/(1e-8+r));
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "fresnel": """
-            vec4 func(vec2 x){
-                float r = length(x);
-                float d = .7;
-                float val = 1.;
-                if (r>d){
-                    val = exp(-4*(r-d));
-                    val *= cos(1000*(r-d)*(r-d));
-
-                }
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "sphere": """
-            vec4 func(vec2 x){
-
-                float r = length(x);
-                float r0 = .8;
-                float val= 0;
-                if (r<r0)
-                    val= sqrt(0.001+r0*r0-r*r);
-                else
-                    discard;
-                return vec4(val,val,val,1);
-            }
-            """,
-    "none": """
-            vec4 func(vec2 x){
-                return vec4(1,1,1,1);
-            }
-            """,
-    "bubble": """
-            vec4 func(vec2 x){
-                float r = length(x);
-                float r1 = .8;
-                float r2 = .9;
-                float val = 0;
-                if (r<r1)
-                    val = (sqrt(r2*r2-r*r)-sqrt(r1*r1-r*r))/sqrt(r2*r2-r1*r1);
-                if (r<r2)
-                    val = sqrt(r2*r2-r*r)/sqrt(r2*r2-r1*r1);
-                else
-                    discard;
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "bubble2": """
-            vec4 func(vec2 x){
-                float r = length(x);
-                float r0 = .9;
-                float val = exp(-400*(r-r0)*(r-r0));
-                if (r<r0){
-                    val = max(val,r*r/r0/r0);
-                }
-                else{
-                    discard;
-                }
-                return val*vec4(1,1,1,1);
-            }
-            """,
-    "fractal": """
-            vec4 func(vec2 x){
-                vec2 c = vec2(-.4,.6);
-                const float r = 2;
-                const int n = 100;
-                int res=0;
-                for (int i=0;i<n;i++){
-                    res += int(length(x)<r);
-                    x = vec2(x.x*x.x-x.y*x.y,2*x.x*x.y);
-                    x = x+c;
-                }
-                float val= float(res)/n;
-                return val*vec4(1,1,1,1);
-            }
-            """,
-}
+#
+# What a billboard shows is a footprint from `core.footprints.PALETTE`.  The
+# GLSL for each lives in `footprint_shaders`, shared with the instanced
+# backend; napari-particles' own sprite table used to sit here.
 
 
 class ShaderFilter(Filter):
+    """Shades every billboard with one footprint from the palette.
+
+    *mode* is a palette name, one of napari-particles' own names for its sprites
+    (see `footprint_shaders.LEGACY_NAMES`), or raw GLSL for a filter of one's
+    own.  *distance_intensity_increase* is accepted and ignored: the template it
+    fed computed a value nothing used.
+    """
+
     def __init__(self, mode="gaussian", distance_intensity_increase=1, **kwargs):
         kwargs.setdefault("fhook", "post")
+        name = LEGACY_NAMES.get(mode, mode)
+        if name in SHAPES:
+            fcode = Function("""
+            varying mat2 covariance_inv;
+            varying mat2 v_disc_inv;
 
-        fcode = Function("""
-
-
-        void apply() {
-            // normalize texcoords to (-1,1)
-            vec4 val = $func(2*(v_texcoord-.5));
-
-            // if particle is far away, ramp up intensity
-            float infinity_raise = $distance_intensity_increase*length(fwidth(v_texcoord));
-
-            //gl_FragColor *= val*(1+infinity_raise);
-
-            //val.w *= (exp(-.5*max(v_scale_intensity-1,0))+.05)/1.05;
-
-            //gl_FragColor *= val/sqrt(max(1, v_scale_intensity));
-
-            gl_FragColor *= val;
-
-
-
-
-        }""")
-
-        if mode in _shader_functions:
-            fcode["func"] = Function(_shader_functions[mode])
-            fcode["distance_intensity_increase"] = 10 * distance_intensity_increase
+            void apply() {
+                // normalize texcoords to (-1,1)
+                vec2 x = 2.0*(v_texcoord - 0.5);
+                // See InstancedBillboardsFilter: an opaque footprint is drawn
+                // at alpha 1, and not at all while the layer's opacity is 0.
+                if ($opaque > 0.5 && gl_FragColor.a <= 0.0) {
+                    discard;
+                }
+                vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
+                                    dot(x, covariance_inv*x), gl_FragColor);
+                if ($opaque > 0.5) {
+                    drawn.a = 1.0;
+                }
+                gl_FragColor = drawn;
+            }""")
+            fcode["shape"] = shape_function(name)
+            fcode["opaque"] = 1.0 if is_opaque(name) else 0.0
         else:
             fcode = mode
 

@@ -101,6 +101,22 @@ Variable-size mode and the encoding is turned off with it.
 
 ### 5) Add a decorator layer (Grid plane) & scalebar
 
+**Rendering Style**, at the top of the Decorators tab, chooses what every
+localization is drawn as. **Gaussian (scientific)** is the reconstruction and
+the default. The **Alternative visualisations** are for viewing:
+
+* **Markers** -- points, outlined points, rings, spheres, crosses, squares and
+  diamonds -- are opaque, one sigma in radius, and a nearer one hides a farther
+  one.
+* **napari-particles' sprites** -- domes, glow, bubbles, Airy-like, Fresnel, a
+  Julia fractal, a polynomial Gaussian and tiles -- glow and add up.
+* **Use uncertainty** sizes and shapes each marker by its own localization
+  uncertainty, so rings become uncertainty ellipses. It is the same switch as
+  **Variable-size gaussian**, and needs data that records an uncertainty.
+* **Smallest on screen [px]** keeps a visualisation visible when zoomed out.
+
+Exports always write the Gaussian reconstruction.
+
 Tick **Grid plane activated?** in the Decorators tab, then adjust:
 
 * **Grid line distance [µm]:**

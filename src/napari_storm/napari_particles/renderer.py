@@ -145,6 +145,10 @@ class NapariParticlesRenderer(LocalizationRenderer):
             layer.contrast_limits = list(appearance.contrast_limits)
         if appearance.visible is not None:
             layer.visible = bool(appearance.visible)
+        if appearance.min_size_px is not None:
+            layer.min_size_px = appearance.min_size_px
+        if appearance.footprint is not None:
+            layer.footprint = appearance.footprint
         return layer
 
     def appearance(self, dataset_id):
@@ -156,6 +160,8 @@ class NapariParticlesRenderer(LocalizationRenderer):
             opacity=layer.opacity,
             contrast_limits=tuple(layer.contrast_limits),
             visible=layer.visible,
+            footprint=layer.footprint,
+            min_size_px=layer.min_size_px,
         )
 
     def value_range(self, dataset_id):

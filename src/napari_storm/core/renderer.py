@@ -24,8 +24,21 @@ from typing import Any
 
 import numpy as np
 
+from .footprints import (
+    DEFAULT_MIN_SIZE_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    FOOTPRINTS,
+    validate_footprint,
+    validate_min_size_px,
+)
+
 __all__ = [
     "Changed",
+    "DEFAULT_MIN_SIZE_PX",
+    "FOOTPRINTS",
+    "FOOTPRINT_DISC",
+    "FOOTPRINT_GAUSSIAN",
     "LayerAppearance",
     "RenderRequest",
     "LocalizationRenderer",
@@ -68,12 +81,38 @@ class LayerAppearance:
 
     None means "leave this as it is", so a control that owns one slider can
     send only what it changed rather than having to know the rest.
+
+    Attributes:
+        footprint: what each localization is drawn as -- a name from
+            `core.footprints.PALETTE`.  ``"gaussian"`` sums a Gaussian per
+            localization: the reconstruction.  The rest are alternative
+            visualisations: points, spheres, uncertainty ellipses and the
+            napari-particles sprites.  It is appearance, not data, because
+            switching costs no buffer rebuild.
+
+            Opaque footprints are opaque whatever the opacity: translucent
+            markers have to be depth-sorted to be drawn correctly, and drawing
+            them unsorted is the defect a point cloud is wanted to avoid.
+            Opacity 0 still hides the layer, which is how a channel is switched
+            off.
+        min_size_px: smallest on-screen diameter of a visualisation's one-sigma
+            outline, in screen pixels, so it does not vanish when zoomed out.
+            The scientific Gaussian is never enlarged: its summed intensity is
+            the measurement.
     """
 
     colormap: Any = None
     opacity: float = None
     contrast_limits: tuple = None
     visible: bool = None
+    footprint: str = None
+    min_size_px: float = None
+
+    def __post_init__(self):
+        if self.footprint is not None:
+            validate_footprint(self.footprint)
+        if self.min_size_px is not None:
+            validate_min_size_px(self.min_size_px)
 
 
 @dataclass(frozen=True)
@@ -160,6 +199,10 @@ class LocalizationRenderer:
         colormap must not require rebuilding a single buffer, and a control
         that owns one slider should not have to reach past the backend to a
         host layer object to move it.
+
+        The footprint is appearance too, so a dataset keeps it across
+        :meth:`update` -- a filter change does not turn a point cloud back into
+        Gaussians -- and :meth:`open` starts every dataset as Gaussians.
         """
         raise NotImplementedError
 
@@ -217,7 +260,11 @@ class NullRenderer(LocalizationRenderer):
         self.requests[dataset_id] = request
         self.visibility[dataset_id] = True
         self.appearances[dataset_id] = LayerAppearance(
-            colormap=request.colormap, opacity=1.0, visible=True
+            colormap=request.colormap,
+            opacity=1.0,
+            visible=True,
+            footprint=FOOTPRINT_GAUSSIAN,
+            min_size_px=DEFAULT_MIN_SIZE_PX,
         )
 
     def update(self, dataset_id, request):

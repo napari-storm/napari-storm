@@ -142,6 +142,59 @@ for dataset_id, colour in ((7, "red"), (9, "green")):
     ))
 ```
 
+## Alternative visualisations
+
+The Gaussian is the reconstruction: summed, it is the super-resolution image,
+and it is all an export writes. Every localization can instead be drawn as
+anything in the footprint palette -- points, spheres, uncertainty ellipses and
+the sprites napari-particles shipped. The palette is plain data, so a host can
+offer it in its own menus before any viewer exists:
+
+```python
+from napari_storm.core import PALETTE, LayerAppearance
+
+for footprint in PALETTE:
+    print(footprint.name, footprint.label, footprint.group)
+
+renderer.open(1, RenderPlanner().plan(
+    table, GaussianSettings(fixed_sigma_xy_nm=10.0, fixed_sigma_z_nm=10.0),
+    traits, name="points",
+))
+renderer.set_appearance(1, LayerAppearance(footprint="disc", min_size_px=3.0))
+```
+
+| Attribute | Meaning |
+|---|---|
+| `name` | what `LayerAppearance.footprint` takes and a saved scene records |
+| `label`, `description` | for a menu entry and its tooltip |
+| `group` | `"reconstruction"` for the Gaussian, `"visualisation"` for the rest |
+| `blend` | `"opaque"` markers occlude by depth; `"additive"` sprites add up |
+| `uncertainty` | draws each localization's own one-sigma ellipse |
+
+A few things follow:
+
+* **Markers are drawn at the one-sigma outline.** Their radius is the width the
+  planner computed, so `fixed_sigma_xy_nm` is the point size in nanometres.
+  Footprints marked `uncertainty` draw each localization's own ellipse: plan
+  with `GaussianSettings(mode=1)` and a ring becomes an uncertainty ellipse.
+  The dock's **Use uncertainty** box is that same switch.
+* **Opaque markers are depth-tested.** A nearer one hides a farther one
+  whatever order they were drawn in, across datasets as well. Opacity between
+  0 and 1 has no effect on them: translucent markers have to be depth-sorted to
+  be drawn correctly. Opacity 0 still hides the dataset.
+* **`min_size_px` keeps visualisations visible zoomed out.** It is the smallest
+  diameter of the one-sigma outline, in screen pixels, 2 unless you say
+  otherwise. The scientific Gaussian is never enlarged: its summed intensity is
+  the measurement.
+* **It is appearance, not data.** Switching costs no upload and survives
+  `update`; `open` starts every dataset as the Gaussian, so set it after
+  opening.
+
+Colour works as for Gaussians: the request's values through the colormap and
+contrast limits. `NapariPointsRenderer`, the comparison backend, draws each
+opaque footprint as napari's nearest marker and approximates the size floor
+through napari's own marker limits.
+
 ## Things that will catch you
 
 **The renderer is main-thread and same-process.** Planning runs anywhere —

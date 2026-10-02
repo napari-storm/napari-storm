@@ -73,7 +73,11 @@ defaults to `"gray"` rather than `None`, because "no colormap" is not neutral â€
 see the warning in [`embedding.md`](embedding.md).
 
 `LayerAppearance` fields default to `None` meaning *leave this as it is*, so a
-control owning one slider can send only what it changed.
+control owning one slider can send only what it changed. Its `footprint`
+picks what every localization is drawn as from `core.footprints.PALETTE` --
+the scientific Gaussian or an alternative visualisation -- with `min_size_px`
+as the smallest on-screen size; see
+[alternative visualisations](embedding.md#alternative-visualisations).
 
 `Changed` is a flag set saying which parts of a request differ from the last
 one, so a backend can update only those buffers.

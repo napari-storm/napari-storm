@@ -18,10 +18,12 @@ from qtpy.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from napari_storm.core.footprints import DEFAULT_MIN_SIZE_PX, PALETTE
 from napari_storm.CustomErrors import ParentError
 from napari_storm.ns_constants import (
     FWHM_TO_SIGMA,
@@ -339,6 +341,67 @@ class NapariStormGUI(QWidget):
 
         # Decorators tab
         self.decorator_tab_layout = QFormLayout()
+
+        # Rendering style: the scientific Gaussian, or an alternative
+        # visualisation from core.footprints.PALETTE.
+        self.Lfootprint = QLabel()
+        self.Lfootprint.setText("Rendering Style")
+        self.Lfootprint.setFont(QFont("Arial", 10))
+        self.decorator_tab_layout.addRow(self.Lfootprint)
+
+        self.Bfootprint = QComboBox()
+        for footprint in PALETTE:
+            if (
+                not footprint.reconstruction
+                and self.Bfootprint.findData("__visualisations__") < 0
+            ):
+                self.Bfootprint.insertSeparator(self.Bfootprint.count())
+                self.Bfootprint.addItem(
+                    "Alternative visualisations:", "__visualisations__"
+                )
+                header = self.Bfootprint.model().item(self.Bfootprint.count() - 1)
+                header.setEnabled(False)
+            self.Bfootprint.addItem(footprint.label, footprint.name)
+            self.Bfootprint.setItemData(
+                self.Bfootprint.count() - 1, footprint.description, Qt.ToolTipRole
+            )
+        self.Bfootprint.currentIndexChanged.connect(self._footprint_changed)
+        self.decorator_tab_layout.addRow("Draw localizations as:", self.Bfootprint)
+
+        self.Cfootprint_uncertainty = QCheckBox("Use uncertainty")
+        self.Cfootprint_uncertainty.setToolTip(
+            "Size and shape every localization by its own uncertainty, so "
+            "rings become uncertainty ellipses.  The same switch as "
+            "'Variable-size gaussian' under Rendering options; it needs data "
+            "that records an uncertainty, and a footprint that draws the "
+            "one-sigma outline."
+        )
+        self.Cfootprint_uncertainty.toggled.connect(self._footprint_uncertainty_toggled)
+        self.decorator_tab_layout.addRow("", self.Cfootprint_uncertainty)
+
+        self.Sfootprint_min_size = QSpinBox()
+        self.Sfootprint_min_size.setRange(0, 50)
+        self.Sfootprint_min_size.setValue(int(DEFAULT_MIN_SIZE_PX))
+        self.Sfootprint_min_size.setToolTip(
+            "Smallest diameter an alternative visualisation is drawn at, in "
+            "screen pixels, so it stays visible zoomed out.  The scientific "
+            "Gaussian is never enlarged."
+        )
+        self.Sfootprint_min_size.valueChanged.connect(self._footprint_min_size_changed)
+        self.decorator_tab_layout.addRow(
+            "Smallest on screen [px]:", self.Sfootprint_min_size
+        )
+
+        self.Lfootprint_note = QLabel(
+            "Alternative visualisations are for viewing: exports always write "
+            "the Gaussian reconstruction."
+        )
+        self.Lfootprint_note.setWordWrap(True)
+        self.Lfootprint_note.setStyleSheet("color: gray;")
+        self.decorator_tab_layout.addRow(self.Lfootprint_note)
+
+        self.HL_footprint = QHSeperationLine()
+        self.decorator_tab_layout.addRow(self.HL_footprint)
 
         self.Lgrid_plane = QLabel()
         self.Lgrid_plane.setText("Grid Plane")
