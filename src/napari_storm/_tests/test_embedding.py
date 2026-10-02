@@ -152,6 +152,16 @@ def test_a_host_can_recolour_without_replanning(make_napari_viewer):
     assert renderer.appearance(1).opacity == 0.5
 
 
+def test_a_host_can_offer_the_palette():
+    """The palette is data: a host can build its menu before any viewer exists."""
+    from napari_storm.core import PALETTE
+
+    names = [footprint.name for footprint in PALETTE]
+    assert names[0] == "gaussian"
+    assert {"disc", "ring", "sphere"} <= set(names)
+    assert all(footprint.label and footprint.group for footprint in PALETTE)
+
+
 def test_a_host_can_draw_a_point_cloud(make_napari_viewer):
     """Discs instead of Gaussians: opaque, depth-tested, one sigma across."""
     from napari_storm.core import FOOTPRINT_DISC
@@ -168,13 +178,13 @@ def test_a_host_can_draw_a_point_cloud(make_napari_viewer):
         ),
     )
     renderer.set_appearance(
-        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=3.0)
+        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=3.0)
     )
     viewer.dims.ndisplay = 3
 
     appearance = renderer.appearance(1)
     assert appearance.footprint == FOOTPRINT_DISC
-    assert appearance.min_disc_px == 3.0
+    assert appearance.min_size_px == 3.0
     assert renderer.layer(1).blending == "opaque"
     assert _brightness(viewer) > 0.5
 

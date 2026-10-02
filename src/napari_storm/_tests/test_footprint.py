@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from napari_storm.core import (
-    DEFAULT_MIN_DISC_PX,
+    DEFAULT_MIN_SIZE_PX,
     FOOTPRINT_DISC,
     FOOTPRINT_GAUSSIAN,
     DatasetEntry,
@@ -107,23 +107,23 @@ def _at(image, scale, centre, dx_px=0.0, dy_px=0.0):
 
 def test_appearance_refuses_a_footprint_that_does_not_exist():
     with pytest.raises(ValueError, match="footprint"):
-        LayerAppearance(footprint="square")
+        LayerAppearance(footprint="teapot")
     for bad in (-1.0, float("nan"), float("inf"), "large"):
-        with pytest.raises(ValueError, match="min_disc_px"):
-            LayerAppearance(min_disc_px=bad)
+        with pytest.raises(ValueError, match="min_size_px"):
+            LayerAppearance(min_size_px=bad)
 
 
 def test_the_null_renderer_records_the_footprint():
     renderer = NullRenderer()
     renderer.open(1, _request((1.0, 0.0, 0.0)))
     assert renderer.appearance(1).footprint == FOOTPRINT_GAUSSIAN
-    assert renderer.appearance(1).min_disc_px == DEFAULT_MIN_DISC_PX
+    assert renderer.appearance(1).min_size_px == DEFAULT_MIN_SIZE_PX
 
-    renderer.set_appearance(1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=5))
+    renderer.set_appearance(1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=5))
     renderer.set_appearance(1, LayerAppearance(opacity=0.5))
     appearance = renderer.appearance(1)
     assert appearance.footprint == FOOTPRINT_DISC
-    assert appearance.min_disc_px == 5
+    assert appearance.min_size_px == 5
     assert appearance.opacity == 0.5
 
 
@@ -133,7 +133,7 @@ def test_a_dataset_opens_as_gaussians(make_napari_viewer, backend_class):
     renderer.open(1, _request((1.0, 0.0, 0.0)))
     appearance = renderer.appearance(1)
     assert appearance.footprint == FOOTPRINT_GAUSSIAN
-    assert appearance.min_disc_px == DEFAULT_MIN_DISC_PX
+    assert appearance.min_size_px == DEFAULT_MIN_SIZE_PX
 
 
 @pytest.mark.parametrize("backend_class", BACKENDS)
@@ -142,14 +142,14 @@ def test_the_footprint_survives_an_update(make_napari_viewer, backend_class):
     renderer = backend_class(make_napari_viewer())
     renderer.open(1, _request([(1.0, 0.0, 0.0), (1.0, 50.0, 50.0)]))
     renderer.set_appearance(
-        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=6.0)
+        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=6.0)
     )
 
     renderer.update(1, _request((1.0, 10.0, 10.0)))
 
     appearance = renderer.appearance(1)
     assert appearance.footprint == FOOTPRINT_DISC
-    assert appearance.min_disc_px == 6.0
+    assert appearance.min_size_px == 6.0
     renderer.set_appearance(1, GAUSSIAN)
     assert renderer.appearance(1).footprint == FOOTPRINT_GAUSSIAN
 
@@ -277,13 +277,13 @@ def test_a_disc_is_never_smaller_on_screen_than_the_floor(
     _look_at(viewer, (1.0, 0.0, 0.0), nm_per_px=10.0)  # 2 nm across: 0.2 px
 
     renderer.set_appearance(
-        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=0.0)
+        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=0.0)
     )
     image, scale = _render(viewer)
     # at most a speck: napari's own markers keep an antialiased pixel or two
     assert np.count_nonzero(_lit(image)) <= (2 * scale) ** 2
 
-    renderer.set_appearance(1, LayerAppearance(min_disc_px=12.0))
+    renderer.set_appearance(1, LayerAppearance(min_size_px=12.0))
     image, scale = _render(viewer)
     _row, _col, width, height = _box(_lit(image))
     assert abs(width - 12.0 * scale) <= 2 * scale, width
@@ -300,7 +300,7 @@ def test_the_points_backend_floors_discs_through_napari(make_napari_viewer):
     lit = []
     for floor in (0.0, 12.0, 40.0):
         renderer.set_appearance(
-            1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=floor)
+            1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=floor)
         )
         assert renderer.layer(1).canvas_size_limits[0] == floor
         lit.append(np.count_nonzero(_lit(_render(viewer)[0])))
@@ -315,7 +315,7 @@ def test_the_floor_leaves_a_disc_that_is_already_large_alone(
     renderer = backend_class(viewer)
     renderer.open(1, _request((1.0, 0.0, 0.0), sigma_nm=1000.0))
     renderer.set_appearance(
-        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=20.0)
+        1, LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=20.0)
     )
     _look_at(viewer, (1.0, 0.0, 0.0), nm_per_px=10.0)  # 200 px across
 
@@ -367,12 +367,12 @@ def test_opacity_zero_still_hides_a_disc(make_napari_viewer, backend_class):
 
 def test_a_scene_keeps_the_footprint(tmp_path):
     path = tmp_path / "scene.json"
-    appearance = LayerAppearance(footprint=FOOTPRINT_DISC, min_disc_px=4.0)
+    appearance = LayerAppearance(footprint=FOOTPRINT_DISC, min_size_px=4.0)
     save_scene(path, Scene(datasets=(DatasetEntry(name="a", appearance=appearance),)))
 
     loaded = load_scene(path).datasets[0].appearance
     assert loaded.footprint == FOOTPRINT_DISC
-    assert loaded.min_disc_px == 4.0
+    assert loaded.min_size_px == 4.0
 
 
 def test_a_scene_without_a_footprint_reads_as_before(tmp_path):
@@ -384,14 +384,14 @@ def test_a_scene_without_a_footprint_reads_as_before(tmp_path):
 
     loaded = load_scene(path).datasets[0].appearance
     assert loaded.footprint is None
-    assert loaded.min_disc_px is None
+    assert loaded.min_size_px is None
 
 
 def test_a_scene_with_an_unknown_footprint_is_refused(tmp_path):
     path = tmp_path / "scene.json"
     save_scene(path, Scene(datasets=(DatasetEntry(name="a", appearance=DISC),)))
     raw = json.loads(path.read_text())
-    raw["datasets"][0]["appearance"]["footprint"] = "square"
+    raw["datasets"][0]["appearance"]["footprint"] = "teapot"
     path.write_text(json.dumps(raw))
 
     with pytest.raises(SceneFormatError, match="footprint"):

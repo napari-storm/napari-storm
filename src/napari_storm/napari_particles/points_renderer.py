@@ -20,28 +20,40 @@ What it gives back is memory and maintenance: it stores a position, a size and
 a colour per localization, and nothing else.
 
 Its default look is additive, spherically shaded discs as wide as the
-Gaussian billboard -- the closest a Points layer gets to a splat.  Under the
-``"disc"`` footprint it draws what the other backends draw there: opaque, flat,
-depth-tested discs of radius sigma.  The ``min_disc_px`` floor goes through
-napari's own marker limit, which bounds the marker sprite rather than the disc
-drawn inside it, so here it is approximate.
+Gaussian billboard -- the closest a Points layer gets to a splat -- and every
+additive footprint keeps it.  An opaque footprint becomes napari's nearest
+marker, opaque and depth-tested, one sigma in radius.  The ``min_size_px``
+floor goes through napari's own marker limit, which bounds the marker sprite
+rather than the shape drawn inside it, so here it is approximate.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..core.renderer import (
-    DEFAULT_MIN_DISC_PX,
-    FOOTPRINT_DISC,
+from ..core.footprints import (
+    BLEND_OPAQUE,
+    DEFAULT_MIN_SIZE_PX,
     FOOTPRINT_GAUSSIAN,
-    LayerAppearance,
-    LocalizationRenderer,
+    footprint_named,
 )
-from .instanced_layer import DISC_QUAD_SCALE
+from ..core.renderer import LayerAppearance, LocalizationRenderer
+from .footprint_shaders import quad_scale
 
 #: napari's own floor and ceiling for marker sizes, in canvas pixels.
 _NAPARI_CANVAS_SIZE_LIMITS = (2, 10000)
+
+#: napari's marker and shading closest to each opaque footprint.
+_MARKERS = {
+    "disc": ("disc", "none"),
+    "outlined": ("disc", "none"),
+    "ring": ("ring", "none"),
+    "sphere": ("disc", "spherical"),
+    "cross": ("cross", "none"),
+    "square": ("square", "none"),
+    "diamond": ("diamond", "none"),
+    "dome": ("disc", "spherical"),
+}
 
 __all__ = ["NapariPointsRenderer"]
 
@@ -52,7 +64,7 @@ class NapariPointsRenderer(LocalizationRenderer):
     def __init__(self, viewer):
         self.viewer = viewer
         self._layers = {}
-        self._footprints = {}  # dataset id -> (footprint, min_disc_px)
+        self._footprints = {}  # dataset id -> (footprint, min_size_px)
         self._closing = set()
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
@@ -100,11 +112,13 @@ class NapariPointsRenderer(LocalizationRenderer):
         The request's ``size`` is the billboard edge for the largest Gaussian
         and its ``sigmas`` are normalized against that same largest one, so the
         product recovers a per-localization width on the same scale the
-        billboard backend draws.  A disc is narrower: two sigmas across.
+        billboard backend draws.  A footprint drawn on less of the billboard --
+        a marker, two sigmas across -- is that much smaller.
         """
         widest = np.max(request.sigmas[:, 1:], axis=1)
-        scale = DISC_QUAD_SCALE if footprint == FOOTPRINT_DISC else 1.0
-        return np.asarray(request.size * widest * scale, dtype=np.float32)
+        return np.asarray(
+            request.size * widest * quad_scale(footprint), dtype=np.float32
+        )
 
     def _apply_footprint(self, dataset_id, previous=None):
         """Put the dataset's footprint on its layer.
@@ -113,22 +127,27 @@ class NapariPointsRenderer(LocalizationRenderer):
         a footprint change needs no request -- appearance never rebuilds data.
         """
         layer = self._layers[dataset_id]
-        footprint, min_disc_px = self._footprints[dataset_id]
-        if previous is not None and previous != footprint:
-            ratio = (
-                DISC_QUAD_SCALE if footprint == FOOTPRINT_DISC else 1 / DISC_QUAD_SCALE
-            )
-            layer.size = np.asarray(layer.size, dtype=np.float64) * ratio
-        if footprint == FOOTPRINT_DISC:
-            layer.shading = "none"
+        name, min_size_px = self._footprints[dataset_id]
+        if previous is not None and previous != name:
+            ratio = quad_scale(name) / quad_scale(previous)
+            if ratio != 1.0:
+                layer.size = np.asarray(layer.size, dtype=np.float64) * ratio
+        if footprint_named(name).blend == BLEND_OPAQUE:
+            symbol, shading = _MARKERS.get(name, ("disc", "none"))
+            layer.symbol = symbol
+            layer.shading = shading
             layer.blending = "opaque"
+            layer.border_width = 0.15 if name == "outlined" else 0.0
+            layer.border_color = "black"
             layer.canvas_size_limits = (
-                float(min_disc_px),
+                float(min_size_px),
                 _NAPARI_CANVAS_SIZE_LIMITS[1],
             )
         else:
+            layer.symbol = "disc"
             layer.shading = "spherical"
             layer.blending = "additive"
+            layer.border_width = 0.0
             layer.canvas_size_limits = _NAPARI_CANVAS_SIZE_LIMITS
 
     def open(self, dataset_id, request):
@@ -148,7 +167,7 @@ class NapariPointsRenderer(LocalizationRenderer):
             out_of_slice_display=True,
         )
         self._layers[dataset_id] = layer
-        self._footprints[dataset_id] = (FOOTPRINT_GAUSSIAN, DEFAULT_MIN_DISC_PX)
+        self._footprints[dataset_id] = (FOOTPRINT_GAUSSIAN, DEFAULT_MIN_SIZE_PX)
         return layer
 
     def update(self, dataset_id, request):
@@ -183,12 +202,12 @@ class NapariPointsRenderer(LocalizationRenderer):
             layer.face_contrast_limits = tuple(appearance.contrast_limits)
         if appearance.visible is not None:
             layer.visible = bool(appearance.visible)
-        if appearance.footprint is not None or appearance.min_disc_px is not None:
-            previous, min_disc_px = self._footprints[dataset_id]
+        if appearance.footprint is not None or appearance.min_size_px is not None:
+            previous, min_size_px = self._footprints[dataset_id]
             footprint = appearance.footprint or previous
-            if appearance.min_disc_px is not None:
-                min_disc_px = float(appearance.min_disc_px)
-            self._footprints[dataset_id] = (footprint, min_disc_px)
+            if appearance.min_size_px is not None:
+                min_size_px = float(appearance.min_size_px)
+            self._footprints[dataset_id] = (footprint, min_size_px)
             self._apply_footprint(dataset_id, previous=previous)
         return layer
 
@@ -196,14 +215,14 @@ class NapariPointsRenderer(LocalizationRenderer):
         layer = self._layers.get(dataset_id)
         if layer is None:
             return None
-        footprint, min_disc_px = self._footprints[dataset_id]
+        footprint, min_size_px = self._footprints[dataset_id]
         return LayerAppearance(
             colormap=layer.face_colormap,
             opacity=layer.opacity,
             contrast_limits=tuple(layer.face_contrast_limits or (0.0, 1.0)),
             visible=layer.visible,
             footprint=footprint,
-            min_disc_px=min_disc_px,
+            min_size_px=min_size_px,
         )
 
     def value_range(self, dataset_id):

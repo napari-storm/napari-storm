@@ -8,6 +8,7 @@ from qtpy.QtCore import Qt
 from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
 from .core import DatasetStore, LayerAppearance, WorldTransform
+from .core.footprints import FOOTPRINTS, footprint_named
 from .CustomErrors import (
     DimensionError,
     StaticAttributeError,
@@ -166,6 +167,7 @@ class napari_storm(NapariStormGUI):
         custom_keys_and_scalebar(self)
         self.hide_non_available_widgets()
         self.hide_testing_mode()
+        self._sync_footprint_controls()
         self._instances[id(napari_viewer)] = self
 
     @property
@@ -723,6 +725,93 @@ class napari_storm(NapariStormGUI):
         if not zdim_present:
             self.Bz_color_coding.hide()
         self.data_to_layer_itf.update_layer_appearance()
+        self._sync_footprint_controls()
+
+    # ------------------------------------------------------------------
+    # Rendering style (Decorators tab)
+    # ------------------------------------------------------------------
+
+    @property
+    def footprint(self):
+        """What every localization is drawn as; a name from the palette."""
+        return self.render_config.footprint
+
+    def _footprint_changed(self, _index=None):
+        name = self.Bfootprint.currentData()
+        if name not in FOOTPRINTS:
+            return  # the separator or the group heading
+        self.render_config.footprint = name
+        self._apply_footprint_to_all()
+        if self.render_gaussian_mode == 1:
+            # between a Gaussian and a marker the values change meaning:
+            # intensities for one, flat colour for the other
+            self.data_to_layer_itf.update_layer_appearance()
+        self._sync_footprint_controls()
+
+    def _footprint_min_size_changed(self, value):
+        self.render_config.min_size_px = float(value)
+        self._apply_footprint_to_all()
+
+    def _footprint_uncertainty_toggled(self, checked):
+        """The Decorators tab's view of 'Variable-size gaussian'.
+
+        One switch, shown in two places: the planner has a single width mode,
+        so the box moves the Rendering options combo and the combo moves the box.
+        """
+        index = 1 if checked else 0
+        if self.Brenderoptions.currentIndex() != index:
+            self.Brenderoptions.setCurrentIndex(index)
+        self._sync_footprint_controls()
+
+    def _uncertainty_available(self):
+        """Whether every loaded dataset can be drawn at its own uncertainty."""
+        datasets = self.localization_datasets
+        return bool(datasets) and all(
+            isinstance(dataset, StormDataClass) for dataset in datasets
+        )
+
+    def _sync_footprint_controls(self):
+        """Enable what applies to the current footprint and data, and no more."""
+        if not hasattr(self, "Cfootprint_uncertainty"):
+            return  # the Decorators tab is not built yet
+        footprint = footprint_named(self.render_config.footprint)
+        visualisation = not footprint.reconstruction
+        self.Sfootprint_min_size.setEnabled(visualisation)
+        self.Lfootprint_note.setVisible(visualisation)
+        box = self.Cfootprint_uncertainty
+        box.blockSignals(True)
+        box.setChecked(self.render_gaussian_mode == 1)
+        box.setEnabled(footprint.uncertainty and self._uncertainty_available())
+        box.blockSignals(False)
+
+    def _restore_rendering_style(self, footprint=None, min_size_px=None):
+        """Put a saved rendering style back, controls included.
+
+        The style is one setting for the whole session here, so the Decorators
+        tab shows what the scene recorded rather than what it showed before.
+        """
+        if footprint is not None:
+            self.render_config.footprint = footprint
+            self.Bfootprint.blockSignals(True)
+            self.Bfootprint.setCurrentIndex(self.Bfootprint.findData(footprint))
+            self.Bfootprint.blockSignals(False)
+        if min_size_px is not None:
+            self.render_config.min_size_px = float(min_size_px)
+            self.Sfootprint_min_size.blockSignals(True)
+            self.Sfootprint_min_size.setValue(int(round(min_size_px)))
+            self.Sfootprint_min_size.blockSignals(False)
+        self._apply_footprint_to_all()
+        if self.render_gaussian_mode == 1:
+            self.data_to_layer_itf.update_layer_appearance()
+        self._sync_footprint_controls()
+
+    def _apply_footprint_to_all(self):
+        for dataset in self.localization_datasets:
+            self.data_to_layer_itf.set_appearance(
+                dataset,
+                footprint=self.render_config.footprint,
+                min_size_px=self.render_config.min_size_px,
+            )
 
     def _start_typing_timer(self, timer):
         timer.start(500)
@@ -902,6 +991,7 @@ class napari_storm(NapariStormGUI):
             self.data_to_layer_itf.update_grid_plane(
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
             )
+        self._sync_footprint_controls()
         return True
 
     def add_dataset_entries_for_all_itfs(self, dataset):
@@ -921,6 +1011,7 @@ class napari_storm(NapariStormGUI):
             self.n_datasets += 1
             self.create_layer(self.localization_datasets[-1], idx=i)
         self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
+        self._sync_footprint_controls()
 
     # ------------------------------------------------------------------
     # Scene persistence
@@ -1030,6 +1121,7 @@ class napari_storm(NapariStormGUI):
             for dataset in self.localization_datasets
         }
         unmatched = []
+        restored_style = {}
         for entry in scene.datasets:
             dataset = by_name.get(entry.name)
             if dataset is None:
@@ -1050,6 +1142,12 @@ class napari_storm(NapariStormGUI):
                     contrast_limits=appearance.contrast_limits,
                     visible=appearance.visible,
                 )
+                if appearance.footprint is not None:
+                    restored_style["footprint"] = appearance.footprint
+                if appearance.min_size_px is not None:
+                    restored_style["min_size_px"] = appearance.min_size_px
+        if restored_style:
+            self._restore_rendering_style(**restored_style)
 
         camera = scene.camera
         self.viewer.dims.ndisplay = camera.ndisplay

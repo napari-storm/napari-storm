@@ -24,9 +24,18 @@ from typing import Any
 
 import numpy as np
 
+from .footprints import (
+    DEFAULT_MIN_SIZE_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    FOOTPRINTS,
+    validate_footprint,
+    validate_min_size_px,
+)
+
 __all__ = [
     "Changed",
-    "DEFAULT_MIN_DISC_PX",
+    "DEFAULT_MIN_SIZE_PX",
     "FOOTPRINTS",
     "FOOTPRINT_DISC",
     "FOOTPRINT_GAUSSIAN",
@@ -65,20 +74,6 @@ class Changed(Flag):
 #: and neutral enough not to imply a channel identity.
 DEFAULT_COLORMAP = "gray"
 
-#: Each localization drawn as a Gaussian, summed with its neighbours: the
-#: reconstruction.  The default, and the only footprint the dock widget uses.
-FOOTPRINT_GAUSSIAN = "gaussian"
-
-#: Each localization drawn as an opaque disc, depth-tested: a point cloud.
-#: Offered to hosts that embed the renderer; the dock widget does not expose it.
-FOOTPRINT_DISC = "disc"
-
-FOOTPRINTS = (FOOTPRINT_GAUSSIAN, FOOTPRINT_DISC)
-
-#: Smallest on-screen diameter of a disc, in screen pixels, unless a host says
-#: otherwise.  The same floor napari puts under its own Points markers.
-DEFAULT_MIN_DISC_PX = 2.0
-
 
 @dataclass(frozen=True)
 class LayerAppearance:
@@ -88,20 +83,22 @@ class LayerAppearance:
     send only what it changed rather than having to know the rest.
 
     Attributes:
-        footprint: what each localization is drawn as.  ``"gaussian"`` sums a
-            Gaussian per localization -- the reconstruction.  ``"disc"`` draws
-            the same width as an opaque disc -- the one-sigma outline, filled
-            -- with depth testing, so localizations that overlap occlude one
-            another instead of adding up: a point cloud.  It is appearance, not
-            data, because switching costs no buffer rebuild.
+        footprint: what each localization is drawn as -- a name from
+            `core.footprints.PALETTE`.  ``"gaussian"`` sums a Gaussian per
+            localization: the reconstruction.  The rest are alternative
+            visualisations: points, spheres, uncertainty ellipses and the
+            napari-particles sprites.  It is appearance, not data, because
+            switching costs no buffer rebuild.
 
-            Discs are opaque whatever the opacity: translucent points have to
-            be depth-sorted to be drawn correctly, and drawing them unsorted is
-            the defect a point cloud is wanted to avoid.  Opacity 0 still hides
-            the layer, which is how a channel is switched off.
-        min_disc_px: smallest diameter a disc is drawn at, in screen pixels, so
-            a point cloud does not vanish when zoomed out.  Gaussians are never
-            enlarged: their summed intensity is the measurement.
+            Opaque footprints are opaque whatever the opacity: translucent
+            markers have to be depth-sorted to be drawn correctly, and drawing
+            them unsorted is the defect a point cloud is wanted to avoid.
+            Opacity 0 still hides the layer, which is how a channel is switched
+            off.
+        min_size_px: smallest on-screen diameter of a visualisation's one-sigma
+            outline, in screen pixels, so it does not vanish when zoomed out.
+            The scientific Gaussian is never enlarged: its summed intensity is
+            the measurement.
     """
 
     colormap: Any = None
@@ -109,31 +106,13 @@ class LayerAppearance:
     contrast_limits: tuple = None
     visible: bool = None
     footprint: str = None
-    min_disc_px: float = None
+    min_size_px: float = None
 
     def __post_init__(self):
         if self.footprint is not None:
             validate_footprint(self.footprint)
-        if self.min_disc_px is not None:
-            validate_min_disc_px(self.min_disc_px)
-
-
-def validate_footprint(footprint):
-    """*footprint*, or a ValueError naming the ones there are."""
-    if footprint not in FOOTPRINTS:
-        raise ValueError(f"footprint must be one of {FOOTPRINTS}, not {footprint!r}")
-    return footprint
-
-
-def validate_min_disc_px(min_disc_px):
-    """*min_disc_px* as a float, or a ValueError if it is not a size."""
-    try:
-        value = float(min_disc_px)
-    except (TypeError, ValueError):
-        raise ValueError(f"min_disc_px must be a number, not {min_disc_px!r}") from None
-    if not np.isfinite(value) or value < 0:
-        raise ValueError(f"min_disc_px must be finite and >= 0, not {min_disc_px!r}")
-    return value
+        if self.min_size_px is not None:
+            validate_min_size_px(self.min_size_px)
 
 
 @dataclass(frozen=True)
@@ -285,7 +264,7 @@ class NullRenderer(LocalizationRenderer):
             opacity=1.0,
             visible=True,
             footprint=FOOTPRINT_GAUSSIAN,
-            min_disc_px=DEFAULT_MIN_DISC_PX,
+            min_size_px=DEFAULT_MIN_SIZE_PX,
         )
 
     def update(self, dataset_id, request):

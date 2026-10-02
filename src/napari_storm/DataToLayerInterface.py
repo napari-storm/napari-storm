@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -15,6 +15,7 @@ from .core import (
     StoreCleared,
     TransformChanged,
 )
+from .core.footprints import BLEND_OPAQUE, FOOTPRINT_GAUSSIAN, footprint_named
 from .core.renderer import Changed, LayerAppearance
 from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
@@ -446,6 +447,15 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             dataset.dataset_id,
             self._render_request(dataset, name=layer_name, colormap=self.colormap[-1]),
         )
+        # A layer opens as the Gaussian; one loaded while the Decorators tab
+        # shows another style has to join it.
+        footprint = getattr(self.render_config, "footprint", FOOTPRINT_GAUSSIAN)
+        if footprint != FOOTPRINT_GAUSSIAN:
+            self.set_appearance(
+                dataset,
+                footprint=footprint,
+                min_size_px=self.render_config.min_size_px,
+            )
 
         # add_layer already frames a newly inserted layer.  Camera recentering
         # after range/filter changes is handled explicitly by the widget using
@@ -548,6 +558,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             changed=changed,
             size_limit=self._splat_size_limit(),
         )
+        request = self._markers_at_full_value(request)
         # Kept for the resource-limit reporting and for tests that inspect what
         # the renderer was handed.
         state = self._state_for(dataset)
@@ -558,6 +569,22 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         )
         self._note_clamped_splat(dataset, request.size)
         return request
+
+    def _markers_at_full_value(self, request):
+        """Draw opaque markers at their colour, not at an intensity weight.
+
+        In variable-size mode a request's values are intensities -- tighter
+        localizations brighter -- which the Gaussian sums into the image.  A
+        marker is not summed: weighting its colour by them drew most of the
+        cloud near-black, and the marker already shows the uncertainty as its
+        size and shape.  Z colour coding, the other use of the values, is only
+        offered in fixed-size mode, where they are all equal anyway.
+        """
+        config = self.render_config
+        footprint = footprint_named(getattr(config, "footprint", FOOTPRINT_GAUSSIAN))
+        if footprint.blend != BLEND_OPAQUE or config.gaussian_mode != 1:
+            return request
+        return replace(request, values=np.ones_like(request.values))
 
     def set_appearance(self, dataset, **fields):
         """Change how *dataset* is drawn, without touching what is drawn.

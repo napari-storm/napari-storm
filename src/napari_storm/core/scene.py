@@ -218,8 +218,8 @@ def _appearance_to_dict(appearance):
     # them, which is why they need no new format version.
     if appearance.footprint is not None:
         raw["footprint"] = appearance.footprint
-    if appearance.min_disc_px is not None:
-        raw["min_disc_px"] = appearance.min_disc_px
+    if appearance.min_size_px is not None:
+        raw["min_size_px"] = appearance.min_size_px
     return raw
 
 
@@ -234,7 +234,7 @@ def _appearance_from_dict(raw):
             contrast_limits=None if limits is None else tuple(limits),
             visible=raw.get("visible"),
             footprint=raw.get("footprint"),
-            min_disc_px=raw.get("min_disc_px"),
+            min_size_px=raw.get("min_size_px"),
         )
     except ValueError as exc:
         raise SceneFormatError(f"invalid appearance: {exc}") from None

@@ -11,12 +11,13 @@ from vispy.gloo import VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
 
-from ..core.renderer import (
-    DEFAULT_MIN_DISC_PX,
-    FOOTPRINT_DISC,
+from ..core.footprints import (
+    DEFAULT_MIN_SIZE_PX,
     FOOTPRINT_GAUSSIAN,
+    FOOTPRINTS,
+    footprint_named,
     validate_footprint,
-    validate_min_disc_px,
+    validate_min_size_px,
 )
 from ._napari_compat import (
     apply_footprint_blending,
@@ -24,7 +25,7 @@ from ._napari_compat import (
     release_additive_blending,
 )
 from .filters import ShaderFilter
-from .instanced_layer import DISC_QUAD_SCALE
+from .footprint_shaders import quad_scale
 from .utils import generate_billboards_2d
 
 _DEFAULT_FILTER = object()
@@ -91,14 +92,14 @@ class BillboardsFilter(Filter):
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
-            // The disc footprint, line for line as InstancedBillboardsFilter
-            // draws it: the one-sigma ellipse in units of the largest sigma,
-            // and a floor under its on-screen radius.  The corners here are
+            // The one-sigma ellipse and the on-screen floor, line for line as
+            // InstancedBillboardsFilter draws them.  The corners here are
             // offsets from the origin, so the half-edge is |pos.x|.
             vec3 rs = camera_right * $sigmas;
             vec3 us = camera_up * $sigmas;
             mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
-                                 dot(rs, us), dot(us, us));
+                                 dot(rs, us), dot(us, us))
+                          / ($extent_sigmas * $extent_sigmas);
             v_disc_inv = $inverse(disc_cov);
             float grow = 1.0;
             if ($min_half_px > 0.0) {
@@ -167,8 +168,9 @@ class BillboardsFilter(Filter):
         vfunc["texcoords"] = self._texcoords_buffer
         vfunc["antialias"] = float(antialias)
         self._antialias = float(antialias)
-        # Gaussians until `set_footprint` says otherwise.
+        # The scientific Gaussian until `set_footprint` says otherwise.
         vfunc["quad_scale"] = 1.0
+        vfunc["extent_sigmas"] = footprint_named(FOOTPRINT_GAUSSIAN).extent_sigmas
         vfunc["min_half_px"] = 0.0
 
         self._centercoords_buffer = VertexBuffer(np.zeros((0, 3), dtype=np.float32))
@@ -179,17 +181,23 @@ class BillboardsFilter(Filter):
 
         super().__init__(vcode=vfunc, vhook="post", fcode=ffunc, fhook="post")
 
-    def set_footprint(self, footprint, min_disc_px=0.0):
-        """Draw Gaussians, or discs no smaller than *min_disc_px* on screen.
+    def set_footprint(self, name, min_size_px=0.0):
+        """Size the billboard for *name*, no smaller than *min_size_px* on screen.
 
-        Antialiasing is off for discs: it keeps a far-away sprite's size by
-        shrinking its texture, which is a Gaussian's answer to the problem the
-        disc floor answers.
+        The shading itself is the layer's `ShaderFilter`.  Antialiasing is off
+        for the visualisations: it keeps a far-away sprite's size by shrinking
+        its texture, which is a Gaussian's answer to the problem the size floor
+        answers.
         """
-        disc = footprint == FOOTPRINT_DISC
-        self.vshader["quad_scale"] = DISC_QUAD_SCALE if disc else 1.0
-        self.vshader["min_half_px"] = 0.5 * float(min_disc_px) if disc else 0.0
-        self.vshader["antialias"] = 0.0 if disc else self._antialias
+        footprint = footprint_named(name)
+        self.vshader["quad_scale"] = quad_scale(name)
+        self.vshader["extent_sigmas"] = footprint.extent_sigmas
+        if footprint.reconstruction:
+            self.vshader["min_half_px"] = 0.0
+            self.vshader["antialias"] = self._antialias
+        else:
+            self.vshader["min_half_px"] = 0.5 * float(min_size_px)
+            self.vshader["antialias"] = 0.0
 
     @property
     def centercoords(self):
@@ -327,7 +335,7 @@ class Particles(Surface):
         self._visual = None
         self._shader_name = shader_name
         self._footprint = FOOTPRINT_GAUSSIAN
-        self._min_disc_px = DEFAULT_MIN_DISC_PX
+        self._min_size_px = DEFAULT_MIN_SIZE_PX
         # Names of layer-list events we connected to, so close() can undo them.
         self._layer_event_connections = []
         super().__init__((vertices, faces, values), texcoords=texcoords, **kwargs)
@@ -481,7 +489,7 @@ class Particles(Surface):
 
     @property
     def footprint(self):
-        """``"gaussian"`` or ``"disc"``; see `core.renderer.LayerAppearance`."""
+        """A name from `core.footprints.PALETTE`; see `LayerAppearance`."""
         return self._footprint
 
     @footprint.setter
@@ -490,23 +498,23 @@ class Particles(Surface):
         self._apply_footprint()
 
     @property
-    def min_disc_px(self):
-        """Smallest on-screen diameter of a disc, in canvas pixels."""
-        return self._min_disc_px
+    def min_size_px(self):
+        """Smallest on-screen diameter of a visualisation, in canvas pixels."""
+        return self._min_size_px
 
-    @min_disc_px.setter
-    def min_disc_px(self, value):
-        self._min_disc_px = validate_min_disc_px(value)
+    @min_size_px.setter
+    def min_size_px(self, value):
+        self._min_size_px = validate_min_size_px(value)
         self._apply_footprint()
 
     def _apply_footprint(self):
-        self._billboard_filter.set_footprint(self._footprint, self._min_disc_px)
-        # The shader is swapped only into and out of "disc", so a layer built
-        # with a filter of its own keeps it while it stays a Gaussian one.
-        if self._footprint == FOOTPRINT_DISC and self._shader_name != "disc":
-            self.shader = "disc"
-        elif self._footprint == FOOTPRINT_GAUSSIAN and self._shader_name == "disc":
-            self.shader = "gaussian"
+        self._billboard_filter.set_footprint(self._footprint, self._min_size_px)
+        # A layer built with a filter of its own keeps it while it stays a
+        # Gaussian one; any palette footprint replaces a palette shader.
+        if self._shader_name != self._footprint and (
+            self._footprint != FOOTPRINT_GAUSSIAN or self._shader_name in FOOTPRINTS
+        ):
+            self.shader = self._footprint
         self._apply_blend_state()
         if self._visual is not None:
             self._visual.update()

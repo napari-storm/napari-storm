@@ -24,6 +24,17 @@ from .dataset_store import (
     DatasetStore,
     StoreCleared,
 )
+from .footprints import (
+    BLEND_ADDITIVE,
+    BLEND_OPAQUE,
+    DEFAULT_MIN_SIZE_PX,
+    FOOTPRINT_DISC,
+    FOOTPRINT_GAUSSIAN,
+    FOOTPRINTS,
+    PALETTE,
+    Footprint,
+    footprint_named,
+)
 from .localization_table import (
     ACTIVE,
     AXES,
@@ -46,10 +57,6 @@ from .metadata import (
 )
 from .render_planner import DatasetTraits, GaussianSettings, RenderPlanner
 from .renderer import (
-    DEFAULT_MIN_DISC_PX,
-    FOOTPRINT_DISC,
-    FOOTPRINT_GAUSSIAN,
-    FOOTPRINTS,
     Changed,
     LayerAppearance,
     LocalizationRenderer,
@@ -116,10 +123,15 @@ __all__ = [
     "MaskChanged",
     "TransformChanged",
     "Changed",
-    "DEFAULT_MIN_DISC_PX",
+    "BLEND_ADDITIVE",
+    "BLEND_OPAQUE",
+    "DEFAULT_MIN_SIZE_PX",
     "FOOTPRINTS",
     "FOOTPRINT_DISC",
     "FOOTPRINT_GAUSSIAN",
+    "Footprint",
+    "PALETTE",
+    "footprint_named",
     "LayerAppearance",
     "DatasetTraits",
     "GaussianSettings",

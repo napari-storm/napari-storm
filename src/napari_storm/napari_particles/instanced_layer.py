@@ -31,19 +31,19 @@ from vispy.gloo import VertexBuffer
 from vispy.visuals.filters import Filter
 from vispy.visuals.shaders import Function, Varying
 
-from ..core.render_planner import SIGMA_TO_SIZE_FACTOR
-from ..core.renderer import (
-    DEFAULT_MIN_DISC_PX,
-    FOOTPRINT_DISC,
+from ..core.footprints import (
+    DEFAULT_MIN_SIZE_PX,
     FOOTPRINT_GAUSSIAN,
+    footprint_named,
     validate_footprint,
-    validate_min_disc_px,
+    validate_min_size_px,
 )
 from ._napari_compat import (
     apply_footprint_blending,
     get_layer_visual,
     release_additive_blending,
 )
+from .footprint_shaders import is_opaque, quad_scale, shape_function
 
 __all__ = ["InstancedParticles", "InstancedBillboardsFilter"]
 
@@ -52,12 +52,6 @@ QUAD_XY = np.array(
     [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=np.float32
 )
 QUAD_FACES = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
-
-#: A disc quad, as a fraction of the Gaussian billboard.  The billboard edge is
-#: `SIGMA_TO_SIZE_FACTOR` largest sigmas, room for a Gaussian's tails; a disc is
-#: the one-sigma outline, so its quad needs a half-edge of one largest sigma.
-#: Drawing discs on the full billboard would discard seven fragments in eight.
-DISC_QUAD_SCALE = 2.0 / SIGMA_TO_SIZE_FACTOR
 
 # There is deliberately no texture-coordinate buffer here.  A per-vertex
 # attribute has to be in the order the vertices are *drawn*, and that is not the
@@ -122,26 +116,27 @@ class InstancedBillboardsFilter(Filter):
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
-            // The disc footprint is the one-sigma ellipse, filled.  Its
+            // The localization's one-sigma ellipse on screen, which the
+            // footprints that draw an outline measure against.  Its
             // covariance in the screen basis is the marginal of the
             // axis-aligned diag(sigma^2) -- what an orthographic projection
-            // of the 3-D ellipsoid looks like -- in units of the largest
-            // sigma, which is the half-edge of a disc quad.  Computed for
-            // Gaussians as well and not used there: one branch in the
-            // fragment shader is cheaper than a second program to keep in
-            // step with this one.
+            // of the 3-D ellipsoid looks like.  $sigmas are in units of the
+            // widest sigma and the drawn square is $extent_sigmas of those to
+            // either side, so dividing by its square puts the ellipse in the
+            // square's own -1 to 1 coordinate.
             vec3 rs = camera_right * $sigmas;
             vec3 us = camera_up * $sigmas;
             mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
-                                 dot(rs, us), dot(us, us));
+                                 dot(rs, us), dot(us, us))
+                          / ($extent_sigmas * $extent_sigmas);
             v_disc_inv = $inverse(disc_cov);
 
-            // A disc smaller on screen than $min_half_px (a radius, in canvas
-            // pixels) is enlarged to it, so a point cloud stays visible when
-            // zoomed out.  Measured on the ellipse's equal-area radius, the
-            // square root of its semi-axes' product.  Zero for Gaussians,
-            // which are never enlarged: their summed intensity is the
-            // measurement.
+            // A one-sigma outline smaller on screen than $min_half_px (a
+            // radius, in canvas pixels) is enlarged to it, so a visualisation
+            // stays visible when zoomed out.  Measured on the ellipse's
+            // equal-area radius, the square root of its semi-axes' product.
+            // Zero for the scientific Gaussian, which is never enlarged: its
+            // summed intensity is the measurement.
             float grow = 1.0;
             if ($min_half_px > 0.0) {
                 float half_edge = 0.5 * $billboard_size * $quad_scale;
@@ -157,9 +152,9 @@ class InstancedBillboardsFilter(Filter):
                 }
             }
 
-            // $quad_scale shrinks a disc's quad to its bounding square; the
-            // quad coordinate below is taken before scaling, so it still runs
-            // -1 to 1 across whatever is drawn.
+            // $quad_scale shrinks the billboard to the square the footprint
+            // needs; the quad coordinate below is taken before scaling, so it
+            // still runs -1 to 1 across whatever is drawn.
             vec3 pos_real = $vertex_center.xyz
                           + (camera_right*pos.x + camera_up*pos.y)
                             * ($quad_scale * grow);
@@ -215,22 +210,23 @@ class InstancedBillboardsFilter(Filter):
                 (v_instance_value - $clim_low) / $clim_range, 0.0, 1.0
             );
             vec4 mapped = $cmap(t);
-            if ($footprint > 0.5) {
-                // A disc: flat colour inside the one-sigma ellipse, nothing
-                // outside.  Alpha is 1 because a disc is opaque: napari
-                // blends the bottom-most layer with the canvas even under
-                // its "opaque" preset, at whatever alpha arrives.
-                if (layer_alpha <= 0.0 || dot(x, v_disc_inv*x) > 1.0) {
-                    discard;
-                }
-                gl_FragColor = vec4(mapped.rgb, 1.0);
-            } else {
-                float gaussian = exp(-2.0*dot(x, covariance_inv*x));
-                // The falloff goes in alpha as well as colour so additive
-                // blending squares it, matching the shader this replaces.
-                gl_FragColor = mapped * gaussian;
-                gl_FragColor.a = gaussian * layer_alpha;
+            // What the footprint puts on the square: see footprint_shaders.
+            // An opaque one is drawn at alpha 1 -- napari blends the
+            // bottom-most layer with the canvas even under its "opaque"
+            // preset, at whatever alpha arrives -- and not at all at opacity
+            // 0, which is how a channel is switched off.  The Gaussian's
+            // falloff goes in alpha as well as colour, so additive blending
+            // squares it, matching the shader this replaces.
+            if ($opaque > 0.5 && layer_alpha <= 0.0) {
+                discard;
             }
+            vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
+                                dot(x, covariance_inv*x),
+                                vec4(mapped.rgb, layer_alpha));
+            if ($opaque > 0.5) {
+                drawn.a = 1.0;
+            }
+            gl_FragColor = drawn;
         }
         """)
 
@@ -243,9 +239,11 @@ class InstancedBillboardsFilter(Filter):
         # Identity window until the layer says otherwise.
         ffunc["clim_low"] = 0.0
         ffunc["clim_range"] = 1.0
-        # Gaussians until `set_footprint` says otherwise.
-        ffunc["footprint"] = 0.0
+        # The scientific Gaussian until `set_footprint` says otherwise.
+        ffunc["shape"] = shape_function(FOOTPRINT_GAUSSIAN)
+        ffunc["opaque"] = 0.0
         vfunc["quad_scale"] = 1.0
+        vfunc["extent_sigmas"] = footprint_named(FOOTPRINT_GAUSSIAN).extent_sigmas
         vfunc["min_half_px"] = 0.0
 
         self._texcoord_varying = Varying("v_texcoord", "vec2")
@@ -294,12 +292,19 @@ class InstancedBillboardsFilter(Filter):
         """The quad edge, needed to recover the quad coordinate in the shader."""
         self.vshader["billboard_size"] = float(size)
 
-    def set_footprint(self, footprint, min_disc_px=0.0):
-        """Draw Gaussians, or discs no smaller than *min_disc_px* on screen."""
-        disc = footprint == FOOTPRINT_DISC
-        self.fshader["footprint"] = 1.0 if disc else 0.0
-        self.vshader["quad_scale"] = DISC_QUAD_SCALE if disc else 1.0
-        self.vshader["min_half_px"] = 0.5 * float(min_disc_px) if disc else 0.0
+    def set_footprint(self, name, min_size_px=0.0):
+        """Draw *name* from the palette, no smaller than *min_size_px* on screen.
+
+        The floor never applies to the scientific Gaussian.
+        """
+        footprint = footprint_named(name)
+        self.fshader["shape"] = shape_function(name)
+        self.fshader["opaque"] = 1.0 if is_opaque(name) else 0.0
+        self.vshader["quad_scale"] = quad_scale(name)
+        self.vshader["extent_sigmas"] = footprint.extent_sigmas
+        self.vshader["min_half_px"] = (
+            0.0 if footprint.reconstruction else 0.5 * float(min_size_px)
+        )
 
     def set_instances(self, centers, sigmas, values):
         """Upload one row per localization."""
@@ -354,7 +359,7 @@ class InstancedParticles(Surface):
 
         self._billboard_filter = InstancedBillboardsFilter()
         self._footprint = FOOTPRINT_GAUSSIAN
-        self._min_disc_px = DEFAULT_MIN_DISC_PX
+        self._min_size_px = DEFAULT_MIN_SIZE_PX
         self._viewer = None
         self._visual = None
         self._layer_event_connections = []
@@ -368,7 +373,7 @@ class InstancedParticles(Surface):
 
     @property
     def footprint(self):
-        """``"gaussian"`` or ``"disc"``; see `core.renderer.LayerAppearance`."""
+        """A name from `core.footprints.PALETTE`; see `LayerAppearance`."""
         return self._footprint
 
     @footprint.setter
@@ -377,17 +382,17 @@ class InstancedParticles(Surface):
         self._apply_footprint()
 
     @property
-    def min_disc_px(self):
-        """Smallest on-screen diameter of a disc, in canvas pixels."""
-        return self._min_disc_px
+    def min_size_px(self):
+        """Smallest on-screen diameter of a visualisation, in canvas pixels."""
+        return self._min_size_px
 
-    @min_disc_px.setter
-    def min_disc_px(self, value):
-        self._min_disc_px = validate_min_disc_px(value)
+    @min_size_px.setter
+    def min_size_px(self, value):
+        self._min_size_px = validate_min_size_px(value)
         self._apply_footprint()
 
     def _apply_footprint(self):
-        self._billboard_filter.set_footprint(self._footprint, self._min_disc_px)
+        self._billboard_filter.set_footprint(self._footprint, self._min_size_px)
         self._apply_blend_state()
         if self._visual is not None:
             self._visual.update()

@@ -16,7 +16,7 @@ FutureWarning from 0.6 onward and is slated for removal in 0.8, so
 import warnings
 import weakref
 
-from ..core.renderer import FOOTPRINT_DISC
+from ..core.footprints import BLEND_OPAQUE, footprint_named
 
 __all__ = [
     "NapariInternalsChanged",
@@ -155,16 +155,17 @@ def release_additive_blending(visual):
 def apply_footprint_blending(layer, visual, footprint):
     """Give *layer*'s *visual* the blend state its *footprint* needs.
 
-    Gaussians are summed, so their blending is forced additive -- see
-    :func:`force_additive_blending` for why it is forced rather than set.  Discs
-    occlude: the force is released and napari's own ``opaque`` preset applies,
-    depth test on, which also keeps it applied across napari's re-orderings.
+    An additive footprint -- the Gaussian above all -- is summed, so its
+    blending is forced additive; see :func:`force_additive_blending` for why it
+    is forced rather than set.  An opaque one occludes: the force is released
+    and napari's own ``opaque`` preset applies, depth test on, which also keeps
+    it applied across napari's re-orderings.
     The layer's ``blending`` property is moved with it, so what napari's
     controls report is what is drawn.
     """
     if visual is None:
         return
-    if footprint == FOOTPRINT_DISC:
+    if footprint_named(footprint).blend == BLEND_OPAQUE:
         release_additive_blending(visual)
         if layer.blending != "opaque":
             layer.blending = "opaque"
