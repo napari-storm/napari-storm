@@ -21,6 +21,7 @@ import numpy as np
 
 from .localization_table import ACTIVE
 from .renderer import DEFAULT_COLORMAP, Changed, RenderRequest
+from .traces import AUTO, plan_traces
 from .validation import (
     InvalidLocalizationData,
     require_positive_maximum,
@@ -290,6 +291,9 @@ class RenderPlanner:
         changed=Changed.EVERYTHING,
         size_limit=None,
         selection=ACTIVE,
+        trace_column=None,
+        time_column=AUTO,
+        trace_properties=(),
     ):
         """Everything a backend needs to draw this dataset as it stands now.
 
@@ -303,6 +307,13 @@ class RenderPlanner:
         :data:`~napari_storm.core.localization_table.FILTERED`, the rows the
         user actually selected, because budget thinning is an accommodation to
         the GPU and has no business in a saved result.
+
+        *trace_column*, when given, also arranges the same rows as
+        trajectories -- `core.traces.plan_traces`, with *time_column* and
+        *trace_properties* passed through -- into ``request.traces``.  The
+        coordinates are the ones computed for the splats, not a second
+        computation of them, so every trajectory passes through its own drawn
+        localizations.  Without it ``request.traces`` is None.
         """
         if settings.mode == 1 and not traits.uncertainty_defined:
             raise InvalidLocalizationData(
@@ -315,8 +326,20 @@ class RenderPlanner:
         sigmas, size = self.sigmas(rows, settings, traits)
         if size_limit is not None:
             size = min(size, float(size_limit))
+        coords = self.coordinates(rows, traits, transform)
+        traces = None
+        if trace_column is not None:
+            traces = plan_traces(
+                table,
+                traits,
+                trace_column=trace_column,
+                time_column=time_column,
+                selection=selection,
+                properties=tuple(trace_properties),
+                coords=coords,
+            )
         return RenderRequest(
-            coords=self.coordinates(rows, traits, transform),
+            coords=coords,
             sigmas=sigmas,
             size=size,
             values=self.values(rows, settings, traits),
@@ -325,6 +348,7 @@ class RenderPlanner:
             antialias=antialias,
             active_ids=rows.ids,
             changed=changed,
+            traces=traces,
         )
 
 
