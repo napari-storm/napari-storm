@@ -41,6 +41,7 @@ from ..core.footprints import (
 from ._napari_compat import (
     apply_footprint_blending,
     get_layer_visual,
+    mesh_vertex_buffer,
     release_additive_blending,
 )
 from .footprint_shaders import is_opaque, quad_scale, shape_function
@@ -91,10 +92,14 @@ class InstancedBillboardsFilter(Filter):
         varying mat2 v_disc_inv;
 
         void apply(){
-            // The quad corner, in world units, recovered the same way the
-            // non-instanced filter does it.
-            vec4 pos = $transform_inv(gl_Position);
-            pos.z *= pos.w;
+            // The quad corner, in visual units, read from the mesh's own
+            // vertex buffer.  It used to be recovered by inverting the
+            // transforms on gl_Position, which through the perspective camera
+            // came apart for a quad far from the camera -- and this quad sits
+            // near the origin, wherever the data is: zoomed in and tilted
+            // away from the origin, every splat flickered and was cut off
+            // from changing sides.  See mesh_vertex_buffer.
+            vec3 pos = $quad_corner;
 
             mat4 cov = mat4(1.0);
             cov[0][0] = sqrt($sigmas[0]);
@@ -340,9 +345,7 @@ class InstancedBillboardsFilter(Filter):
 
     def _attach(self, visual):
         self.vshader["transform"] = visual.transforms.get_transform("visual", "render")
-        self.vshader["transform_inv"] = visual.transforms.get_transform(
-            "render", "visual"
-        )
+        self.vshader["quad_corner"] = mesh_vertex_buffer(visual)
         self.vshader["camera_inv"] = visual.transforms.get_transform(
             "document", "scene"
         )
