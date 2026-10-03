@@ -15,6 +15,8 @@ Unlike voxel-based approaches, napari-storm renders each localization as a **bil
 - Multi-channel colormaps with per-channel contrast/opacity controls.
 - Interactive histogram-based filtering.
 - Overlays: grid planes, scalebars, and 3D camera views.
+- MINFLUX traces drawn as paths through their own localizations, in the order
+  they were measured -- a tracking run's trajectories, in 2-D and 3-D.
 - Export data in multiple formats, including **calibrated OME-TIFF** at a pixel
   size you choose, which never downsamples to fit.
 - **Embeddable**: a host application can render localizations through the API

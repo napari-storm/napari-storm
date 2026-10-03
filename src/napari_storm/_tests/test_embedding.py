@@ -189,6 +189,52 @@ def test_a_host_can_draw_a_point_cloud(make_napari_viewer):
     assert _brightness(viewer) > 0.5
 
 
+def test_a_host_can_connect_traces(make_napari_viewer):
+    """A MINFLUX trace as a path through its localizations, in time order."""
+    from dataclasses import fields
+
+    from napari_storm.core import find_trace_column
+
+    assert "traces" in {f.name for f in fields(LayerAppearance)}
+
+    viewer = make_napari_viewer()
+    records = _records(n=2_000)
+    traced = np.rec.array(
+        np.zeros(
+            len(records),
+            dtype=records.dtype.descr + [("trace_id", "i4"), ("time_s", "f4")],
+        )
+    )
+    for name in records.dtype.names:
+        traced[name] = records[name]
+    traced.trace_id = np.arange(len(traced)) % 50
+    traced.time_s = np.arange(len(traced)) * 1e-3
+    table = LocalizationTable(traced)
+    settings, traits = GaussianSettings(), DatasetTraits(zdim_present=True)
+
+    request = RenderPlanner().plan(
+        table,
+        settings,
+        traits,
+        name="tracking",
+        trace_column=find_trace_column(table),
+    )
+    renderer = select_renderer(viewer)
+    renderer.open(1, request)
+    renderer.set_appearance(
+        1, LayerAppearance(traces=True, trace_color_by="time", trace_width_px=2.0)
+    )
+    viewer.dims.ndisplay = 3
+
+    assert renderer.draws_traces(1)
+    assert len(renderer.trace_layer(1).data) == len(table)
+    # Every trajectory vertex is a drawn localization.
+    np.testing.assert_array_equal(
+        renderer.trace_layer(1).data[:, 2:],
+        renderer.layer(1).localization_coords[request.traces.localization_ids],
+    )
+
+
 def test_closing_releases_everything(make_napari_viewer):
     viewer = make_napari_viewer()
     renderer = select_renderer(viewer)

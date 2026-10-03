@@ -129,6 +129,34 @@ the default. The **Alternative visualisations** are for viewing:
 
 Exports always write the Gaussian reconstruction.
 
+**Traces**, below it, connects the localizations of one molecule. A MINFLUX
+trace is one molecule localized again and again, and the file says which
+localizations belong together (its `tid`). Tick **Connect traces** and each
+trace is drawn as a line through its own localizations, in the order they were
+measured -- for a tracking run, the path the molecule took; for a fixed
+sample, how far its repeated localizations wander.
+
+* **Colour traces by:** **Trace** gives every trace its own colour, which it
+  keeps when filters change; **Time** colours by when each localization was
+  measured; **Progress along trace** runs from the first localization to the
+  last, which shows which way a tracked molecule went. Below those are the
+  numeric columns of the data, `efo` or `cfr` for MINFLUX.
+* **Trace width [px]:** the line width on screen. Your graphics driver may cap
+  it; on a Mac, at 8.
+
+The lines go wherever the localizations go: they follow the filters, the
+render range, a dataset's shift and its channel's show/hide and opacity, and
+they appear for a dataset loaded later. Data without trace ids -- STORM and
+PALM files, for instance -- has nothing to connect: the box is greyed out and
+its tooltip says why. A trace of a single shown localization draws nothing.
+Deleting a trace layer in napari's layer list switches traces off again
+without unloading anything. Traces are for viewing; exports do not include
+them.
+
+The lines are a napari Tracks layer, which normally comes with a time slider.
+Every point of the overlay is put at one time, so there is no slider to move
+and nothing is hidden -- time is shown by colour instead.
+
 Tick **Grid plane activated?** in the Decorators tab, then adjust:
 
 * **Grid line distance [µm]:**
@@ -204,11 +232,15 @@ knowing:
   to be showing. If a large dataset is being displayed as a subsample to stay
   within the memory budget, the export still contains every localization that
   passed your filters.
+* **It exports the reconstruction only.** Traces and the alternative
+  visualisations from the Decorators tab are for viewing and are not written;
+  the file holds the summed Gaussians, which is the quantitative image.
 
 ### 10) Save the scene
 
 **Save Scene…** writes this session's *decisions* — alignment, colours, render
-settings, reference-image placement, camera — as a small JSON file. The
+settings, rendering style and traces, reference-image placement, camera — as a
+small JSON file. The
 localizations are not copied into it; the scene points at the files it came
 from, so it stays small and does not duplicate your data.
 

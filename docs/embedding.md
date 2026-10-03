@@ -6,9 +6,9 @@ a notebook — supplies the data and drives the lifecycle; the plugin supplies
 the Gaussian model and the renderer.
 
 Every example below is executed by the test suite, so the code you copy is the
-code CI runs and it cannot quietly stop working. The lifecycle examples come
-from `_tests/test_embedding.py`; the column-declaration example from
-`_tests/test_declared_columns.py`, and the export example from
+code CI runs and it cannot quietly stop working. The lifecycle and trace
+examples come from `_tests/test_embedding.py`; the column-declaration example
+from `_tests/test_declared_columns.py`, and the export example from
 `_tests/test_ome_export.py`.
 
 ## The whole of it
@@ -211,6 +211,102 @@ Colour is per marker: each localization's own value through the colormap and
 contrast limits, since an opaque footprint has no sum to window. `NapariPointsRenderer`, the comparison backend, draws each
 opaque footprint as napari's nearest marker and approximates the size floor
 through napari's own marker limits.
+
+## Traces
+
+A trace is one molecule localized repeatedly -- MINFLUX's `tid`, which the
+readers store as `trace_id`. Drawn as points it is a smear; connected through
+its own localizations in the order they were measured, it is a path, which is
+what a tracking acquisition measures. Any integer column can name the traces:
+plan with it, then ask for the overlay through the appearance:
+
+```python
+from napari_storm.core import LayerAppearance, RenderPlanner, find_trace_column
+
+request = RenderPlanner().plan(
+    table, settings, traits, name="tracking",
+    trace_column=find_trace_column(table),      # "trace_id", or None
+)
+renderer.open(1, request)
+renderer.set_appearance(1, LayerAppearance(
+    traces=True, trace_color_by="time", trace_width_px=2.0,
+))
+assert renderer.draws_traces(1)
+```
+
+`find_trace_column` tries `trace_id`; for any other column -- Picasso's
+`group`, a tracker's id, a column your format declares -- pass its name. It
+has to hold whole numbers: a fraction or a NaN is refused rather than guessed
+at, and negative ids, which tracking and clustering tools write for
+"unlinked", join no trace.
+
+| Field | Meaning |
+|---|---|
+| `traces` | draw the overlay; off until set, and `open` starts every dataset without it |
+| `trace_color_by` | `"trace"` (default): one hue per trace, kept when a filter removes its neighbours; `"time"`; `"progress"` along each trace, first to last; or a column planned with `trace_properties=("efo",)` |
+| `trace_width_px` | line width in screen pixels |
+
+What follows from planning it with the request:
+
+* **The vertices are the splat centres, exactly.** `request.traces` is built
+  from the coordinate array planned for the splats, so a trajectory passes
+  through its own localizations after a `WorldTransform`, a filter mask, a
+  render-range crop or the display limit -- under the budget it connects the
+  localizations that are drawn. Flat data stays on the splats' plane.
+* **Order is time, else acquisition.** Each trace is sorted by the table's time
+  (`time_s`, then a frame number) and, where there is none, keeps its row order
+  -- which is acquisition order for every reader here. Ties keep the row order
+  too. `time_column=` names another column, or `None` asks for row order.
+* **It follows the dataset.** `update` replans it, `set_visible` and the
+  appearance's `opacity` hide and fade it, `close` removes it. An update whose
+  `changed` lacks `TRACES`, `SELECTION` and `POSITIONS` leaves the overlay as
+  it is -- that is what keeps a width change cheap -- and one that is only
+  `Changed.TRACES` touches nothing but the overlay.
+* **A trace of one selected localization** has nothing to connect and is left
+  out; with nothing left to connect there is no overlay layer at all.
+* **It is a visualisation.** No export writes it, and nothing derives a width
+  from a trace's spread: that spread is a precision only for a fixed sample,
+  and is the motion itself in a tracking run.
+  `core.trace_spread_is_meaningful(is_tracking)` says which, and whether an
+  acquisition is tracking cannot be read off the file -- the caller says so.
+
+On the napari backends the overlay is a napari **Tracks** layer named
+`"<dataset> traces"` (`renderer.trace_layer(1)` hands it over for inspection).
+Tracks are time-resolved, and two things a host might otherwise trip over are
+handled for it:
+
+* every vertex sits at **one time point**, so the time axis napari adds has a
+  single step: there is no slider to move before anything shows, and nothing
+  is faded. Time is shown by `trace_color_by="time"` instead;
+* napari **refits the camera** whenever the viewer gains or loses an axis; the
+  overlay restores the camera, and the layer selection, after adding or
+  removing its layer.
+
+Lines are drawn by the GL driver, which caps their width -- at 8 logical
+pixels on macOS, and at 1 on some drivers that support only thin lines.
+Deleting an overlay layer in napari turns that dataset's traces off rather
+than closing the dataset; set `renderer.on_traces_removed_by_host` to hear
+about it.
+
+**Checking for it.** As for summed contrast, check for the capability rather
+than a version:
+
+```python
+from dataclasses import fields
+has_traces = "traces" in {f.name for f in fields(LayerAppearance)}
+```
+
+`LocalizationRenderer.draws_traces` exists on every backend, and answers False
+on one that predates traces.
+
+**What it costs.** 10^4 traces of 100 localizations -- 10^6 vertices -- plan in
+0.06 s, and the overlay takes 0.7 s to build, 0.4-0.5 s to follow a filter
+change (most of it napari indexing the tracks for hovering) and adds about
+2 ms to a 2560x1600 frame; a width or colour change is immediate, and a
+filter change with traces off costs what it did. At 10^5 vertices those are
+0.12 s and 0.04 s. Memory is about 90 bytes a vertex for the vertices and the
+arrays handed to napari, and as much again inside napari.
+`scripts/benchmark_traces.py` measures it.
 
 ## Things that will catch you
 
