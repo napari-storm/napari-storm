@@ -64,6 +64,19 @@ for its own Points layer.
 
 ---
 
+## Traces are planned, then drawn
+
+Connecting a MINFLUX trace's localizations follows the same split. The planner
+groups the rows it has just planned for the splats by trace and sorts each by
+time -- concurrent traces arrive interleaved in a MINFLUX file -- reusing the
+same coordinates, so a line runs exactly through its localizations whatever
+alignment or filter applies. A backend then draws them as a napari Tracks
+layer with every vertex at one time point, so napari's time slider never hides
+part of a path. The overlay is a visualisation: it is not part of the
+reconstruction, and no export writes it.
+
+---
+
 ## Architecture Overview
 
 ![napari-storm architecture flowchart](res/napari_storm_flowchart_linear.png)

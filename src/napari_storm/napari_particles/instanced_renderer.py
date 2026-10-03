@@ -11,15 +11,16 @@ rather than a blank viewer.
 
 from __future__ import annotations
 
-from ..core.renderer import LayerAppearance, LocalizationRenderer
+from ..core.renderer import Changed, LayerAppearance, LocalizationRenderer
 from ._napari_compat import instancing_available
 from .instanced_layer import InstancedParticles
+from .trace_overlay import TraceOverlay, TracesMixin
 
 __all__ = ["InstancedRenderer"]
 
 
-class InstancedRenderer(LocalizationRenderer):
-    """Draws each dataset as one instanced quad."""
+class InstancedRenderer(TracesMixin, LocalizationRenderer):
+    """Draws each dataset as one instanced quad, and its traces over it."""
 
     def __init__(self, viewer):
         if not instancing_available():
@@ -35,6 +36,7 @@ class InstancedRenderer(LocalizationRenderer):
         self._closing = set()
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
+        self._traces = TraceOverlay(viewer)
 
     # ------------------------------------------------------------------
     # Handles
@@ -55,6 +57,7 @@ class InstancedRenderer(LocalizationRenderer):
             self.viewer.layers.events.removed.disconnect(self._on_layer_removed)
         except (ValueError, TypeError, RuntimeError):
             pass
+        self._traces.detach()
 
     def _on_layer_removed(self, event):
         layer = getattr(event, "value", None)
@@ -65,6 +68,7 @@ class InstancedRenderer(LocalizationRenderer):
             return
         self._layers.pop(dataset_id, None)
         layer.close()
+        self._traces.close(dataset_id)
         if self.on_layer_removed_by_host is not None:
             self.on_layer_removed_by_host(dataset_id)
 
@@ -84,12 +88,17 @@ class InstancedRenderer(LocalizationRenderer):
         )
         layer.add_to_viewer(self.viewer)
         self._layers[dataset_id] = layer
+        self._traces.open(dataset_id, request)
         return layer
 
     def update(self, dataset_id, request):
         layer = self._layers.get(dataset_id)
         if layer is None:
             raise KeyError(f"dataset {dataset_id} is not open")
+        if request.changed == Changed.TRACES:
+            # Only the overlay differs: the splats are as they were.
+            self._traces.update(dataset_id, request)
+            return layer
         layer.update_particle_data(
             coords=request.coords,
             size=request.size,
@@ -102,12 +111,15 @@ class InstancedRenderer(LocalizationRenderer):
         # splats stop summing and the reconstruction becomes whichever Gaussian
         # was drawn last.
         layer._apply_blend_state()
+        self._traces.update(dataset_id, request)
+        self._traces.set_shown(dataset_id, True)
         return layer
 
     def set_visible(self, dataset_id, visible):
         layer = self._layers.get(dataset_id)
         if layer is not None:
             layer.visible = bool(visible)
+            self._traces.set_shown(dataset_id, visible)
 
     def set_appearance(self, dataset_id, appearance):
         layer = self._layers.get(dataset_id)
@@ -127,6 +139,7 @@ class InstancedRenderer(LocalizationRenderer):
             layer.min_size_px = appearance.min_size_px
         if appearance.footprint is not None:
             layer.footprint = appearance.footprint
+        self._traces.set_appearance(dataset_id, appearance)
         return layer
 
     def appearance(self, dataset_id):
@@ -141,6 +154,7 @@ class InstancedRenderer(LocalizationRenderer):
             footprint=layer.footprint,
             min_size_px=layer.min_size_px,
             summed_contrast=layer.summed_contrast,
+            **self._traces.appearance_fields(dataset_id),
         )
 
     def value_range(self, dataset_id):
@@ -152,6 +166,7 @@ class InstancedRenderer(LocalizationRenderer):
         return layer is not None and layer.contrast_is_summed
 
     def close(self, dataset_id):
+        self._traces.close(dataset_id)
         layer = self._layers.pop(dataset_id, None)
         if layer is None:
             return
@@ -169,4 +184,6 @@ class InstancedRenderer(LocalizationRenderer):
 
     def host_bytes(self, dataset_id):
         layer = self._layers.get(dataset_id)
-        return 0 if layer is None else layer.host_bytes()
+        if layer is None:
+            return 0
+        return layer.host_bytes() + self._traces.host_bytes(dataset_id)

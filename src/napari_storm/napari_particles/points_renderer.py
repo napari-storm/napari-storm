@@ -37,8 +37,9 @@ from ..core.footprints import (
     FOOTPRINT_GAUSSIAN,
     footprint_named,
 )
-from ..core.renderer import LayerAppearance, LocalizationRenderer
+from ..core.renderer import Changed, LayerAppearance, LocalizationRenderer
 from .footprint_shaders import quad_scale
+from .trace_overlay import TraceOverlay, TracesMixin
 
 #: napari's own floor and ceiling for marker sizes, in canvas pixels.
 _NAPARI_CANVAS_SIZE_LIMITS = (2, 10000)
@@ -58,8 +59,8 @@ _MARKERS = {
 __all__ = ["NapariPointsRenderer"]
 
 
-class NapariPointsRenderer(LocalizationRenderer):
-    """Draws each dataset as one napari ``Points`` layer."""
+class NapariPointsRenderer(TracesMixin, LocalizationRenderer):
+    """Draws each dataset as one napari ``Points`` layer, and its traces."""
 
     def __init__(self, viewer):
         self.viewer = viewer
@@ -68,6 +69,7 @@ class NapariPointsRenderer(LocalizationRenderer):
         self._closing = set()
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
+        self._traces = TraceOverlay(viewer)
 
     # ------------------------------------------------------------------
     # Handles
@@ -88,6 +90,7 @@ class NapariPointsRenderer(LocalizationRenderer):
             self.viewer.layers.events.removed.disconnect(self._on_layer_removed)
         except (ValueError, TypeError, RuntimeError):
             pass
+        self._traces.detach()
 
     def _on_layer_removed(self, event):
         layer = getattr(event, "value", None)
@@ -98,6 +101,7 @@ class NapariPointsRenderer(LocalizationRenderer):
             return
         self._layers.pop(dataset_id, None)
         self._footprints.pop(dataset_id, None)
+        self._traces.close(dataset_id)
         if self.on_layer_removed_by_host is not None:
             self.on_layer_removed_by_host(dataset_id)
 
@@ -171,12 +175,17 @@ class NapariPointsRenderer(LocalizationRenderer):
         )
         self._layers[dataset_id] = layer
         self._footprints[dataset_id] = (FOOTPRINT_GAUSSIAN, DEFAULT_MIN_SIZE_PX)
+        self._traces.open(dataset_id, request)
         return layer
 
     def update(self, dataset_id, request):
         layer = self._layers.get(dataset_id)
         if layer is None:
             raise KeyError(f"dataset {dataset_id} is not open")
+        if request.changed == Changed.TRACES:
+            # Only the overlay differs: the points are as they were.
+            self._traces.update(dataset_id, request)
+            return layer
         # Points has no in-place buffer API; assigning data replaces the arrays
         # but keeps the layer, its colormap and its event connections.  That it
         # cannot do better than this is itself a result for the comparison.
@@ -185,12 +194,15 @@ class NapariPointsRenderer(LocalizationRenderer):
         layer.size = self._point_sizes(request, self._footprints[dataset_id][0])
         layer.face_color = "value"
         layer.visible = True
+        self._traces.update(dataset_id, request)
+        self._traces.set_shown(dataset_id, True)
         return layer
 
     def set_visible(self, dataset_id, visible):
         layer = self._layers.get(dataset_id)
         if layer is not None:
             layer.visible = bool(visible)
+            self._traces.set_shown(dataset_id, visible)
 
     def set_appearance(self, dataset_id, appearance):
         layer = self._layers.get(dataset_id)
@@ -212,6 +224,7 @@ class NapariPointsRenderer(LocalizationRenderer):
                 min_size_px = float(appearance.min_size_px)
             self._footprints[dataset_id] = (footprint, min_size_px)
             self._apply_footprint(dataset_id, previous=previous)
+        self._traces.set_appearance(dataset_id, appearance)
         return layer
 
     def appearance(self, dataset_id):
@@ -226,6 +239,7 @@ class NapariPointsRenderer(LocalizationRenderer):
             visible=layer.visible,
             footprint=footprint,
             min_size_px=min_size_px,
+            **self._traces.appearance_fields(dataset_id),
         )
 
     def value_range(self, dataset_id):
@@ -238,6 +252,7 @@ class NapariPointsRenderer(LocalizationRenderer):
         return float(np.min(values)), float(np.max(values))
 
     def close(self, dataset_id):
+        self._traces.close(dataset_id)
         layer = self._layers.pop(dataset_id, None)
         self._footprints.pop(dataset_id, None)
         if layer is None:
@@ -271,4 +286,4 @@ class NapariPointsRenderer(LocalizationRenderer):
         ):
             if isinstance(array, np.ndarray):
                 total += array.nbytes
-        return total
+        return total + self._traces.host_bytes(dataset_id)

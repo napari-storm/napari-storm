@@ -23,6 +23,12 @@ from qtpy.QtWidgets import (
 )
 
 from napari_storm.core.footprints import DEFAULT_MIN_SIZE_PX, PALETTE
+from napari_storm.core.traces import (
+    COLOR_BY_PROGRESS,
+    COLOR_BY_TIME,
+    COLOR_BY_TRACE,
+    DEFAULT_TRACE_WIDTH_PX,
+)
 from napari_storm.CustomErrors import ParentError
 from napari_storm.ns_constants import (
     FWHM_TO_SIGMA,
@@ -42,6 +48,19 @@ from .pyqt.detachable_tab import DetachableTabWidget
 from .Test_Mode import TestModeWindow
 
 _LOG = logging.getLogger(__name__)
+
+#: What the Decorators tab offers to colour traces by before any column: the
+#: colourings every trace has, whatever its format recorded.
+TRACE_COLOR_BY_CHOICES = (
+    ("Trace", COLOR_BY_TRACE),
+    ("Time", COLOR_BY_TIME),
+    ("Progress along trace", COLOR_BY_PROGRESS),
+)
+
+#: Widest line the Decorators tab offers, in screen pixels.  Lines are drawn
+#: by the GL driver, and drivers cap them -- macOS at 8 logical pixels on a
+#: Retina display -- so a wider setting would promise what is not drawn.
+MAX_TRACE_WIDTH_PX = 8
 
 
 class NapariStormGUI(QWidget):
@@ -401,6 +420,47 @@ class NapariStormGUI(QWidget):
 
         self.HL_footprint = QHSeperationLine()
         self.decorator_tab_layout.addRow(self.HL_footprint)
+
+        # Traces: one molecule localized repeatedly, drawn as a path through
+        # its own localizations in the order they were measured.
+        self.Ltraces = QLabel()
+        self.Ltraces.setText("Traces")
+        self.Ltraces.setFont(QFont("Arial", 10))
+        self.decorator_tab_layout.addRow(self.Ltraces)
+
+        self.Ctraces = QCheckBox("Connect traces")
+        self.Ctraces.toggled.connect(self._traces_toggled)
+        self.decorator_tab_layout.addRow("", self.Ctraces)
+
+        self.Btrace_color_by = QComboBox()
+        for label, name in TRACE_COLOR_BY_CHOICES:
+            self.Btrace_color_by.addItem(label, name)
+        self.Btrace_color_by.setToolTip(
+            "Trace: one hue per trace, which it keeps when filters change.  "
+            "Time: when each localization was measured.  Progress along "
+            "trace: first to last, the direction a molecule moved.  Below "
+            "those, any numeric column the data carries."
+        )
+        self.Btrace_color_by.currentIndexChanged.connect(self._trace_color_by_changed)
+        self.decorator_tab_layout.addRow("Colour traces by:", self.Btrace_color_by)
+
+        self.Strace_width = QSpinBox()
+        self.Strace_width.setRange(1, MAX_TRACE_WIDTH_PX)
+        self.Strace_width.setValue(int(DEFAULT_TRACE_WIDTH_PX))
+        self.Strace_width.setToolTip("Line width, in screen pixels.")
+        self.Strace_width.valueChanged.connect(self._trace_width_changed)
+        self.decorator_tab_layout.addRow("Trace width [px]:", self.Strace_width)
+
+        self.Ltraces_note = QLabel(
+            "Traces are for viewing: exports write the Gaussian reconstruction "
+            "without them."
+        )
+        self.Ltraces_note.setWordWrap(True)
+        self.Ltraces_note.setStyleSheet("color: gray;")
+        self.decorator_tab_layout.addRow(self.Ltraces_note)
+
+        self.HL_traces = QHSeperationLine()
+        self.decorator_tab_layout.addRow(self.HL_traces)
 
         self.Lgrid_plane = QLabel()
         self.Lgrid_plane.setText("Grid Plane")

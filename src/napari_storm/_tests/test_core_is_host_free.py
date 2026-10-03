@@ -154,6 +154,32 @@ def test_core_filters_and_converts_without_a_host():
     assert "OK" in result.stdout
 
 
+def test_traces_are_arranged_without_a_host():
+    """Which localizations to connect, and in which order, is decided headless."""
+    result = _run_headless("""
+        import numpy as np
+        from napari_storm.core import (DatasetTraits, GaussianSettings,
+                                       LocalizationTable, RenderPlanner)
+
+        records = np.rec.array(np.zeros(6, dtype=[
+            ("x_pos_nm", "f4"), ("y_pos_nm", "f4"),
+            ("trace_id", "i4"), ("time_s", "f4"),
+        ]))
+        records.trace_id = [0, 1, 0, 1, 0, 1]
+        records.time_s = np.arange(6)
+        records.x_pos_nm = np.arange(6) * 10.0
+        request = RenderPlanner().plan(
+            LocalizationTable(records), GaussianSettings(), DatasetTraits(),
+            name="headless", trace_column="trace_id",
+        )
+        assert request.traces.trace_ids.tolist() == [0, 1]
+        assert request.traces.coords[:, 2].tolist() == [0, 20, 40, 10, 30, 50]
+        print("OK")
+        """)
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
+
+
 def test_the_dataset_classes_import_without_a_host():
     """P1-04: a reader may not construct a widget, so it may not need one.
 
