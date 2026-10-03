@@ -98,7 +98,7 @@ three. The measured comparison that chose the default:
 | Backend | Bytes/localization | 5M update | Notes |
 |---|---:|---:|---|
 | `InstancedRenderer` | 28 | 0.16 s | **Default.** Needs VisPy `gl+`. |
-| `NapariParticlesRenderer` | 352 | 2.47 s | The original; the fallback. |
+| `NapariParticlesRenderer` | 304 | 2.47 s | The original; the fallback. |
 | `NapariPointsRenderer` | 52 | 25.57 s | No Gaussian. Kept as a reference point. |
 
 `napari_particles.selection.select_renderer(viewer)` picks between the first two

@@ -136,9 +136,15 @@ class RenderRequest:
             renderer's axis order is stated; the canonical table keys positions
             by axis *name* precisely so that the ordering lives at this
             boundary rather than throughout.
-        sigmas: ``(N, 3)`` float32, normalized to the largest of them.
+        sigmas: ``(N, 3)`` float32 Gaussian widths in world nanometres, in the
+            same ``(z, y, x)`` order as ``coords``.  Not normalized to the
+            billboard, so that a backend draws the width the settings asked
+            for whatever the billboard happens to be.  (Before 3.1 they were
+            normalized to the largest of them, and ``size`` carried the scale.)
         size: billboard edge length in world units, already clamped to the
-            screen-space budget.
+            screen-space budget.  It is the *support* of the Gaussian, never
+            its scale: a request whose size was clamped draws a Gaussian cut
+            short, not a narrower one.
         values: ``(N,)`` float32 per-localization intensity, or colour index
             when Z encoding is on.
         name: what the layer is called in the host.

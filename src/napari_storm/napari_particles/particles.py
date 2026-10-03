@@ -45,71 +45,53 @@ class BillboardsFilter(Filter):
         vfunc = Function("""
         varying float v_z_center;
         varying float v_scale_intensity;
-        varying mat2 covariance_inv;
         varying mat2 v_disc_inv;
 
         void apply(){
             // This vertex's corner of its particle's quad, e.g. [5,5] for
-            // size 5: every quad sits at the origin and $vertex_center moves
+            // size 10: every quad sits at the origin and $vertex_center moves
             // it.  Read from the mesh's own vertex buffer, not recovered by
             // inverting the transforms, which through the perspective camera
             // falls apart far from the origin; see mesh_vertex_buffer.
             vec3 pos = $quad_corner;
 
-            vec2 tex = $texcoords;
+            // Where this corner sits on the quad, -1 to 1, read off the
+            // geometry.  It used to come from a texture-coordinate attribute,
+            // which has to differ per corner and so has to agree with the
+            // order the visual draws the vertices in -- and it did not: napari
+            // reverses every face and VisPy expands the mesh per face corner,
+            // so one triangle of every quad had its coordinates mirrored.
+            // Invisible for an isotropic Gaussian, a chevron for an
+            // anisotropic one.
+            float half_edge = abs(pos.x);
+            vec2 quad = pos.xy / half_edge;
 
-            mat4 cov = mat4(1.0);
-
-            cov[0][0] = sqrt($sigmas[0]);
-            cov[1][1] = sqrt($sigmas[1]);
-            cov[2][2] = sqrt($sigmas[2]);
-
-            // get new inverse covariance matrix (for rotating a gaussian)
-            vec4 ex = vec4(1,0,0,0);
-            vec4 ey = vec4(0,1,0,0);
-            vec4 ez = vec4(0,0,1,0);
-            vec3 ex2 = $camera(cov*$camera_inv(ex)).xyz;
-            vec3 ey2 = $camera(cov*$camera_inv(ey)).xyz;
-            vec3 ez2 = $camera(cov*$camera_inv(ez)).xyz;
-            mat3 Rmat = mat3(ex2, ey2, ez2);
-            covariance_inv = mat2(transpose(Rmat)*mat3(cov)*Rmat);
-            covariance_inv = $inverse(covariance_inv);
-
-
-            // get first and second column of view (which is the inverse of the camera)
+            // The screen axes as unit vectors in world space.
             vec3 camera_right = $camera_inv(vec4(1,0,0,0)).xyz;
             vec3 camera_up    = $camera_inv(vec4(0,1,0,0)).xyz;
-
-            // when particles become too small, lock texture size and apply antialiasing (only used when antialias=1)
-            // decrease this value to increase antialiasing
-            //float dist_cutoff = .2 * max(abs(pos.x), abs(pos.y));
-
-            // increase this value to increase antialiasing
-            float dist_cutoff = $antialias;
-
             float len = length(camera_right);
-
-            //camera_right = normalize(camera_right);
-            //camera_up    = normalize(camera_up);
-
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
             // The one-sigma ellipse and the on-screen floor, line for line as
-            // InstancedBillboardsFilter draws them.  The corners here are
-            // offsets from the origin, so the half-edge is |pos.x|.
+            // InstancedBillboardsFilter draws them: the marginal of
+            // diag(sigma^2) in the screen basis, in nanometres, divided by
+            // the square of the drawn half-edge to put it in the quad's own
+            // -1 to 1 coordinate.  It is what the Gaussian is drawn with too;
+            // see footprint_shaders for the square-root covariance it
+            // replaced.
+            float drawn_half_edge = half_edge * $quad_scale;
             vec3 rs = camera_right * $sigmas;
             vec3 us = camera_up * $sigmas;
             mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
                                  dot(rs, us), dot(us, us))
-                          / ($extent_sigmas * $extent_sigmas);
+                          / (drawn_half_edge * drawn_half_edge);
             v_disc_inv = $inverse(disc_cov);
             float grow = 1.0;
             if ($min_half_px > 0.0) {
-                float half_edge = abs(pos.x) * $quad_scale;
                 vec4 c = $visual_to_canvas(vec4($vertex_center, 1.0));
                 vec4 e = $visual_to_canvas(
-                    vec4($vertex_center + camera_right * half_edge, 1.0));
+                    vec4($vertex_center + camera_right * drawn_half_edge, 1.0));
                 float det = disc_cov[0][0] * disc_cov[1][1]
                           - disc_cov[0][1] * disc_cov[1][0];
                 float radius_px = length(e.xy / e.w - c.xy / c.w)
@@ -119,22 +101,21 @@ class BillboardsFilter(Filter):
                 }
             }
 
+            // when particles become too small, lock texture size and apply
+            // antialiasing (only used when antialias>0)
+            float dist_cutoff = $antialias;
             vec4 p1 = $transform(vec4($vertex_center.xyz + camera_right*pos.x + camera_up*pos.y, 1.));
             vec4 p2 = $transform(vec4($vertex_center,1));
             float dist = length(p1.xy/p1.w-p2.xy/p2.w);
 
-
-            // if antialias and far away zoomed out, keep sprite size constant and shrink texture...
-            // else adjust sprite size
+            // if antialias and far away zoomed out, keep sprite size constant
+            // and shrink texture... else adjust sprite size
             if (($antialias>0) && (dist<dist_cutoff)) {
-
                 float scale = dist_cutoff/dist;
-                tex = .5+(tex-.5)*clamp(scale,1,10);
-
+                quad = quad*clamp(scale,1,10);
                 camera_right = camera_right*scale;
                 camera_up    = camera_up*scale;
                 v_scale_intensity = scale;
-
             }
             vec3 pos_real  = $vertex_center.xyz
                            + (camera_right*pos.x + camera_up*pos.y)
@@ -143,11 +124,8 @@ class BillboardsFilter(Filter):
             vec4 center = $transform(vec4($vertex_center,1));
             v_z_center = center.z/center.w;
 
-            // flip tex coords neccessary since 0.4.13 and vispy bump
-            // TODO: investigate
-
-            $v_texcoords = vec2(tex.y, tex.x);
-            }
+            $v_texcoords = 0.5 * quad + 0.5;
+        }
         """)
 
         ffunc = Function("""
@@ -167,13 +145,10 @@ class BillboardsFilter(Filter):
         vfunc["v_texcoords"] = self._texcoord_varying
         ffunc["texcoords"] = self._texcoord_varying
 
-        self._texcoords_buffer = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
-        vfunc["texcoords"] = self._texcoords_buffer
         vfunc["antialias"] = float(antialias)
         self._antialias = float(antialias)
         # The scientific Gaussian until `set_footprint` says otherwise.
         vfunc["quad_scale"] = 1.0
-        vfunc["extent_sigmas"] = footprint_named(FOOTPRINT_GAUSSIAN).extent_sigmas
         vfunc["min_half_px"] = 0.0
 
         self._centercoords_buffer = VertexBuffer(np.zeros((0, 3), dtype=np.float32))
@@ -194,7 +169,6 @@ class BillboardsFilter(Filter):
         """
         footprint = footprint_named(name)
         self.vshader["quad_scale"] = quad_scale(name)
-        self.vshader["extent_sigmas"] = footprint.extent_sigmas
         if footprint.reconstruction:
             self.vshader["min_half_px"] = 0.0
             self.vshader["antialias"] = self._antialias
@@ -218,7 +192,7 @@ class BillboardsFilter(Filter):
 
     @property
     def sigmas(self):
-        """The vertex center coordinates as an (N, 3) array of floats."""
+        """The Gaussian widths per vertex, (N, 3) in nanometres, ``(z, y, x)``."""
         return self._sigmas
 
     @sigmas.setter
@@ -230,20 +204,6 @@ class BillboardsFilter(Filter):
         if self._attached and self._visual is not None:
             self._sigmas_buffer.set_data(sigmas[:, ::-1], convert=True)
 
-    @property
-    def texcoords(self):
-        """The texture coordinates as an (N, 2) array of floats."""
-        return self._texcoords
-
-    @texcoords.setter
-    def texcoords(self, texcoords):
-        self._texcoords = texcoords
-        self._update_texcoords_buffer(texcoords)
-
-    def _update_texcoords_buffer(self, texcoords):
-        if self._attached and self._visual is not None:
-            self._texcoords_buffer.set_data(texcoords[:, ::-1], convert=True)
-
     def _attach(self, visual):
 
         # the full projection model view
@@ -251,12 +211,11 @@ class BillboardsFilter(Filter):
         # each vertex's own position, exactly as drawn
         self.vshader["quad_corner"] = mesh_vertex_buffer(visual)
 
-        # the modelview
+        # Screen axes back into world space, for the billboard basis and the
+        # projected covariance.  The forward transform is not needed.
         self.vshader["camera_inv"] = visual.transforms.get_transform(
             "document", "scene"
         )
-        # inverse of it
-        self.vshader["camera"] = visual.transforms.get_transform("scene", "document")
         # canvas pixels, for the minimum on-screen size of a disc
         self.vshader["visual_to_canvas"] = visual.transforms.get_transform(
             "visual", "canvas"
@@ -312,7 +271,7 @@ class Particles(Surface):
 
         assert coords.shape[-1] == sigmas.shape[-1] == 3
 
-        vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
+        vertices, faces = generate_billboards_2d(coords, size=size)
 
         # The generator expands every centre to six vertices.
         vpp = 6
@@ -324,7 +283,6 @@ class Particles(Surface):
         self._centercoords = centercoords
         self._sigmas = sigmas
         self._size = size
-        self._texcoords = texcoords
         self._billboard_filter = BillboardsFilter(antialias=antialias)
         if filter is _DEFAULT_FILTER:
             filter = ShaderFilter("gaussian")
@@ -339,7 +297,7 @@ class Particles(Surface):
         self._min_size_px = DEFAULT_MIN_SIZE_PX
         # Names of layer-list events we connected to, so close() can undo them.
         self._layer_event_connections = []
-        super().__init__((vertices, faces, values), texcoords=texcoords, **kwargs)
+        super().__init__((vertices, faces, values), **kwargs)
 
     def update_particle_data(self, coords, size, sigmas, values):
         """Update billboard geometry and attributes without replacing the layer.
@@ -362,13 +320,12 @@ class Particles(Surface):
         sigmas = np.broadcast_to(np.asarray(sigmas, dtype=np.float32), (len(coords), 3))
         values = np.broadcast_to(np.asarray(values, dtype=np.float32), len(coords))
 
-        vertices, faces, texcoords = generate_billboards_2d(coords, size=size)
+        vertices, faces = generate_billboards_2d(coords, size=size)
         vertices_per_particle = 6
         self._coords = coords
         self._size = size
         self._centercoords = np.repeat(coords, vertices_per_particle, axis=0)
         self._sigmas = np.repeat(sigmas, vertices_per_particle, axis=0)
-        self._texcoords = texcoords
         vertex_values = np.repeat(values, vertices_per_particle, axis=0)
 
         # Surface.data emits napari's normal data event, updating the existing
@@ -383,17 +340,17 @@ class Particles(Surface):
         self._update_billboard_filter()
 
     def _update_billboard_filter(self):
-        """Upload attributes in the same vertex order as the Surface visual.
+        """Upload the per-vertex attributes.
 
-        ``Surface._view_faces`` is an index buffer; it does not reorder the
-        visual's vertex buffer.  Indexing these attributes by flattened faces
-        therefore assigned the second triangle's texture coordinates to the
-        wrong vertices after every in-place update, visually splitting each
-        Gaussian along the quad diagonal.
+        Each is repeated six times per localization, so every vertex of a
+        quad carries the same values and the order in which the visual
+        consumes them cannot matter.  The quad coordinate itself is not
+        uploaded: the shader derives it from the vertex position.  Until 3.1
+        texture coordinates were uploaded, and since they differ per corner
+        they had to agree with a vertex order that napari and VisPy do not
+        keep; one triangle of every quad had its coordinates mirrored.
         """
         if self._billboard_filter._attached:
-            if self._texcoords is not None:
-                self._billboard_filter.texcoords = self._texcoords
             if self._centercoords is not None:
                 self._billboard_filter.centercoords = self._centercoords[:, -3:]
             self._billboard_filter.sigmas = self._sigmas[:, -3:]
@@ -557,9 +514,8 @@ class Particles(Surface):
         self._visual = self.get_visual(viewer)
         self._visual.attach(self._billboard_filter)
 
-        # Populate filter buffers if we already have texcoords
-        if self._texcoords is not None:
-            self._update_billboard_filter()
+        # Now that the filter is attached, its buffers can be populated.
+        self._update_billboard_filter()
 
         # Attach any other shader filters (e.g. gaussian)
         self._attach_filter()

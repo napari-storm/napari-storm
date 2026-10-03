@@ -9,8 +9,11 @@ function
 * ``x`` -- where the fragment sits on the square being drawn, -1 to 1 across.
 * ``q`` -- its squared distance from the centre in sigmas, measured on the
   localization's own one-sigma ellipse: ``q == 1`` is the outline.
-* ``g2`` -- the quadratic form the scientific Gaussian has always been drawn
-  with, kept so that footprint stays bit for bit what it was.
+* ``g2`` -- ``q / 4``, the quadratic form napari-particles wrote its
+  Gaussian-like sprites against (``exp(-2 g2)``), so ported formulas keep
+  their shape and now share the localization's true width.  Until 3.1 it came
+  from a covariance built of the *square roots* of the sigmas, which drew
+  widths going as sigma to the power 0.75: a 4:1 anisotropy came out 2.8:1.
 * ``colour`` -- the colormapped colour, with the layer's opacity in alpha.
 
 and returns the fragment's colour, or discards it.  The caller forces alpha to
@@ -34,8 +37,11 @@ SHAPES = {
     # -- the reconstruction
     "gaussian": """
         vec4 shape(vec2 x, float q, float g2, vec4 colour) {
-            float g = exp(-2.0 * g2);
-            return vec4(colour.rgb * g, colour.a * g);
+            // The falloff goes into alpha alone.  Additive blending multiplies
+            // the colour by alpha, so a falloff written to both -- as this
+            // footprint did until 3.1 -- is squared, and the drawn width was
+            // sigma / sqrt(2) whatever sigma was asked for.
+            return vec4(colour.rgb, colour.a * exp(-0.5 * q));
         }""",
     # -- markers, drawn at the one-sigma outline
     "disc": """

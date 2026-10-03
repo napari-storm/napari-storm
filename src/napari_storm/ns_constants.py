@@ -1,6 +1,10 @@
 from ._data_constants import MINFLUX_Z_CORRECTION_FACTOR as MINFLUX_Z_CORRECTION_FACTOR
 from ._data_constants import STORM_DATA_DTYPE
 
+# The billboard edge in widest sigmas is the planner's, re-exported rather than
+# copied: a copy here would have gone on saying 5 when the planner moved to 6.
+from .core.render_planner import SIGMA_TO_SIZE_FACTOR as SIGMA_TO_SIZE_FACTOR
+
 FWHM_TO_SIGMA = 2.354
 
 DEFAULT_FIXED_FWHM_XY_NM = 20
@@ -12,7 +16,6 @@ DEFAULT_VAR_MIN_FWHM_Z_NM = 10
 DEFAULT_SCALEBAR_NM = 500
 DEFAULT_GRID_LINE_DISTANCE_UM = 1.0
 PERCENTILE_CLIP = 99
-SIGMA_TO_SIZE_FACTOR = 5
 
 #: The plane flat (2-D) localizations are drawn on, in nanometres.  A reference
 #: image imported with no localizations loaded is placed here too, so that the

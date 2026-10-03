@@ -3,7 +3,7 @@ import numpy as np
 
 def generate_billboards_2d(
     coords: np.ndarray, size: float | np.ndarray = 20
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Build billboard quads that always face the camera.
 
@@ -17,8 +17,13 @@ def generate_billboards_2d(
     Returns
     -------
     vertices : (6 N, D) float array
+        The quad corner offsets, not centre plus offset: the leading D-2
+        columns carry the centre's extra dimensions, the last two the corner.
     faces    : (2 N, 3) int  array
-    texcoords: (6 N, 2) float array   ← NEW: 6 rows, not 4
+
+    No texture coordinates: the shader reads the corner off the vertex
+    position, so nothing here has to agree with the order the visual ends up
+    drawing the vertices in.
     """
     coords = np.asarray(coords, dtype=np.float32)
     n = len(coords)
@@ -61,8 +66,4 @@ def generate_billboards_2d(
 
     faces = (faces_base[None, ...] + particle_offset).reshape(-1, 3)  # (2N, 3)
 
-    # --- texcoords  (6 rows / particle) ------------------------------------
-    base_tc = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float32)
-    texcoords = np.tile(base_tc[idx], (n, 1))  # (6N, 2)
-
-    return verts, faces, texcoords
+    return verts, faces

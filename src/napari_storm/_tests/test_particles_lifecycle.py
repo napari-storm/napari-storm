@@ -10,6 +10,7 @@ import pytest
 
 from napari_storm._dock_widget import napari_storm
 from napari_storm.localization_dataset_types import LocalizationDataBaseClass
+from napari_storm.memory_budget import RENDER_BYTES_PER_LOCALIZATION
 from napari_storm.napari_particles._napari_compat import _FORCED_BLENDING
 from napari_storm.napari_particles.particles import Particles
 from napari_storm.napari_particles.renderer import NapariParticlesRenderer
@@ -64,7 +65,7 @@ def _forced_visual_count():
 def test_billboard_faces_are_uint32():
     """Index buffers must not silently widen to int64 (P1-07)."""
     coords = np.zeros((16, 3), dtype=np.float32)
-    _verts, faces, _tex = generate_billboards_2d(coords, size=10.0)
+    _verts, faces = generate_billboards_2d(coords, size=10.0)
     assert faces.dtype == np.uint32
     # winding and range must survive the dtype change
     assert faces.max() == 6 * len(coords) - 1
@@ -75,7 +76,7 @@ def test_particles_render_arrays_are_float32():
     """No float64 array may reach the renderer (P1-07)."""
     coords = np.zeros((16, 3), dtype=np.float64)  # deliberately float64 input
     layer = Particles(coords, size=10.0, sigmas=(1, 1, 1), values=1.0)
-    for name in ("_coords", "_centercoords", "_sigmas", "_size", "_texcoords"):
+    for name in ("_coords", "_centercoords", "_sigmas", "_size"):
         arr = getattr(layer, name)
         assert arr.dtype == np.float32, f"{name} is {arr.dtype}, expected float32"
     vertices, faces, values = layer.data
@@ -85,8 +86,12 @@ def test_particles_render_arrays_are_float32():
     assert layer.shader == "gaussian"
 
 
-def test_particles_host_arrays_use_352_bytes_per_localization():
-    """Keep the measured Level 1 dtype improvement honest."""
+def test_particles_host_arrays_use_304_bytes_per_localization():
+    """Keep the measured Level 1 dtype improvement honest.
+
+    352 until 3.1, when the 48 bytes of per-vertex texture coordinates went:
+    the shader reads the quad corner off the geometry instead.
+    """
     n = 16
     layer = Particles(np.zeros((n, 3), dtype=np.float64), size=10.0)
     arrays = [
@@ -94,11 +99,11 @@ def test_particles_host_arrays_use_352_bytes_per_localization():
         layer._centercoords,
         layer._sigmas,
         layer._size,
-        layer._texcoords,
         layer._view_faces,
         *layer.data,
     ]
-    assert sum(array.nbytes for array in arrays) / n == 352
+    assert sum(array.nbytes for array in arrays) / n == RENDER_BYTES_PER_LOCALIZATION
+    assert RENDER_BYTES_PER_LOCALIZATION == 304
 
 
 def test_empty_particles_layer_fails_before_geometry_or_shader_work():
@@ -223,7 +228,6 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
     widget.Bz_color_coding.setChecked(True)
 
     assert layer.colormap.name == "hsv"
-    np.testing.assert_array_equal(layer._billboard_filter.texcoords, layer._texcoords)
     np.testing.assert_array_equal(
         layer._billboard_filter.centercoords, layer._centercoords[:, -3:]
     )
@@ -239,7 +243,6 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
     assert layer._visual is visual
     assert layer.filter[0] is gaussian_filter
     assert layer.colormap.name == original_colormap
-    np.testing.assert_array_equal(layer._billboard_filter.texcoords, layer._texcoords)
     np.testing.assert_array_equal(layer.data[2], np.ones_like(layer.data[2]))
 
 

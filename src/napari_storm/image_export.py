@@ -23,7 +23,7 @@ import numpy as np
 
 from .core import ACTIVE, FILTERED
 from .core.ome_export import ExportChannel, plan_export
-from .core.render_planner import SIGMA_TO_SIZE_FACTOR
+from .core.raster import SPLAT_SIGMAS
 
 __all__ = [
     "SCOPE_CURRENT_VIEW",
@@ -130,12 +130,10 @@ def channel_for(interface, dataset, planner=None):
 
     # Already (z, y, x), like the sigmas beside it -- see the module docstring.
     coords_zyx = request.coords
-    # The planner normalizes sigmas against the largest and reports the
-    # billboard edge, which is a fixed multiple of it; undo that to recover
-    # nanometres, because a raster is measured in nanometres and not in
-    # billboards.
-    largest_sigma_nm = request.size / SIGMA_TO_SIZE_FACTOR
-    sigmas_zyx = np.asarray(request.sigmas, dtype=np.float64) * largest_sigma_nm
+    # The request carries sigmas in nanometres, which is what a raster is
+    # measured in.  Until 3.1 it carried them normalized to the billboard
+    # edge, and this function divided the edge back out.
+    sigmas_zyx = np.asarray(request.sigmas, dtype=np.float64)
 
     appearance = interface.renderer.appearance(getattr(dataset, "dataset_id", None))
     colormap = None if appearance is None else appearance.colormap
@@ -166,14 +164,16 @@ def export_bounds_nm(widget, options, channels=None):
         stacked = np.concatenate([c.coords_nm for c in channels if len(c.coords_nm)])
         if not len(stacked):
             raise ValueError("no localizations to export")
-        # Pad by the widest splat so the Gaussians are not clipped at the edge
-        # of their own bounding box.
+        # Pad by the widest splat's support in the raster so the Gaussians are
+        # not clipped at the edge of their own bounding box.  That support is
+        # the raster's, not the canvas billboard's: the two are cut at
+        # different radii on purpose.
         pad = (
             max(
                 (float(np.max(c.sigmas_nm)) for c in channels if len(c.sigmas_nm)),
                 default=0.0,
             )
-            * SIGMA_TO_SIZE_FACTOR
+            * SPLAT_SIGMAS
         )
         low = stacked.min(axis=0) - pad
         high = stacked.max(axis=0) + pad

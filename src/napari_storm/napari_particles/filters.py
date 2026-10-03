@@ -56,7 +56,6 @@ class ShaderFilter(Filter):
         name = LEGACY_NAMES.get(mode, mode)
         if name in SHAPES:
             fcode = Function("""
-            varying mat2 covariance_inv;
             varying mat2 v_disc_inv;
 
             void apply() {
@@ -67,8 +66,8 @@ class ShaderFilter(Filter):
                 if ($opaque > 0.5 && gl_FragColor.a <= 0.0) {
                     discard;
                 }
-                vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
-                                    dot(x, covariance_inv*x), gl_FragColor);
+                float q = dot(x, v_disc_inv*x);
+                vec4 drawn = $shape(x, q, 0.25 * q, gl_FragColor);
                 if ($opaque > 0.5) {
                     drawn.a = 1.0;
                 }

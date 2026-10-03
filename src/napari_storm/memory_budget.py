@@ -21,6 +21,9 @@ import os
 
 __all__ = [
     "RENDER_BYTES_PER_LOCALIZATION",
+    "INSTANCED_BYTES_PER_LOCALIZATION",
+    "INSTANCED_SHARED_BYTES",
+    "instanced_render_bytes_for",
     "DEFAULT_RENDER_BUDGET_MB",
     "RENDER_BUDGET_ENV_VAR",
     "MAX_SPLAT_FRACTION_OF_FOV",
@@ -31,13 +34,31 @@ __all__ = [
 ]
 
 #: Host-side bytes per localization held by one ``Particles`` layer.  Measured,
-#: not estimated -- ``test_particles_host_arrays_use_352_bytes_per_localization``
+#: not estimated -- ``test_particles_host_arrays_use_304_bytes_per_localization``
 #: fails if the renderer's dtypes regress.  Excludes VisPy buffers and GPU
-#: copies, so the true footprint is higher and this budget is optimistic.
-RENDER_BYTES_PER_LOCALIZATION = 352
+#: copies, so the true footprint is higher and this budget is optimistic.  It
+#: was 352 until 3.1, when the per-vertex texture coordinates went: the shader
+#: reads the quad corner off the geometry instead.
+RENDER_BYTES_PER_LOCALIZATION = 304
+
+#: Host-side bytes per localization held by one ``InstancedParticles`` layer,
+#: the production backend: centre ``(N, 3)`` float32, sigma ``(N, 3)`` float32
+#: and value ``(N,)`` float32.  The billboard edge is one scalar per dataset,
+#: not a per-instance row, so it costs nothing here.  The device-side copy is
+#: the same three buffers, uploaded once per update, plus the shared quad.
+#: ``InstancedRenderer.host_bytes`` measures this and a test pins the two to
+#: each other, so this is the number the documentation and the benchmark
+#: report.  (The prototype in ``napari_particles.instanced`` carries a
+#: per-instance size as well and so costs 32; that layout is not the one the
+#: plugin runs.)
+INSTANCED_BYTES_PER_LOCALIZATION = 3 * 4 + 3 * 4 + 4
+
+#: Bytes the instanced backend holds regardless of localization count: four
+#: quad vertices of three float32 and six uint32 indices.  Amortizes to nothing.
+INSTANCED_SHARED_BYTES = 4 * 3 * 4 + 6 * 4
 
 #: Default ceiling on host-side render arrays across all loaded datasets.
-#: 2 GB is roughly 5.8M localizations, which is above the largest benchmark
+#: 2 GB is roughly 6.7M localizations, which is above the largest benchmark
 #: fixture and below what a 16 GB machine will tolerate alongside napari itself.
 DEFAULT_RENDER_BUDGET_MB = 2048.0
 
@@ -73,6 +94,13 @@ def default_render_budget_mb():
 def render_bytes_for(n_localizations):
     """Host-side render bytes a dataset of *n_localizations* will occupy."""
     return int(n_localizations) * RENDER_BYTES_PER_LOCALIZATION
+
+
+def instanced_render_bytes_for(n_localizations):
+    """Host-side bytes the instanced backend holds for *n_localizations*."""
+    return (
+        int(n_localizations) * INSTANCED_BYTES_PER_LOCALIZATION + INSTANCED_SHARED_BYTES
+    )
 
 
 def max_localizations_for_budget(budget_mb):

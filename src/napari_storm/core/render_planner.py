@@ -34,8 +34,16 @@ __all__ = ["GaussianSettings", "DatasetTraits", "RenderPlanner"]
 #: enormous uncertainties cannot set the scale for everything else.
 PERCENTILE_CLIP = 99
 
-#: Billboard edge length as a multiple of the largest sigma.
-SIGMA_TO_SIZE_FACTOR = 5
+#: Billboard edge length as a multiple of the largest sigma.  The quad is the
+#: support of the Gaussian, not its scale: the Gaussian is evaluated out to
+#: half this many sigma from its centre and cut there.  Six puts the cut at
+#: three sigma, where the Gaussian is at 1.1% of its peak -- below what an
+#: 8-bit canvas resolves at ordinary contrast.  It was five, which the shader
+#: of the time drew as a cut at 2.8 of the (too narrow) sigma it actually
+#: produced; with the drawn width now exact, five would leave a visible 4.4%
+#: step around every isolated localization.  The cost is fill rate, which
+#: grows with the square of this number.
+SIGMA_TO_SIZE_FACTOR = 6
 
 #: Substituted for a zero, negative or non-finite uncertainty or photon count.
 MIN_USABLE_UNCERTAINTY = 1e-3
@@ -237,7 +245,15 @@ class RenderPlanner:
         return values
 
     def sigmas(self, rows, settings, traits):
-        """``((N, 3) normalized sigmas, billboard edge in nm)``."""
+        """``((N, 3) sigmas in nm, billboard edge in nm)``, both ``(z, y, x)``.
+
+        The sigmas are handed on in nanometres.  They used to be normalized to
+        the largest of them, with the billboard edge the only carrier of the
+        physical scale; that made every drawn width a function of the
+        billboard, so the screen-space cap shrank Gaussians instead of
+        cutting them, and the exporter had to divide the edge back out to
+        recover nanometres.
+        """
         n = rows.n
         if settings.mode == 0:
             sigma_nm = np.empty((n, 3), dtype=np.float32)
@@ -271,7 +287,7 @@ class RenderPlanner:
 
         largest = np.max(sigma_nm)
         require_positive_maximum(np.asarray([largest]), "Gaussian sigma")
-        return sigma_nm / largest, float(SIGMA_TO_SIZE_FACTOR * largest)
+        return sigma_nm, float(SIGMA_TO_SIZE_FACTOR * largest)
 
     # ------------------------------------------------------------------
     # The whole request
@@ -295,7 +311,9 @@ class RenderPlanner:
 
         *size_limit*, when given, caps the billboard edge -- the screen-space
         budget of P0-04, applied here because it changes what is drawn and so
-        belongs to planning rather than to a backend.
+        belongs to planning rather than to a backend.  The cap cuts the
+        Gaussian's support short; it does not narrow the Gaussian, because the
+        sigmas travel in nanometres beside the edge rather than inside it.
 
         *selection* chooses which rows to plan over. The renderer wants
         :data:`~napari_storm.core.localization_table.ACTIVE`, the rows it can

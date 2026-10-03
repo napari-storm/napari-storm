@@ -28,6 +28,7 @@ from napari_storm.core.footprints import (
     GROUP_RECONSTRUCTION,
     GROUP_VISUALISATION,
 )
+from napari_storm.core.render_planner import SIGMA_TO_SIZE_FACTOR
 from napari_storm.localization_dataset_types import (
     LocalizationDataBaseClass,
     StormDataClass,
@@ -43,11 +44,15 @@ FIXED_SHAPES = ["cross", "square", "diamond"]
 
 
 def _request(sigma_nm=1000.0, sigmas=(1.0, 1.0, 1.0)):
-    """One localization at the origin, shaped as the planner shapes a request."""
+    """One localization at the origin, shaped as the planner shapes a request.
+
+    *sigmas* are relative to *sigma_nm*; the request carries nanometres.
+    """
+    relative = np.asarray(sigmas, dtype=np.float32)
     return RenderRequest(
         coords=np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
-        sigmas=np.array([sigmas], dtype=np.float32),
-        size=5.0 * sigma_nm,
+        sigmas=np.array([relative * np.float32(sigma_nm)], dtype=np.float32),
+        size=SIGMA_TO_SIZE_FACTOR * sigma_nm * float(relative.max()),
         values=np.ones(1, dtype=np.float32),
         name="one",
         colormap="red",

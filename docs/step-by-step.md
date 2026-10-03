@@ -171,9 +171,10 @@ always restores exactly what was imported.
 
 ### Memory budget
 
-Rendered localizations cost about 352 bytes each in host memory before napari's own buffers and the
-GPU copy. To keep a large import from taking the process down, the plugin renders at most a **2 GB**
-budget's worth — roughly 5.8 million localizations, shared between all loaded datasets. Beyond that
+Rendered localizations cost up to 304 bytes each in host memory (on the fallback backend; the
+default instanced backend needs 28) before napari's own buffers and the GPU copy. To keep a large
+import from taking the process down, the plugin renders at most a **2 GB** budget's worth — roughly
+6.7 million localizations, shared between all loaded datasets. Beyond that
 it draws an evenly spaced subsample and tells you how many of your localizations are on screen; the
 full dataset stays loaded and filtering still applies to all of it.
 

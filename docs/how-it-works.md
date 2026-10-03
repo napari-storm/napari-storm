@@ -17,6 +17,15 @@ point spread function rather than a flat disc. This:
 - Retains accurate point footprints
 - Enables smooth exploration of **millions of localizations**
 
+The Gaussian on screen is the one the settings ask for: its covariance is the
+orthographic projection of the localization's `diag(σz², σy², σx²)` onto the
+screen, so anisotropic and axial widths survive any rotation, and a test
+measures the drawn width against the model on both backends. Two things
+remain display approximations, on purpose: the canvas cuts each Gaussian at
+three sigma (the export evaluates five), and it ends in an 8-bit framebuffer,
+so very dense regions clip on screen but not in an export. The exported
+floating-point image is the quantitative reference.
+
 ---
 
 ## Deciding and drawing are separate
@@ -42,12 +51,12 @@ every localization, with only centre, width and value stored per point. Where a
 GL session cannot instance, an older path that builds six real vertices per
 localization takes over, with a warning. Both satisfy the same renderer
 contract and every contract test runs against both — the image is the same, and
-the difference is roughly 12× in memory.
+the difference is roughly 11× in memory.
 
 | Backend | Bytes/localization | 5M update |
 |---|---:|---:|
 | Instanced | 28 | 0.16 s |
-| Billboard (fallback) | 352 | 2.47 s |
+| Billboard (fallback) | 304 | 2.47 s |
 
 `select_renderer(viewer)` makes the choice; in practice the fast path is the one
 you get, because instancing needs VisPy's `gl+`, which napari already selects

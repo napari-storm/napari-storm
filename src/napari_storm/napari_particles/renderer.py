@@ -209,7 +209,6 @@ class NapariParticlesRenderer(LocalizationRenderer):
             "_centercoords",
             "_sigmas",
             "_size",
-            "_texcoords",
             "_view_faces",
             "_view_vertices",
         ):

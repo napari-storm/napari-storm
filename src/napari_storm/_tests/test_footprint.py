@@ -31,6 +31,7 @@ from napari_storm.core import (
     load_scene,
     save_scene,
 )
+from napari_storm.core.render_planner import SIGMA_TO_SIZE_FACTOR
 from napari_storm.napari_particles.instanced_renderer import InstancedRenderer
 from napari_storm.napari_particles.points_renderer import NapariPointsRenderer
 from napari_storm.napari_particles.renderer import NapariParticlesRenderer
@@ -48,15 +49,17 @@ GAUSSIAN = LayerAppearance(footprint=FOOTPRINT_GAUSSIAN)
 def _request(zyx, sigma_nm=1000.0, sigmas=(1.0, 1.0, 1.0), colormap="red", name="d"):
     """Localizations at *zyx*, all of width *sigma_nm*, shaped as the planner does.
 
-    The planner normalizes sigmas to the largest and makes the billboard five
-    of them across; *sigmas* are those normalized widths, (z, y, x).
+    *sigmas* are the widths relative to *sigma_nm*, (z, y, x).  The request
+    carries them in nanometres and makes the billboard
+    `SIGMA_TO_SIZE_FACTOR` of the widest across, as the planner does.
     """
     coords = np.atleast_2d(np.asarray(zyx, dtype=np.float32))
     n = len(coords)
+    relative = np.asarray(sigmas, dtype=np.float32)
     return RenderRequest(
         coords=coords,
-        sigmas=np.tile(np.asarray(sigmas, dtype=np.float32), (n, 1)),
-        size=5.0 * sigma_nm,
+        sigmas=np.tile(relative * np.float32(sigma_nm), (n, 1)),
+        size=SIGMA_TO_SIZE_FACTOR * sigma_nm * float(relative.max()),
         values=np.ones(n, dtype=np.float32),
         name=name,
         colormap=colormap,

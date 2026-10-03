@@ -107,17 +107,20 @@ class NapariPointsRenderer(LocalizationRenderer):
 
     @staticmethod
     def _point_sizes(request, footprint=FOOTPRINT_GAUSSIAN):
-        """One disc diameter per localization, from the normalized sigmas.
+        """One disc diameter per localization, from its lateral sigma.
 
-        The request's ``size`` is the billboard edge for the largest Gaussian
-        and its ``sigmas`` are normalized against that same largest one, so the
-        product recovers a per-localization width on the same scale the
-        billboard backend draws.  A footprint drawn on less of the billboard --
-        a marker, two sigmas across -- is that much smaller.
+        The square a footprint is drawn on reaches ``extent_sigmas`` of the
+        localization's own widest lateral sigma to either side -- the same
+        scale the billboard backends draw on -- so a marker, one sigma in
+        radius, is two sigmas across.  No disc is drawn larger than the
+        request's billboard edge allows that footprint, which is where the
+        screen-space budget caps it.
         """
         widest = np.max(request.sigmas[:, 1:], axis=1)
+        diameter = 2.0 * footprint_named(footprint).extent_sigmas * widest
         return np.asarray(
-            request.size * widest * quad_scale(footprint), dtype=np.float32
+            np.minimum(diameter, request.size * quad_scale(footprint)),
+            dtype=np.float32,
         )
 
     def _apply_footprint(self, dataset_id, previous=None):
