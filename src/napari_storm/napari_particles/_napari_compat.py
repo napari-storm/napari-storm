@@ -25,6 +25,7 @@ __all__ = [
     "get_qt_viewer",
     "get_layer_visual",
     "get_layer_controls",
+    "mesh_vertex_buffer",
     "set_builtin_layer_docks_visible",
     "guard_camera_drag_state",
     "force_additive_blending",
@@ -177,6 +178,27 @@ def apply_footprint_blending(layer, visual, footprint):
         if layer.blending != "additive":
             layer.blending = "additive"
         force_additive_blending(visual)
+
+
+def mesh_vertex_buffer(visual):
+    """The VertexBuffer a mesh visual draws its vertices from, in drawn order.
+
+    A shader that needs each vertex's own position reads it from here instead
+    of recovering it by inverting the transforms.  Through a perspective
+    projection that inversion loses a vertex far from the camera entirely:
+    VisPy puts the near plane at 1/3162 of the eye distance, so for anything
+    much farther away the depth row subtracts two all-but-equal float32
+    numbers, and the error is multiplied by the camera's distance from the
+    vertex.  It is VisPy's private ``MeshVisual._vertices``, filled with the
+    face-expanded vertices that ``position`` is bound to, so it cannot
+    disagree with what is drawn.
+    """
+    buffer = getattr(visual, "_vertices", None)
+    if buffer is None:
+        raise NapariInternalsChanged(
+            "the mesh visual no longer exposes its vertex buffer as _vertices"
+        )
+    return buffer
 
 
 def get_layer_controls(viewer, layer):

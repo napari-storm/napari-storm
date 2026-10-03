@@ -22,6 +22,7 @@ from ..core.footprints import (
 from ._napari_compat import (
     apply_footprint_blending,
     get_layer_visual,
+    mesh_vertex_buffer,
     release_additive_blending,
 )
 from .filters import ShaderFilter
@@ -48,10 +49,12 @@ class BillboardsFilter(Filter):
         varying mat2 v_disc_inv;
 
         void apply(){
-            // original world coordinates of the (constant) particle squad, e.g. [5,5] for size 5
-            vec4 pos = $transform_inv(gl_Position);
-
-            pos.z *= pos.w;
+            // This vertex's corner of its particle's quad, e.g. [5,5] for
+            // size 5: every quad sits at the origin and $vertex_center moves
+            // it.  Read from the mesh's own vertex buffer, not recovered by
+            // inverting the transforms, which through the perspective camera
+            // falls apart far from the origin; see mesh_vertex_buffer.
+            vec3 pos = $quad_corner;
 
             vec2 tex = $texcoords;
 
@@ -245,10 +248,8 @@ class BillboardsFilter(Filter):
 
         # the full projection model view
         self.vshader["transform"] = visual.transforms.get_transform("visual", "render")
-        # the inverse of it
-        self.vshader["transform_inv"] = visual.transforms.get_transform(
-            "render", "visual"
-        )
+        # each vertex's own position, exactly as drawn
+        self.vshader["quad_corner"] = mesh_vertex_buffer(visual)
 
         # the modelview
         self.vshader["camera_inv"] = visual.transforms.get_transform(
