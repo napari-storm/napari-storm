@@ -195,15 +195,27 @@ def test_the_contrast_window_selects_which_values_are_coloured(
     widget.data_to_layer_itf.set_appearance(dataset, contrast_limits=(0.75, 1.0))
     upper = _rendered(viewer)
 
-    def _hues(image):
-        lit = image[image.sum(axis=2) > 40]
-        if len(lit) < 20:
-            return np.array([0.0])
-        return np.array([colorsys.rgb_to_hsv(*(p / 255.0))[0] for p in lit[::17]])
+    def _upper_end(image):
+        """Fraction of coloured pixels in the colormap's top quarter.
 
-    # A window over the top quarter spans less of the colour circle than the
-    # whole range does.
-    assert np.ptp(_hues(upper)) < np.ptp(_hues(full))
+        Z colour coding uses ``hsv``, whose top quarter runs from magenta at
+        hue 0.75 round to red at 1.0, which is also hue 0.  Pixels without a
+        colour are left out: where overlapping splats sum past 8 bits they
+        saturate towards white, whose hue is 0 by convention.  (This used to
+        compare the hues' peak-to-peak span, which one such pixel, or one
+        red pixel reported as hue 0 rather than 1, could max out.)
+        """
+        lit = image[image.sum(axis=2) > 40]
+        assert len(lit) >= 20
+        hsv = np.array([colorsys.rgb_to_hsv(*(p / 255.0)) for p in lit[::17]])
+        hue = hsv[hsv[:, 1] > 0.35, 0]
+        assert len(hue) >= 20
+        return float(np.mean((hue >= 0.75) | (hue < 0.05)))
+
+    # A window over the top quarter puts most of what is drawn there; the
+    # whole range spreads it round the circle.
+    assert _upper_end(upper) > 0.7
+    assert _upper_end(upper) > _upper_end(full) + 0.3
 
 
 def test_a_zero_width_contrast_window_never_reaches_the_shader(make_napari_viewer):

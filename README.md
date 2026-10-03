@@ -77,7 +77,8 @@ handle sets how many overlapping localizations it takes to reach full brightness
 The File Infos tab simply displays information on the currently opened datasets.
 
 In the decorators tab you can switch the rendering style from the scientific Gaussian to an alternative visualisation -- points, spheres,
-uncertainty ellipses and more -- activate a grid plane and customize a lot of things for the grid as well as the render range box.
+uncertainty ellipses and more -- connect each MINFLUX trace's localizations in the order they were measured, activate a grid plane
+and customize a lot of things for the grid as well as the render range box.
 
 Last but not least is the data filter tab, which gives you the option to filter your displayed datasets by all properties available in the dataset.
 There you will find two sliders, where the top one lets you change the x-range of the displayed property and the other one controls

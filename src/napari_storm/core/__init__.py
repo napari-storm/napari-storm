@@ -72,6 +72,18 @@ from .scene import (
     load_scene,
     save_scene,
 )
+from .traces import (
+    BUILTIN_COLOR_BY,
+    COLOR_BY_PROGRESS,
+    COLOR_BY_TIME,
+    COLOR_BY_TRACE,
+    DEFAULT_TRACE_WIDTH_PX,
+    TraceVertices,
+    find_trace_column,
+    is_trace_column,
+    plan_traces,
+    trace_spread_is_meaningful,
+)
 from .validation import (
     InvalidLocalizationData,
     non_finite_mask,
@@ -138,4 +150,14 @@ __all__ = [
     "RenderPlanner",
     "IDENTITY",
     "WorldTransform",
+    "BUILTIN_COLOR_BY",
+    "COLOR_BY_PROGRESS",
+    "COLOR_BY_TIME",
+    "COLOR_BY_TRACE",
+    "DEFAULT_TRACE_WIDTH_PX",
+    "TraceVertices",
+    "find_trace_column",
+    "is_trace_column",
+    "plan_traces",
+    "trace_spread_is_meaningful",
 ]

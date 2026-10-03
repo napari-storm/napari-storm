@@ -14,6 +14,7 @@ import pytest
 from scipy import ndimage
 
 from napari_storm.core import LayerAppearance, RenderRequest
+from napari_storm.core.render_planner import SIGMA_TO_SIZE_FACTOR
 from napari_storm.napari_particles.instanced_renderer import InstancedRenderer
 
 SIGMA_NM = 200.0
@@ -28,8 +29,8 @@ def _request(positions_nm, values=None, colormap="gray"):
     coords[:, 2] = positions_nm
     return RenderRequest(
         coords=coords,
-        sigmas=np.ones((len(positions_nm), 3), dtype=np.float32),
-        size=5.0 * SIGMA_NM,
+        sigmas=np.full((len(positions_nm), 3), SIGMA_NM, dtype=np.float32),
+        size=SIGMA_TO_SIZE_FACTOR * SIGMA_NM,
         values=(
             np.ones(len(positions_nm), dtype=np.float32)
             if values is None

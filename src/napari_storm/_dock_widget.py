@@ -9,6 +9,7 @@ from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
 from .core import DatasetStore, LayerAppearance, WorldTransform
 from .core.footprints import FOOTPRINTS, footprint_named
+from .core.traces import BUILTIN_COLOR_BY, COLOR_BY_TRACE, resolve_time_column
 from .CustomErrors import (
     DimensionError,
     StaticAttributeError,
@@ -19,7 +20,7 @@ from .DataFilter import DataFilterInterface
 from .DataToLayerInterface import DataToLayerInterface, look_at_plane
 from .Exp_Controls import custom_keys_and_scalebar
 from .FileToLocalizationDataInterface import FileToLocalizationDataInterface
-from .GUI import NapariStormGUI
+from .GUI import TRACE_COLOR_BY_CHOICES, NapariStormGUI
 from .localization_dataset_types import StormDataClass
 from .napari_particles._napari_compat import guard_camera_drag_state
 from .ns_constants import (
@@ -64,6 +65,21 @@ def _positive_number(text):
     return value
 
 
+#: The Decorators tab's "Connect traces" box, when nothing loaded can use it.
+NO_TRACES_TOOLTIP = (
+    "None of the loaded datasets identifies its traces.  Connecting "
+    "localizations needs a trace id per localization -- MINFLUX's tid -- and "
+    "this data carries none."
+)
+
+#: ... and when something can.
+TRACES_TOOLTIP = (
+    "Connect each trace -- one molecule localized repeatedly, MINFLUX's tid -- "
+    "through its own localizations, in the order they were measured.  Drawn "
+    "over the localizations for viewing; exports do not include it."
+)
+
+
 class napari_storm(NapariStormGUI):
     """The Heart of this code: A Dock Widget, but also
     an object where everything runs together"""
@@ -104,6 +120,7 @@ class napari_storm(NapariStormGUI):
         )
         self._data_to_layer_itf.on_layer_updated = self._on_layer_updated
         self._data_to_layer_itf.on_resource_limit_applied = self._warn_user
+        self._data_to_layer_itf.on_traces_removed = self._on_traces_removed
         self._file_to_data_itf = FileToLocalizationDataInterface(parent=self)
 
         # Attributes
@@ -168,6 +185,7 @@ class napari_storm(NapariStormGUI):
         self.hide_non_available_widgets()
         self.hide_testing_mode()
         self._sync_footprint_controls()
+        self._sync_trace_controls()
         self._instances[id(napari_viewer)] = self
 
     @property
@@ -526,6 +544,7 @@ class napari_storm(NapariStormGUI):
         self.Bz_color_coding.setCheckState(Qt.CheckState.Unchecked)
         self.render_config.zdim = None
         self.hide_non_available_widgets()
+        self._sync_trace_controls()
 
     def unload_dataset(self, dataset_or_index):
         """Unload one localization dataset and all of its associated UI state."""
@@ -570,6 +589,7 @@ class napari_storm(NapariStormGUI):
             self.data_to_layer_itf.update_grid_plane(
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
             )
+        self._sync_trace_controls()
         return True
 
     def reset_render_range(self, full_reset=False):
@@ -817,6 +837,144 @@ class napari_storm(NapariStormGUI):
         for channel in self.channel:
             channel.sync_contrast_model()
 
+    # ------------------------------------------------------------------
+    # Traces (Decorators tab)
+    # ------------------------------------------------------------------
+
+    def _datasets_with_traces(self):
+        itf = self.data_to_layer_itf
+        return [
+            dataset
+            for dataset in self.localization_datasets
+            if itf.trace_column_of(dataset) is not None
+        ]
+
+    def _traces_toggled(self, checked):
+        self.render_config.traces = bool(checked)
+        self.data_to_layer_itf.apply_trace_style(replan=True)
+        self._sync_trace_controls()
+
+    def _trace_color_by_changed(self, _index=None):
+        name = self.Btrace_color_by.currentData()
+        if name is None:
+            return
+        self.render_config.trace_color_by = name
+        # A column has to be planned before it can colour anything.
+        self.data_to_layer_itf.apply_trace_style(replan=name not in BUILTIN_COLOR_BY)
+
+    def _trace_width_changed(self, value):
+        self.render_config.trace_width_px = float(value)
+        self.data_to_layer_itf.apply_trace_style(replan=False)
+
+    def _on_traces_removed(self, _dataset):
+        """A trace layer was deleted in napari: if none is left, say so here.
+
+        Asked of the datasets' recorded appearance, not of what is on screen:
+        a hidden channel's traces are still switched on.
+        """
+        itf = self.data_to_layer_itf
+        if not any(
+            getattr(itf.appearance_of(dataset), "traces", False)
+            for dataset in self._datasets_with_traces()
+        ):
+            self.render_config.traces = False
+        self._sync_trace_controls()
+
+    def _trace_color_columns(self, datasets):
+        """Numeric columns every dataset in *datasets* has, to colour traces by.
+
+        Positions, the trace id and the time column are left out: a trace
+        coloured by its own id is what "Trace" already does, better, and its
+        time is "Time".
+        """
+        itf = self.data_to_layer_itf
+        common = None
+        for dataset in datasets:
+            table = dataset.table
+            excluded = {itf.trace_column_of(dataset), resolve_time_column(table)}
+            for axis in ("x", "y", "z"):
+                if table.has_axis(axis):
+                    excluded.add(table.position_column(axis))
+            names = [
+                name
+                for name in table.field_names
+                if name not in excluded
+                and table.records.dtype[name].kind in "iuf"
+                and table.records.dtype[name].shape == ()
+            ]
+            common = names if common is None else [n for n in common if n in set(names)]
+        return common or []
+
+    def _sync_trace_controls(self):
+        """Offer traces where the data identifies them, and say why not elsewhere."""
+        if not hasattr(self, "Ctraces"):
+            return  # the Decorators tab is not built yet
+        with_traces = self._datasets_with_traces()
+        box = self.Ctraces
+        box.blockSignals(True)
+        box.setChecked(bool(self.render_config.traces))
+        box.setEnabled(bool(with_traces))
+        box.blockSignals(False)
+        if not with_traces:
+            box.setToolTip(NO_TRACES_TOOLTIP)
+        else:
+            without = [
+                getattr(dataset, "name", "dataset")
+                for dataset in self.localization_datasets
+                if dataset not in with_traces
+            ]
+            tooltip = TRACES_TOOLTIP
+            if without:
+                tooltip += (
+                    "  Not drawn for " + ", ".join(without) + ", which carries "
+                    "no trace ids."
+                )
+            box.setToolTip(tooltip)
+        active = bool(with_traces) and bool(self.render_config.traces)
+        self.Btrace_color_by.setEnabled(active)
+        self.Strace_width.setEnabled(active)
+        self.Ltraces_note.setVisible(active)
+        self._sync_trace_color_choices(with_traces)
+
+    def _sync_trace_color_choices(self, with_traces):
+        combo = self.Btrace_color_by
+        wanted = list(TRACE_COLOR_BY_CHOICES) + [
+            (name, name) for name in self._trace_color_columns(with_traces)
+        ]
+        offered = [(combo.itemText(i), combo.itemData(i)) for i in range(combo.count())]
+        chosen = self.render_config.trace_color_by
+        fell_back = chosen not in {name for _label, name in wanted}
+        if fell_back:
+            # The column it was coloured by is not one every dataset has.
+            chosen = COLOR_BY_TRACE
+            self.render_config.trace_color_by = chosen
+        combo.blockSignals(True)
+        if offered != wanted:
+            combo.clear()
+            for label, name in wanted:
+                combo.addItem(label, name)
+        combo.setCurrentIndex(combo.findData(chosen))
+        combo.blockSignals(False)
+        if fell_back:
+            self.data_to_layer_itf.apply_trace_style(replan=False)
+
+    def _restore_trace_style(
+        self, traces=None, trace_color_by=None, trace_width_px=None
+    ):
+        """Put a saved trace style back, controls included."""
+        config = self.render_config
+        if traces is not None:
+            config.traces = bool(traces)
+        if trace_color_by is not None:
+            config.trace_color_by = trace_color_by
+        if trace_width_px is not None:
+            config.trace_width_px = float(trace_width_px)
+            self.Strace_width.blockSignals(True)
+            self.Strace_width.setValue(int(round(trace_width_px)))
+            self.Strace_width.blockSignals(False)
+        self._sync_trace_controls()
+        self.data_to_layer_itf.apply_trace_style(replan=True)
+
     def _start_typing_timer(self, timer):
         timer.start(500)
 
@@ -996,6 +1154,7 @@ class napari_storm(NapariStormGUI):
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
             )
         self._sync_footprint_controls()
+        self._sync_trace_controls()
         return True
 
     def add_dataset_entries_for_all_itfs(self, dataset):
@@ -1016,6 +1175,7 @@ class napari_storm(NapariStormGUI):
             self.create_layer(self.localization_datasets[-1], idx=i)
         self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
         self._sync_footprint_controls()
+        self._sync_trace_controls()
 
     # ------------------------------------------------------------------
     # Scene persistence
@@ -1126,6 +1286,7 @@ class napari_storm(NapariStormGUI):
         }
         unmatched = []
         restored_style = {}
+        restored_traces = {}
         for entry in scene.datasets:
             dataset = by_name.get(entry.name)
             if dataset is None:
@@ -1150,8 +1311,20 @@ class napari_storm(NapariStormGUI):
                     restored_style["footprint"] = appearance.footprint
                 if appearance.min_size_px is not None:
                     restored_style["min_size_px"] = appearance.min_size_px
+                # One trace style for the session, like the footprint: any
+                # dataset that drew traces turns them on.
+                if appearance.traces is not None:
+                    restored_traces["traces"] = bool(
+                        restored_traces.get("traces") or appearance.traces
+                    )
+                if appearance.trace_color_by is not None:
+                    restored_traces["trace_color_by"] = appearance.trace_color_by
+                if appearance.trace_width_px is not None:
+                    restored_traces["trace_width_px"] = appearance.trace_width_px
         if restored_style:
             self._restore_rendering_style(**restored_style)
+        if restored_traces:
+            self._restore_trace_style(**restored_traces)
 
         camera = scene.camera
         self.viewer.dims.ndisplay = camera.ndisplay

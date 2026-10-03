@@ -32,6 +32,12 @@ from .footprints import (
     validate_footprint,
     validate_min_size_px,
 )
+from .traces import (
+    COLOR_BY_TRACE,
+    DEFAULT_TRACE_WIDTH_PX,
+    validate_trace_color_by,
+    validate_trace_width_px,
+)
 
 __all__ = [
     "Changed",
@@ -67,7 +73,11 @@ class Changed(Flag):
     SIGMAS = auto()
     #: Per-localization intensity or colour index.
     VALUES = auto()
-    EVERYTHING = SELECTION | POSITIONS | SIGMAS | VALUES
+    #: The trace vertices: which traces are connected, or whether any are.
+    #: Implied by SELECTION and POSITIONS, which move every vertex; on its own
+    #: it says the localizations are unchanged and only the overlay is not.
+    TRACES = auto()
+    EVERYTHING = SELECTION | POSITIONS | SIGMAS | VALUES | TRACES
 
 
 #: Palette used when a caller does not choose one.  Visible on a dark canvas
@@ -108,6 +118,18 @@ class LayerAppearance:
             localization; so is Z colour coding, which turns it off because
             its values are depths, not weights.  On unless set otherwise, on
             backends that can; see `LocalizationRenderer.contrast_is_summed`.
+        traces: connect each trace's localizations in time order, drawn over
+            the dataset.  Needs trace vertices in the request -- plan with
+            ``RenderPlanner.plan(..., trace_column=...)``; see `core.traces`.
+            The overlay follows the dataset: its filters, render range and
+            world transform through the request, its visibility and opacity
+            through this appearance.  A visualisation only: no export writes
+            it.  Off until set; see `LocalizationRenderer.draws_traces`.
+        trace_color_by: what colours the traces -- ``"trace"``, one hue per
+            trace (the default), ``"time"``, ``"progress"`` along each trace,
+            or a column planned with ``trace_properties``.
+        trace_width_px: line width in screen pixels.  Wide lines are drawn by
+            the GL driver, which may cap them; see ``docs/embedding.md``.
     """
 
     colormap: Any = None
@@ -117,12 +139,19 @@ class LayerAppearance:
     footprint: str = None
     min_size_px: float = None
     summed_contrast: bool = None
+    traces: bool = None
+    trace_color_by: str = None
+    trace_width_px: float = None
 
     def __post_init__(self):
         if self.footprint is not None:
             validate_footprint(self.footprint)
         if self.min_size_px is not None:
             validate_min_size_px(self.min_size_px)
+        if self.trace_color_by is not None:
+            validate_trace_color_by(self.trace_color_by)
+        if self.trace_width_px is not None:
+            validate_trace_width_px(self.trace_width_px)
 
 
 @dataclass(frozen=True)
@@ -136,9 +165,15 @@ class RenderRequest:
             renderer's axis order is stated; the canonical table keys positions
             by axis *name* precisely so that the ordering lives at this
             boundary rather than throughout.
-        sigmas: ``(N, 3)`` float32, normalized to the largest of them.
+        sigmas: ``(N, 3)`` float32 Gaussian widths in world nanometres, in the
+            same ``(z, y, x)`` order as ``coords``.  Not normalized to the
+            billboard, so that a backend draws the width the settings asked
+            for whatever the billboard happens to be.  (Before 3.1 they were
+            normalized to the largest of them, and ``size`` carried the scale.)
         size: billboard edge length in world units, already clamped to the
-            screen-space budget.
+            screen-space budget.  It is the *support* of the Gaussian, never
+            its scale: a request whose size was clamped draws a Gaussian cut
+            short, not a narrower one.
         values: ``(N,)`` float32 per-localization intensity, or colour index
             when Z encoding is on.
         name: what the layer is called in the host.
@@ -157,6 +192,10 @@ class RenderRequest:
             only possible update is a full re-upload, which is precisely what
             Level 3 is trying to measure its way out of.
         changed: which parts differ from the last request for this dataset.
+        traces: the selected rows arranged as trajectories, a
+            `core.traces.TraceVertices` with the same coordinates as
+            ``coords``; None when the request was planned without a trace
+            column.  Drawn only while the appearance asks for traces.
     """
 
     coords: np.ndarray
@@ -168,6 +207,7 @@ class RenderRequest:
     antialias: float = 0.0
     active_ids: np.ndarray = None
     changed: Changed = Changed.EVERYTHING
+    traces: Any = None
 
     def with_changes(self, changed):
         """The same request, declaring a narrower dirty set."""
@@ -212,7 +252,9 @@ class LocalizationRenderer:
 
         The footprint is appearance too, so a dataset keeps it across
         :meth:`update` -- a filter change does not turn a point cloud back into
-        Gaussians -- and :meth:`open` starts every dataset as Gaussians.
+        Gaussians -- and :meth:`open` starts every dataset as Gaussians.  So is
+        the trace overlay: it survives :meth:`update`, follows the request's
+        trace vertices, and :meth:`open` starts every dataset without it.
         """
         raise NotImplementedError
 
@@ -236,6 +278,18 @@ class LocalizationRenderer:
         True, the per-localization value when False.  Not abstract: a backend
         that windows every localization on its own -- all of them, before
         summed contrast existed -- is right to inherit False.
+        """
+        return False
+
+    def draws_traces(self, dataset_id):
+        """Whether *dataset_id*'s trace overlay is on screen now.
+
+        True when the appearance asks for traces, the request carried trace
+        vertices with at least one connection, and the dataset is visible.
+        Not abstract: a backend that predates traces draws none, and a host
+        asking ``hasattr(renderer, "draws_traces")`` -- or looking for
+        ``traces`` among ``dataclasses.fields(LayerAppearance)`` -- can tell a
+        napari-storm that has them from one that does not.
         """
         return False
 
@@ -285,6 +339,9 @@ class NullRenderer(LocalizationRenderer):
             visible=True,
             footprint=FOOTPRINT_GAUSSIAN,
             min_size_px=DEFAULT_MIN_SIZE_PX,
+            traces=False,
+            trace_color_by=COLOR_BY_TRACE,
+            trace_width_px=DEFAULT_TRACE_WIDTH_PX,
         )
 
     def update(self, dataset_id, request):
@@ -317,6 +374,19 @@ class NullRenderer(LocalizationRenderer):
         if request is None or request.values is None or len(request.values) == 0:
             return None
         return float(np.min(request.values)), float(np.max(request.values))
+
+    def draws_traces(self, dataset_id):
+        request = self.requests.get(dataset_id)
+        appearance = self.appearances.get(dataset_id)
+        if request is None or appearance is None or not appearance.traces:
+            return False
+        traces = request.traces
+        return (
+            traces is not None
+            and traces.n_segments > 0
+            and self.visibility.get(dataset_id, False)
+            and (appearance.opacity is None or appearance.opacity > 0)
+        )
 
     def close(self, dataset_id):
         self.calls.append(("close", dataset_id))

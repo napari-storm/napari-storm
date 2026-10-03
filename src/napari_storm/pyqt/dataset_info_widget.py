@@ -169,7 +169,10 @@ def _collect_rows(dataset):
             parts.append("photons")
         if parts:
             rows.append(("Uncertainties", ", ".join(parts)))
-        elif dataset.uncertainty_defined is False:
+        elif getattr(dataset, "uncertainty_defined", None) is False:
+            # Only the STORM class defines this flag; a base-class dataset
+            # that merely carries ``sigma_present`` raised AttributeError
+            # here, and the whole info panel with it.
             rows.append(("Uncertainties", "none"))
 
     # MINFLUX AI iteration

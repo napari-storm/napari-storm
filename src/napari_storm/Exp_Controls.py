@@ -8,6 +8,21 @@ from qtpy.QtWidgets import QWidget
 logger = logging.getLogger(__name__)
 
 
+def _nudge(layer, offset_zyx):
+    """Move *layer* by *offset_zyx*, whatever its number of axes.
+
+    The offset is in the ``(z, y, x)`` of the localization layers and is laid
+    on a layer's trailing axes, which is how napari lines layers up.  Adding a
+    three-vector to ``translate`` assumed every layer had three axes; a trace
+    overlay has four -- napari's Tracks carry a time axis -- and a 2-D image
+    two, and both raised from inside the key binding.
+    """
+    offset = np.zeros(layer.ndim)
+    shared = min(layer.ndim, len(offset_zyx))
+    offset[-shared:] = np.asarray(offset_zyx, dtype=float)[-shared:]
+    layer.translate = np.asarray(layer.translate, dtype=float) + offset
+
+
 def custom_keys_and_scalebar(self):
     # Custom Keys : w and s for zoom
     # q and e to switch trough axis
@@ -59,25 +74,25 @@ def custom_keys_and_scalebar(self):
         def translate_up(v):
             for layer in v.layers:
                 if layer.name != "scalebar":
-                    layer.translate += [0, -50, 0]
+                    _nudge(layer, [0, -50, 0])
 
         @v.bind_key("Down")
         def translate_down(v):
             for layer in v.layers:
                 if layer.name != "scalebar":
-                    layer.translate += [0, 50, 0]
+                    _nudge(layer, [0, 50, 0])
 
         @v.bind_key("Left")
         def translate_left(v):
             for layer in v.layers:
                 if layer.name != "scalebar":
-                    layer.translate += [0, 0, -50]
+                    _nudge(layer, [0, 0, -50])
 
         @v.bind_key("Right")
         def translate_right(v):
             for layer in v.layers:
                 if layer.name != "scalebar":
-                    layer.translate += [0, 0, 50]
+                    _nudge(layer, [0, 0, 50])
 
     except Exception as exc:
         # Reinitializing a dock can encounter keys already bound by the prior

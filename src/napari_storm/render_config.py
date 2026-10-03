@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .core.footprints import DEFAULT_MIN_SIZE_PX, FOOTPRINT_GAUSSIAN
+from .core.traces import COLOR_BY_TRACE, DEFAULT_TRACE_WIDTH_PX
 from .memory_budget import MAX_SPLAT_FRACTION_OF_FOV, default_render_budget_mb
 from .ns_constants import (
     DEFAULT_FIXED_FWHM_XY_NM,
@@ -48,6 +49,12 @@ class RenderConfig:
     footprint: str = FOOTPRINT_GAUSSIAN
     # Smallest on-screen diameter of a visualisation, in screen pixels.
     min_size_px: float = DEFAULT_MIN_SIZE_PX
+
+    # Traces: connect each trace's localizations in time order, for every
+    # dataset that identifies its traces.  See core.traces.
+    traces: bool = False
+    trace_color_by: str = COLOR_BY_TRACE
+    trace_width_px: float = DEFAULT_TRACE_WIDTH_PX
 
     # Dimensionality
     zdim: bool | None = None

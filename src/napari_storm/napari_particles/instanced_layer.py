@@ -13,8 +13,8 @@ localization from four vertices.
 
 Two things make that work rather than merely compile:
 
-* `render_size` is already one scalar per dataset — five times the largest sigma
-  — so the quad can carry the size and only the *shape* varies per instance.
+* `render_size` is already one scalar per dataset — a fixed multiple of the
+  largest sigma — so the quad can carry the size and only the *shape* varies per instance.
   Had the size been per-localization the quad could not have been shared.
 * `_extent_data` is overridden. napari would otherwise frame the camera on a
   four-vertex quad at the origin instead of on the data.
@@ -88,7 +88,6 @@ class InstancedBillboardsFilter(Filter):
         vfunc = Function("""
         varying float v_z_center;
         varying float v_instance_value;
-        varying mat2 covariance_inv;
         varying mat2 v_disc_inv;
 
         void apply(){
@@ -101,40 +100,32 @@ class InstancedBillboardsFilter(Filter):
             // from changing sides.  See mesh_vertex_buffer.
             vec3 pos = $quad_corner;
 
-            mat4 cov = mat4(1.0);
-            cov[0][0] = sqrt($sigmas[0]);
-            cov[1][1] = sqrt($sigmas[1]);
-            cov[2][2] = sqrt($sigmas[2]);
-
-            vec4 ex = vec4(1,0,0,0);
-            vec4 ey = vec4(0,1,0,0);
-            vec4 ez = vec4(0,0,1,0);
-            vec3 ex2 = $camera(cov*$camera_inv(ex)).xyz;
-            vec3 ey2 = $camera(cov*$camera_inv(ey)).xyz;
-            vec3 ez2 = $camera(cov*$camera_inv(ez)).xyz;
-            mat3 Rmat = mat3(ex2, ey2, ez2);
-            covariance_inv = mat2(transpose(Rmat)*mat3(cov)*Rmat);
-            covariance_inv = $inverse(covariance_inv);
-
+            // The screen axes as unit vectors in world space.
             vec3 camera_right = $camera_inv(vec4(1,0,0,0)).xyz;
             vec3 camera_up    = $camera_inv(vec4(0,1,0,0)).xyz;
             float len = length(camera_right);
             camera_right = camera_right/len;
             camera_up    = camera_up/len;
 
-            // The localization's one-sigma ellipse on screen, which the
-            // footprints that draw an outline measure against.  Its
-            // covariance in the screen basis is the marginal of the
-            // axis-aligned diag(sigma^2) -- what an orthographic projection
-            // of the 3-D ellipsoid looks like.  $sigmas are in units of the
-            // widest sigma and the drawn square is $extent_sigmas of those to
-            // either side, so dividing by its square puts the ellipse in the
-            // square's own -1 to 1 coordinate.
+            // The localization's one-sigma ellipse on screen: what the
+            // Gaussian is drawn with, and what the footprints that draw an
+            // outline measure against.  Its covariance in the screen basis is
+            // the marginal of the axis-aligned diag(sigma^2) -- what an
+            // orthographic projection of the 3-D Gaussian looks like.
+            // $sigmas are in nanometres and the drawn square reaches
+            // half_edge nanometres to either side, so dividing by its square
+            // puts the ellipse in the square's own -1 to 1 coordinate.
+            //
+            // Until 3.1 the Gaussian was drawn from a second covariance, built
+            // of the square roots of the sigmas and sandwiched between two
+            // rotations, which drew widths going as sigma to the power 0.75 --
+            // and its falloff was squared by the blend on top.
             vec3 rs = camera_right * $sigmas;
             vec3 us = camera_up * $sigmas;
+            float half_edge = 0.5 * $billboard_size * $quad_scale;
             mat2 disc_cov = mat2(dot(rs, rs), dot(rs, us),
                                  dot(rs, us), dot(us, us))
-                          / ($extent_sigmas * $extent_sigmas);
+                          / (half_edge * half_edge);
             v_disc_inv = $inverse(disc_cov);
 
             // A one-sigma outline smaller on screen than $min_half_px (a
@@ -145,7 +136,6 @@ class InstancedBillboardsFilter(Filter):
             // summed intensity is the measurement.
             float grow = 1.0;
             if ($min_half_px > 0.0) {
-                float half_edge = 0.5 * $billboard_size * $quad_scale;
                 vec4 c = $visual_to_canvas(vec4($vertex_center, 1.0));
                 vec4 e = $visual_to_canvas(
                     vec4($vertex_center + camera_right * half_edge, 1.0));
@@ -179,7 +169,6 @@ class InstancedBillboardsFilter(Filter):
         ffunc = Function("""
         varying float v_z_center;
         varying float v_instance_value;
-        varying mat2 covariance_inv;
         varying mat2 v_disc_inv;
 
         void apply() {
@@ -216,30 +205,30 @@ class InstancedBillboardsFilter(Filter):
                 (v_instance_value - $clim_low) / $clim_range, 0.0, 1.0
             );
             vec4 mapped = $cmap(t);
+            // Squared distance from the centre in sigmas of this localization.
+            float q = dot(x, v_disc_inv*x);
             // What the footprint puts on the square: see footprint_shaders.
             // An opaque one is drawn at alpha 1 -- napari blends the
             // bottom-most layer with the canvas even under its "opaque"
             // preset, at whatever alpha arrives -- and not at all at opacity
             // 0, which is how a channel is switched off.  The Gaussian's
-            // falloff goes in alpha as well as colour, so additive blending
-            // squares it, matching the shader this replaces.
+            // falloff goes into alpha alone, so additive blending applies it
+            // once.
             if ($opaque > 0.5 && layer_alpha <= 0.0) {
                 discard;
             }
             if ($accumulate > 0.5) {
                 // Summed contrast (see summed_contrast.py): write only what
-                // this localization adds here -- its value times the falloff,
-                // squared exactly as additive blending squares it below -- at
-                // alpha 1.  The window, colormap and opacity are applied once,
-                // to the sum.
-                vec4 weight = $shape(x, dot(x, v_disc_inv*x),
-                                     dot(x, covariance_inv*x), vec4(1.0));
+                // this localization adds here -- its value times what the
+                // footprint puts on the square, colour times alpha exactly as
+                // additive blending combines them below -- at alpha 1.  The
+                // window, colormap and opacity are applied once, to the sum.
+                vec4 weight = $shape(x, q, 0.25 * q, vec4(1.0));
                 gl_FragColor = vec4(
                     v_instance_value * weight.r * weight.a, 0.0, 0.0, 1.0
                 );
             } else {
-                vec4 drawn = $shape(x, dot(x, v_disc_inv*x),
-                                    dot(x, covariance_inv*x),
+                vec4 drawn = $shape(x, q, 0.25 * q,
                                     vec4(mapped.rgb, layer_alpha));
                 if ($opaque > 0.5) {
                     drawn.a = 1.0;
@@ -264,7 +253,6 @@ class InstancedBillboardsFilter(Filter):
         # Colours, until the layer hands the sum to a SummedContrastPass.
         ffunc["accumulate"] = 0.0
         vfunc["quad_scale"] = 1.0
-        vfunc["extent_sigmas"] = footprint_named(FOOTPRINT_GAUSSIAN).extent_sigmas
         vfunc["min_half_px"] = 0.0
 
         self._texcoord_varying = Varying("v_texcoord", "vec2")
@@ -326,7 +314,6 @@ class InstancedBillboardsFilter(Filter):
         self.fshader["shape"] = shape_function(name)
         self.fshader["opaque"] = 1.0 if is_opaque(name) else 0.0
         self.vshader["quad_scale"] = quad_scale(name)
-        self.vshader["extent_sigmas"] = footprint.extent_sigmas
         self.vshader["min_half_px"] = (
             0.0 if footprint.reconstruction else 0.5 * float(min_size_px)
         )
@@ -346,10 +333,11 @@ class InstancedBillboardsFilter(Filter):
     def _attach(self, visual):
         self.vshader["transform"] = visual.transforms.get_transform("visual", "render")
         self.vshader["quad_corner"] = mesh_vertex_buffer(visual)
+        # Screen axes back into world space, for the billboard basis and the
+        # projected covariance.  The forward transform is not needed.
         self.vshader["camera_inv"] = visual.transforms.get_transform(
             "document", "scene"
         )
-        self.vshader["camera"] = visual.transforms.get_transform("scene", "document")
         # Canvas pixels, for the minimum on-screen size of a disc: logical
         # pixels, so the floor reads the same on a high-density display.
         self.vshader["visual_to_canvas"] = visual.transforms.get_transform(

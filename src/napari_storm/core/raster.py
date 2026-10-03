@@ -36,9 +36,12 @@ __all__ = [
     "splat_extent_nm",
 ]
 
-#: How far out a Gaussian is evaluated, in sigmas. Matches the renderer's
-#: billboard, which is cut at five sigma -- about 4% of peak amplitude -- so the
-#: export inherits the same truncation rather than inventing a second one.
+#: How far out a Gaussian is evaluated, in sigmas.  Five sigma is 4e-6 of the
+#: peak: nothing a file can show is lost.  The canvas cuts its billboards
+#: earlier (half of ``render_planner.SIGMA_TO_SIZE_FACTOR``, so three sigma)
+#: because it pays for every fragment on every frame and an export does not;
+#: that is one of the ways the canvas approximates this model rather than the
+#: other way round.
 SPLAT_SIGMAS = 5.0
 
 #: Target tile edge in pixels. A 1024x1024 float32 tile is 4 MB, which keeps the

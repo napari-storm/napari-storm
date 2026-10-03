@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core.renderer import LayerAppearance, LocalizationRenderer
+from ..core.renderer import Changed, LayerAppearance, LocalizationRenderer
 from .particles import Particles
+from .trace_overlay import TraceOverlay, TracesMixin
 
 __all__ = ["NapariParticlesRenderer"]
 
 
-class NapariParticlesRenderer(LocalizationRenderer):
-    """Draws each dataset as one `Particles` layer in a napari viewer."""
+class NapariParticlesRenderer(TracesMixin, LocalizationRenderer):
+    """Draws each dataset as one `Particles` layer, and its traces over it."""
 
     def __init__(self, viewer):
         self.viewer = viewer
@@ -31,6 +32,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
         #: callable(dataset_id) -- the user deleted one of our layers in napari.
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
+        self._traces = TraceOverlay(viewer)
 
     def detach(self):
         """Stop listening to the viewer.  Call before dropping the renderer."""
@@ -39,6 +41,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
         except (ValueError, TypeError, RuntimeError):
             # Already disconnected, or the viewer is gone.
             pass
+        self._traces.detach()
 
     def _on_layer_removed(self, event):
         """A layer left the viewer.  If it was ours, stop pretending it is open.
@@ -55,6 +58,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
             return
         self._layers.pop(dataset_id, None)
         layer.close()
+        self._traces.close(dataset_id)
         if self.on_layer_removed_by_host is not None:
             self.on_layer_removed_by_host(dataset_id)
 
@@ -95,6 +99,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
         # `shading`, which accepts only None/'flat'/'smooth' -- see P0-08.
         layer.shader = "gaussian"
         self._layers[dataset_id] = layer
+        self._traces.open(dataset_id, request)
         return layer
 
     def update(self, dataset_id, request):
@@ -107,6 +112,10 @@ class NapariParticlesRenderer(LocalizationRenderer):
         layer = self._layers.get(dataset_id)
         if layer is None:
             raise KeyError(f"dataset {dataset_id} is not open")
+        if request.changed == Changed.TRACES:
+            # Only the overlay differs: the splats are as they were.
+            self._traces.update(dataset_id, request)
+            return layer
         layer.update_particle_data(
             coords=request.coords,
             size=request.size,
@@ -119,12 +128,15 @@ class NapariParticlesRenderer(LocalizationRenderer):
         # splats stop summing and the reconstruction becomes whichever Gaussian
         # was drawn last.
         layer._apply_blend_state()
+        self._traces.update(dataset_id, request)
+        self._traces.set_shown(dataset_id, True)
         return layer
 
     def set_visible(self, dataset_id, visible):
         layer = self._layers.get(dataset_id)
         if layer is not None:
             layer.visible = bool(visible)
+            self._traces.set_shown(dataset_id, visible)
 
     def set_appearance(self, dataset_id, appearance):
         """Apply the non-None fields of *appearance* to the napari layer.
@@ -149,6 +161,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
             layer.min_size_px = appearance.min_size_px
         if appearance.footprint is not None:
             layer.footprint = appearance.footprint
+        self._traces.set_appearance(dataset_id, appearance)
         return layer
 
     def appearance(self, dataset_id):
@@ -162,6 +175,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
             visible=layer.visible,
             footprint=layer.footprint,
             min_size_px=layer.min_size_px,
+            **self._traces.appearance_fields(dataset_id),
         )
 
     def value_range(self, dataset_id):
@@ -171,6 +185,7 @@ class NapariParticlesRenderer(LocalizationRenderer):
 
     def close(self, dataset_id):
         """Disconnect the layer's callbacks and filters, then drop it."""
+        self._traces.close(dataset_id)
         layer = self._layers.pop(dataset_id, None)
         if layer is None:
             return
@@ -209,7 +224,6 @@ class NapariParticlesRenderer(LocalizationRenderer):
             "_centercoords",
             "_sigmas",
             "_size",
-            "_texcoords",
             "_view_faces",
             "_view_vertices",
         ):
@@ -219,4 +233,4 @@ class NapariParticlesRenderer(LocalizationRenderer):
         data = getattr(layer, "data", None)
         if isinstance(data, tuple):
             total += sum(a.nbytes for a in data if isinstance(a, np.ndarray))
-        return total
+        return total + self._traces.host_bytes(dataset_id)

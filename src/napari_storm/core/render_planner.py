@@ -21,6 +21,7 @@ import numpy as np
 
 from .localization_table import ACTIVE
 from .renderer import DEFAULT_COLORMAP, Changed, RenderRequest
+from .traces import AUTO, plan_traces
 from .validation import (
     InvalidLocalizationData,
     require_positive_maximum,
@@ -34,8 +35,16 @@ __all__ = ["GaussianSettings", "DatasetTraits", "RenderPlanner"]
 #: enormous uncertainties cannot set the scale for everything else.
 PERCENTILE_CLIP = 99
 
-#: Billboard edge length as a multiple of the largest sigma.
-SIGMA_TO_SIZE_FACTOR = 5
+#: Billboard edge length as a multiple of the largest sigma.  The quad is the
+#: support of the Gaussian, not its scale: the Gaussian is evaluated out to
+#: half this many sigma from its centre and cut there.  Six puts the cut at
+#: three sigma, where the Gaussian is at 1.1% of its peak -- below what an
+#: 8-bit canvas resolves at ordinary contrast.  It was five, which the shader
+#: of the time drew as a cut at 2.8 of the (too narrow) sigma it actually
+#: produced; with the drawn width now exact, five would leave a visible 4.4%
+#: step around every isolated localization.  The cost is fill rate, which
+#: grows with the square of this number.
+SIGMA_TO_SIZE_FACTOR = 6
 
 #: Substituted for a zero, negative or non-finite uncertainty or photon count.
 MIN_USABLE_UNCERTAINTY = 1e-3
@@ -237,7 +246,15 @@ class RenderPlanner:
         return values
 
     def sigmas(self, rows, settings, traits):
-        """``((N, 3) normalized sigmas, billboard edge in nm)``."""
+        """``((N, 3) sigmas in nm, billboard edge in nm)``, both ``(z, y, x)``.
+
+        The sigmas are handed on in nanometres.  They used to be normalized to
+        the largest of them, with the billboard edge the only carrier of the
+        physical scale; that made every drawn width a function of the
+        billboard, so the screen-space cap shrank Gaussians instead of
+        cutting them, and the exporter had to divide the edge back out to
+        recover nanometres.
+        """
         n = rows.n
         if settings.mode == 0:
             sigma_nm = np.empty((n, 3), dtype=np.float32)
@@ -271,7 +288,7 @@ class RenderPlanner:
 
         largest = np.max(sigma_nm)
         require_positive_maximum(np.asarray([largest]), "Gaussian sigma")
-        return sigma_nm / largest, float(SIGMA_TO_SIZE_FACTOR * largest)
+        return sigma_nm, float(SIGMA_TO_SIZE_FACTOR * largest)
 
     # ------------------------------------------------------------------
     # The whole request
@@ -290,12 +307,17 @@ class RenderPlanner:
         changed=Changed.EVERYTHING,
         size_limit=None,
         selection=ACTIVE,
+        trace_column=None,
+        time_column=AUTO,
+        trace_properties=(),
     ):
         """Everything a backend needs to draw this dataset as it stands now.
 
         *size_limit*, when given, caps the billboard edge -- the screen-space
         budget of P0-04, applied here because it changes what is drawn and so
-        belongs to planning rather than to a backend.
+        belongs to planning rather than to a backend.  The cap cuts the
+        Gaussian's support short; it does not narrow the Gaussian, because the
+        sigmas travel in nanometres beside the edge rather than inside it.
 
         *selection* chooses which rows to plan over. The renderer wants
         :data:`~napari_storm.core.localization_table.ACTIVE`, the rows it can
@@ -303,6 +325,13 @@ class RenderPlanner:
         :data:`~napari_storm.core.localization_table.FILTERED`, the rows the
         user actually selected, because budget thinning is an accommodation to
         the GPU and has no business in a saved result.
+
+        *trace_column*, when given, also arranges the same rows as
+        trajectories -- `core.traces.plan_traces`, with *time_column* and
+        *trace_properties* passed through -- into ``request.traces``.  The
+        coordinates are the ones computed for the splats, not a second
+        computation of them, so every trajectory passes through its own drawn
+        localizations.  Without it ``request.traces`` is None.
         """
         if settings.mode == 1 and not traits.uncertainty_defined:
             raise InvalidLocalizationData(
@@ -315,8 +344,20 @@ class RenderPlanner:
         sigmas, size = self.sigmas(rows, settings, traits)
         if size_limit is not None:
             size = min(size, float(size_limit))
+        coords = self.coordinates(rows, traits, transform)
+        traces = None
+        if trace_column is not None:
+            traces = plan_traces(
+                table,
+                traits,
+                trace_column=trace_column,
+                time_column=time_column,
+                selection=selection,
+                properties=tuple(trace_properties),
+                coords=coords,
+            )
         return RenderRequest(
-            coords=self.coordinates(rows, traits, transform),
+            coords=coords,
             sigmas=sigmas,
             size=size,
             values=self.values(rows, settings, traits),
@@ -325,6 +366,7 @@ class RenderPlanner:
             antialias=antialias,
             active_ids=rows.ids,
             changed=changed,
+            traces=traces,
         )
 
 

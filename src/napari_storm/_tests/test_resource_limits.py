@@ -110,8 +110,8 @@ def test_over_budget_dataset_is_thinned_and_reported_once(make_napari_viewer):
     widget = napari_storm(napari_viewer=make_napari_viewer())
     messages = []
     widget.data_to_layer_itf.on_resource_limit_applied = messages.append
-    # 1000 localizations at 352 B each is 0.352 MB; allow a tenth of that.
-    widget.render_config.render_budget_mb = 0.0352
+    # 1000 localizations at 304 B each is 0.304 MB; allow a tenth of that.
+    widget.render_config.render_budget_mb = 0.0304
 
     widget.get_dataset_from_test_mode([_dataset(1_000)])
     dataset = widget.localization_datasets[0]
@@ -166,7 +166,7 @@ def test_extreme_gaussian_is_capped_instead_of_flooding_the_viewport(
 
 def test_budget_is_shared_between_loaded_datasets(make_napari_viewer):
     widget = napari_storm(napari_viewer=make_napari_viewer())
-    widget.render_config.render_budget_mb = 0.352  # 1000 localizations total
+    widget.render_config.render_budget_mb = 0.304  # 1000 localizations total
 
     widget.get_dataset_from_test_mode([_dataset(1_000, "a"), _dataset(1_000, "b")])
 
@@ -195,7 +195,7 @@ def test_benchmark_fixtures_fit_the_default_budget():
 def test_the_budget_hides_rows_without_deselecting_them(make_napari_viewer):
     """P0-04 must not silently edit what an export or a save would see."""
     widget = napari_storm(napari_viewer=make_napari_viewer())
-    widget.render_config.render_budget_mb = 0.0352  # 100 localizations
+    widget.render_config.render_budget_mb = 0.0304  # 100 localizations
 
     widget.get_dataset_from_test_mode([_dataset(1_000)])
     dataset = widget.localization_datasets[0]
@@ -208,7 +208,7 @@ def test_the_budget_hides_rows_without_deselecting_them(make_napari_viewer):
 
 def test_raising_the_budget_restores_the_full_view(make_napari_viewer):
     widget = napari_storm(napari_viewer=make_napari_viewer())
-    widget.render_config.render_budget_mb = 0.0352
+    widget.render_config.render_budget_mb = 0.0304
 
     widget.get_dataset_from_test_mode([_dataset(1_000)])
     assert widget.localization_datasets[0].is_display_limited

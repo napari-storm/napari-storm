@@ -65,8 +65,10 @@ class Footprint:
         group: ``"reconstruction"`` or ``"visualisation"``.
         blend: ``"additive"`` or ``"opaque"``.
         extent_sigmas: half the edge of the square the footprint is drawn on,
-            in sigmas of the widest localization.  2.5 is the whole Gaussian
-            billboard; a marker drawn at its one-sigma outline needs 1.
+            in sigmas of the widest localization.  3 is the whole Gaussian
+            billboard (the Gaussian is cut at three sigma); a marker drawn at
+            its one-sigma outline needs 1, and napari-particles' sprites keep
+            the 2.5 they were drawn on before 3.1.
         uncertainty: the footprint draws each localization's own one-sigma
             ellipse, so with widths taken from the localization uncertainty it
             shows that uncertainty as its size and shape -- a ring becomes an
@@ -103,7 +105,7 @@ PALETTE = (
         "Gaussian (scientific)",
         GROUP_RECONSTRUCTION,
         BLEND_ADDITIVE,
-        2.5,
+        3.0,
         True,
         "Each localization as a Gaussian, summed: the reconstruction, and what "
         "an export writes.",
