@@ -264,8 +264,8 @@ def test_turning_traces_on_and_off_leaves_the_view_alone(make_napari_viewer):
         viewer.dims.ndisplay,
     ) == before
     assert viewer.layers.selection.active is renderer.layer(1)
-    # The localizations draw exactly as they did, a fourth axis or not.
-    np.testing.assert_array_equal(_image(viewer), splats)
+    # The localizations draw as they did, a fourth axis or not.
+    _assert_same_picture(_image(viewer), splats)
 
     renderer.set_appearance(1, LayerAppearance(traces=False))
     assert viewer.dims.ndim == 3
@@ -275,7 +275,23 @@ def test_turning_traces_on_and_off_leaves_the_view_alone(make_napari_viewer):
         tuple(viewer.camera.angles),
         viewer.dims.ndisplay,
     ) == before
-    np.testing.assert_array_equal(_image(viewer), splats)
+    _assert_same_picture(_image(viewer), splats)
+
+
+def _assert_same_picture(image, reference):
+    """The same picture, up to the GPU's rounding of a float sum to 8 bits.
+
+    The camera checks above are exact; this asks whether the splats moved or
+    changed.  Bit-for-bit equality asked more than that: on the macOS CI
+    runner the summed-contrast resolve rounded six of 1.44 million channel
+    values one step differently between two identical frames.  A view that
+    moved, or a layer that drew, changes thousands of pixels by far more.
+    """
+    difference = np.abs(image.astype(np.int16) - reference.astype(np.int16))
+    assert difference.max() <= 2, f"largest change {difference.max()}"
+    assert (
+        np.count_nonzero(difference) <= 1e-4 * difference.size
+    ), f"{np.count_nonzero(difference)} of {difference.size} values changed"
 
 
 def test_flat_data_keeps_its_plane_in_2d(make_napari_viewer):
