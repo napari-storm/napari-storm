@@ -867,9 +867,16 @@ class napari_storm(NapariStormGUI):
         self.data_to_layer_itf.apply_trace_style(replan=False)
 
     def _on_traces_removed(self, _dataset):
-        """A trace layer was deleted in napari: if none is left, say so here."""
+        """A trace layer was deleted in napari: if none is left, say so here.
+
+        Asked of the datasets' recorded appearance, not of what is on screen:
+        a hidden channel's traces are still switched on.
+        """
         itf = self.data_to_layer_itf
-        if not any(itf.draws_traces(d) for d in self._datasets_with_traces()):
+        if not any(
+            getattr(itf.appearance_of(dataset), "traces", False)
+            for dataset in self._datasets_with_traces()
+        ):
             self.render_config.traces = False
         self._sync_trace_controls()
 

@@ -282,8 +282,9 @@ handled for it:
   overlay restores the camera, and the layer selection, after adding or
   removing its layer.
 
-Lines are drawn by the GL driver, which caps their width -- at 8 logical
-pixels on macOS, and at 1 on some drivers that support only thin lines.
+Lines are drawn by the GL driver, which caps their width: at 8 logical pixels
+on macOS (measured), and a driver that offers only thin lines -- which OpenGL
+core profiles are allowed to -- draws every width as one pixel.
 Deleting an overlay layer in napari turns that dataset's traces off rather
 than closing the dataset; set `renderer.on_traces_removed_by_host` to hear
 about it.
@@ -296,12 +297,12 @@ from dataclasses import fields
 has_traces = "traces" in {f.name for f in fields(LayerAppearance)}
 ```
 
-`LocalizationRenderer.draws_traces` exists on every backend, and answers False
-on one that predates traces.
+`LocalizationRenderer.draws_traces` is part of the contract; a backend of your
+own that does not draw traces inherits an answer of False.
 
 **What it costs.** 10^4 traces of 100 localizations -- 10^6 vertices -- plan in
 0.06 s, and the overlay takes 0.7 s to build, 0.4-0.5 s to follow a filter
-change (most of it napari indexing the tracks for hovering) and adds about
+change (most of it napari re-indexing the tracks) and adds about
 2 ms to a 2560x1600 frame; a width or colour change is immediate, and a
 filter change with traces off costs what it did. At 10^5 vertices those are
 0.12 s and 0.04 s. Memory is about 90 bytes a vertex for the vertices and the

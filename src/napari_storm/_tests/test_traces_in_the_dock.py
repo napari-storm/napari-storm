@@ -317,6 +317,21 @@ def test_deleting_the_trace_layer_unticks_the_box(make_napari_viewer, tmp_path):
     assert _trace_layer(widget, tracking) is None
 
 
+def test_deleting_one_of_two_keeps_the_box_ticked(make_napari_viewer, tmp_path):
+    """Even while the other's channel is hidden: its traces are still on."""
+    first, second = _minflux(tmp_path, "first"), _minflux(tmp_path, "second")
+    widget, viewer = _dock(make_napari_viewer, [first, second])
+    widget.Ctraces.setChecked(True)
+    widget.channel[1].Bshow_channel.setChecked(False)
+
+    viewer.layers.remove(_trace_layer(widget, first))
+
+    assert widget.Ctraces.isChecked()
+    widget.channel[1].Bshow_channel.setChecked(True)
+    assert widget.data_to_layer_itf.draws_traces(second)
+    assert not widget.data_to_layer_itf.draws_traces(first)
+
+
 # -------------------------------------------------------------------- scene
 
 
