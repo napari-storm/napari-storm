@@ -17,7 +17,12 @@ from .core import (
 )
 from .core.footprints import BLEND_OPAQUE, FOOTPRINT_GAUSSIAN, footprint_named
 from .core.renderer import Changed, LayerAppearance
-from .core.traces import BUILTIN_COLOR_BY, find_trace_column, is_trace_column
+from .core.traces import (
+    BUILTIN_COLOR_BY,
+    COLOR_BY_TRACE,
+    find_trace_column,
+    is_trace_column,
+)
 from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
 from .memory_budget import max_localizations_for_budget, render_bytes_for
@@ -483,7 +488,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             )
         # And without traces, which it joins in the same way.
         if self.traces_wanted(dataset):
-            self.set_appearance(dataset, **self._trace_style())
+            self.set_appearance(dataset, **self._trace_style(dataset))
 
         # add_layer already frames a newly inserted layer.  Camera recentering
         # after range/filter changes is handled explicitly by the widget using
@@ -680,11 +685,19 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             self.trace_column_of(dataset) is not None
         )
 
-    def _trace_style(self):
+    def _trace_style(self, dataset):
+        """The Decorators tab's trace settings, as *dataset* can take them.
+
+        A column to colour by that this dataset does not carry falls back to
+        one hue per trace here, rather than as a warning from the backend.
+        """
         config = self.render_config
+        color_by = config.trace_color_by
+        if color_by not in BUILTIN_COLOR_BY and not dataset.table.has_field(color_by):
+            color_by = COLOR_BY_TRACE
         return {
             "traces": bool(config.traces),
-            "trace_color_by": config.trace_color_by,
+            "trace_color_by": color_by,
             "trace_width_px": float(config.trace_width_px),
         }
 
@@ -713,10 +726,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         column to colour by -- and only the overlay is updated: the splats are
         unchanged.  A width or a built-in colouring is appearance alone.
         """
-        style = self._trace_style()
         for dataset in self.parent.localization_datasets:
             if self.trace_column_of(dataset) is None:
                 continue
+            style = self._trace_style(dataset)
             if (
                 replan
                 and style["traces"]

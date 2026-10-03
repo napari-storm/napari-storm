@@ -139,6 +139,47 @@ def test_a_dataset_loaded_later_joins(make_napari_viewer, tmp_path):
     assert _trace_layer(widget, second) is not None
 
 
+def _custom_traces(name="custom", n_traces=4, n_points=6):
+    """A table of our own with trace ids, a time -- and no `efo`."""
+    rows = n_traces * n_points
+    locs = np.zeros(
+        rows,
+        dtype=[
+            ("x_pos_nm", "f4"),
+            ("y_pos_nm", "f4"),
+            ("z_pos_nm", "f4"),
+            ("trace_id", "i4"),
+            ("time_s", "f4"),
+        ],
+    )
+    locs["trace_id"] = np.tile(np.arange(n_traces), n_points)
+    locs["time_s"] = np.arange(rows)
+    locs["x_pos_nm"] = np.arange(rows) * 20.0
+    locs["y_pos_nm"] = locs["trace_id"] * 300.0
+    locs["z_pos_nm"] = np.arange(rows) * 5.0
+    return LocalizationDataBaseClass(np.rec.array(locs), name=name, zdim_present=True)
+
+
+def test_a_column_not_every_dataset_has_falls_back_to_one_hue_per_trace(
+    make_napari_viewer, tmp_path, recwarn
+):
+    tracking = _minflux(tmp_path)
+    widget, _viewer = _dock(make_napari_viewer, [tracking])
+    widget.Ctraces.setChecked(True)
+    _choose_colour(widget, "efo")
+
+    custom = _custom_traces()
+    widget._apply_loaded_datasets([custom], merge=True)
+
+    assert _trace_layer(widget, custom) is not None
+    assert widget.Btrace_color_by.currentData() == "trace"
+    assert widget.Btrace_color_by.findData("efo") < 0
+    for dataset in (tracking, custom):
+        appearance = widget.data_to_layer_itf.renderer.appearance(dataset.dataset_id)
+        assert appearance.trace_color_by == "trace"
+    assert not [w for w in recwarn if "coloured by" in str(w.message)]
+
+
 # ----------------------------------------------------------- registration
 
 

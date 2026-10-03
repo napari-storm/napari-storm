@@ -936,8 +936,9 @@ class napari_storm(NapariStormGUI):
         ]
         offered = [(combo.itemText(i), combo.itemData(i)) for i in range(combo.count())]
         chosen = self.render_config.trace_color_by
-        if chosen not in {name for _label, name in wanted}:
-            # The column it was coloured by left with its dataset.
+        fell_back = chosen not in {name for _label, name in wanted}
+        if fell_back:
+            # The column it was coloured by is not one every dataset has.
             chosen = COLOR_BY_TRACE
             self.render_config.trace_color_by = chosen
         combo.blockSignals(True)
@@ -947,6 +948,8 @@ class napari_storm(NapariStormGUI):
                 combo.addItem(label, name)
         combo.setCurrentIndex(combo.findData(chosen))
         combo.blockSignals(False)
+        if fell_back:
+            self.data_to_layer_itf.apply_trace_style(replan=False)
 
     def _restore_trace_style(
         self, traces=None, trace_color_by=None, trace_width_px=None
