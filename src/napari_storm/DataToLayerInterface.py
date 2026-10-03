@@ -17,6 +17,7 @@ from .core import (
 )
 from .core.footprints import BLEND_OPAQUE, FOOTPRINT_GAUSSIAN, footprint_named
 from .core.renderer import Changed, LayerAppearance
+from .core.traces import BUILTIN_COLOR_BY, find_trace_column, is_trace_column
 from .CustomErrors import ParentError
 from .grid_plane_renderer import GridPlaneRenderer
 from .memory_budget import max_localizations_for_budget, render_bytes_for
@@ -61,6 +62,8 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # Callbacks for communicating back to the GUI without direct widget access
         self._on_grid_line_distance_clamped = None  # set via property
         self.on_layer_updated = None  # callable(channel_index: int)
+        # callable(dataset) -- the user deleted a dataset's trace layer.
+        self.on_traces_removed = None
         # callable(message: str) -- resource limits that changed what is drawn
         self.on_resource_limit_applied = None
         # Ids of datasets currently thinned/clamped, so a limit is reported when
@@ -87,6 +90,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # that dataset gone.  Honour it rather than keeping half a session.
         if hasattr(self.renderer, "on_layer_removed_by_host"):
             self.renderer.on_layer_removed_by_host = self._on_layer_removed_by_host
+        # Deleting a trace layer means "not these traces", not "not this
+        # dataset": it turns the overlay off and leaves the data alone.
+        if hasattr(self.renderer, "on_traces_removed_by_host"):
+            self.renderer.on_traces_removed_by_host = self._on_traces_removed_by_host
 
         # Renderer inputs, keyed by stable dataset id rather than by position.
         # These were three parallel lists indexed alongside the dataset list, so
@@ -230,6 +237,24 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         # filter entries and info card go with it, exactly as if the Unload
         # button had been pressed.
         self.parent.unload_dataset(dataset)
+
+    def _on_traces_removed_by_host(self, dataset_id):
+        """The user deleted a dataset's trace layer through napari.
+
+        The backend has already turned that overlay off; recording it on the
+        dataset's state keeps a saved scene honest, and the dock gets to say
+        so in the Decorators tab.
+        """
+        if getattr(self.parent, "_closed", False):
+            return
+        dataset = self._dataset_for(dataset_id)
+        if dataset is None:
+            return
+        store = getattr(self.parent, "dataset_store", None)
+        if store is not None and store.state_of(dataset) is not None:
+            store.set_appearance(dataset_id, traces=False)
+        if self.on_traces_removed is not None:
+            self.on_traces_removed(dataset)
 
     def close(self):
         """Release every renderer resource this interface owns."""
@@ -456,6 +481,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
                 footprint=footprint,
                 min_size_px=self.render_config.min_size_px,
             )
+        # And without traces, which it joins in the same way.
+        if self.traces_wanted(dataset):
+            self.set_appearance(dataset, **self._trace_style())
 
         # add_layer already frames a newly inserted layer.  Camera recentering
         # after range/filter changes is handled explicitly by the widget using
@@ -557,6 +585,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             antialias=self.render_anti_alias,
             changed=changed,
             size_limit=self._splat_size_limit(),
+            **self._trace_plan_arguments(dataset),
         )
         request = self._markers_at_full_value(request)
         # Kept for the resource-limit reporting and for tests that inspect what
@@ -625,6 +654,92 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         """
         query = getattr(self.renderer, "contrast_is_summed", None)
         return bool(query(dataset.dataset_id)) if query is not None else False
+
+    # ------------------------------------------------------------------
+    # Traces
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def trace_column_of(dataset):
+        """The column identifying *dataset*'s traces, or None if it has none.
+
+        A dataset class may declare one as ``trace_column``; otherwise the
+        defaults in `core.traces` are tried -- MINFLUX's ``trace_id``.
+        """
+        table = getattr(dataset, "table", None)
+        if table is None:
+            return None
+        declared = getattr(dataset, "trace_column", None)
+        if declared is not None:
+            return declared if is_trace_column(table, declared) else None
+        return find_trace_column(table)
+
+    def traces_wanted(self, dataset):
+        """Whether *dataset*'s traces should be drawn now."""
+        return bool(getattr(self.render_config, "traces", False)) and (
+            self.trace_column_of(dataset) is not None
+        )
+
+    def _trace_style(self):
+        config = self.render_config
+        return {
+            "traces": bool(config.traces),
+            "trace_color_by": config.trace_color_by,
+            "trace_width_px": float(config.trace_width_px),
+        }
+
+    def _trace_plan_arguments(self, dataset):
+        """What `RenderPlanner.plan` needs to arrange *dataset*'s traces.
+
+        Nothing while traces are off: arranging a million rows by trace is not
+        free, and a request that draws none has no use for it.
+        """
+        if not self.traces_wanted(dataset):
+            return {}
+        color_by = self.render_config.trace_color_by
+        planned = ()
+        if color_by not in BUILTIN_COLOR_BY and dataset.table.has_field(color_by):
+            planned = (color_by,)
+        return {
+            "trace_column": self.trace_column_of(dataset),
+            "trace_properties": planned,
+        }
+
+    def apply_trace_style(self, replan=True):
+        """Give every dataset with traces the Decorators tab's trace settings.
+
+        *replan* re-arranges the traces first, which is needed whenever the
+        vertices may not have been planned yet -- traces turned on, or a
+        column to colour by -- and only the overlay is updated: the splats are
+        unchanged.  A width or a built-in colouring is appearance alone.
+        """
+        style = self._trace_style()
+        for dataset in self.parent.localization_datasets:
+            if self.trace_column_of(dataset) is None:
+                continue
+            if (
+                replan
+                and style["traces"]
+                and self.renderer.is_open(dataset.dataset_id)
+                and dataset.number_of_active_entries() > 0
+            ):
+                self.renderer.update(
+                    dataset.dataset_id,
+                    self._render_request(dataset, changed=Changed.TRACES),
+                )
+            self.set_appearance(dataset, **style)
+
+    def draws_traces(self, dataset):
+        """Whether *dataset*'s traces are on screen."""
+        query = getattr(self.renderer, "draws_traces", None)
+        return bool(query(dataset.dataset_id)) if query is not None else False
+
+    def trace_layer_for(self, dataset):
+        """The host layer drawing *dataset*'s traces, or None.  For tests."""
+        trace_layer = getattr(self.renderer, "trace_layer", None)
+        if trace_layer is None:
+            return None
+        return trace_layer(getattr(dataset, "dataset_id", None))
 
     def layer_for(self, dataset):
         """The host layer drawing *dataset*, or None.

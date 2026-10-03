@@ -10,7 +10,8 @@ What a scene records is therefore **the decisions**, never the pixels and never
 the localizations:
 
 * where each dataset's file is, and where the dataset sits in world space,
-* how it is displayed -- colormap, opacity, contrast, visibility,
+* how it is displayed -- colormap, opacity, contrast, visibility, rendering
+  style, and whether its traces are connected and how,
 * how localizations are turned into Gaussians,
 * where reference images are and how they are placed,
 * where the camera was.
@@ -220,6 +221,12 @@ def _appearance_to_dict(appearance):
         raw["footprint"] = appearance.footprint
     if appearance.min_size_px is not None:
         raw["min_size_px"] = appearance.min_size_px
+    if appearance.traces is not None:
+        raw["traces"] = bool(appearance.traces)
+    if appearance.trace_color_by is not None:
+        raw["trace_color_by"] = appearance.trace_color_by
+    if appearance.trace_width_px is not None:
+        raw["trace_width_px"] = float(appearance.trace_width_px)
     return raw
 
 
@@ -235,6 +242,9 @@ def _appearance_from_dict(raw):
             visible=raw.get("visible"),
             footprint=raw.get("footprint"),
             min_size_px=raw.get("min_size_px"),
+            traces=raw.get("traces"),
+            trace_color_by=raw.get("trace_color_by"),
+            trace_width_px=raw.get("trace_width_px"),
         )
     except ValueError as exc:
         raise SceneFormatError(f"invalid appearance: {exc}") from None
