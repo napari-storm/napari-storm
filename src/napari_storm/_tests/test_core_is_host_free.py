@@ -247,3 +247,17 @@ def test_the_blocker_itself_works():
     result = _run_headless("import qtpy\n")
     assert result.returncode != 0
     assert "must not import qtpy" in result.stderr
+
+
+def test_postprocessing_imports_without_a_host_or_comet():
+    result = _run_headless("""
+        import napari_storm.postprocessing
+        import napari_storm.postprocessing.comet_runner
+        import napari_storm.postprocessing.pair_network
+        import napari_storm.postprocessing.grouping
+        import napari_storm.postprocessing.fiducials
+        assert "comet" not in sys.modules
+        assert "torch" not in sys.modules
+        assert "numba" not in sys.modules
+    """)
+    assert result.returncode == 0, result.stderr

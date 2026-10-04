@@ -23,6 +23,14 @@ question appears as a normal dialog.
 Building the layer itself still happens on the interface thread, so the window pauses briefly at the
 end of a large import.
 
+### Optional: post-process before reconstruction
+
+Open **Post-proc.** to review and exclude fiducials, group STORM localizations,
+and estimate drift with COMET. Estimate memory before running. Correction is
+reversible until Discard, and the preview slider affects only the display.
+See [Post-processing](post-processing.md) for installation, clocks, memory,
+exports and pair-network interpretation.
+
 ### Optional: overlay and orient a reference image
 
 Import a reference image and enter its physical pixel size and X/Y/Z position. Adding or removing a

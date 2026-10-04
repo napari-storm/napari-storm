@@ -398,8 +398,11 @@ streamed, so peak memory is one 1024² tile whatever the size of the file.
   drag-and-drop is tied to a global. A host driving the API directly does not
   touch that path.
 * **There is no incremental append.** Adding localizations to an open dataset
-  means replacing the records and replanning; `set_records` resets the
-  selection, so a host that filters must re-apply its mask afterwards.
+  means replacing the records and replanning. When the new records extend
+  the old ones (the same rows first, more after), `set_records` keeps the
+  selection, the exclusions and the side columns of the old rows and selects
+  the new ones; otherwise it resets the selection, so a host that filters must
+  re-apply its mask. It refuses while a drift correction holds the positions.
 
 ## Worked examples
 

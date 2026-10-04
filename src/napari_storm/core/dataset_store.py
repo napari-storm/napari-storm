@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from .dataset_state import (
     AppearanceChanged,
     DatasetState,
+    DriftChanged,
     MaskChanged,
     TransformChanged,
 )
@@ -254,6 +255,14 @@ class DatasetStore:
         state.transform = transform
         self._emit(TransformChanged(dataset_id, transform))
         return transform
+
+    def set_drift(self, dataset_id, drift, *, positions_only=False):
+        state = self._states.get(dataset_id)
+        if state is None:
+            raise KeyError(dataset_id)
+        state.drift = drift
+        self._emit(DriftChanged(dataset_id, positions_only))
+        return drift
 
     def notify_mask_changed(self, dataset_id):
         """Announce that which localizations are drawn has changed.

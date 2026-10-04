@@ -40,6 +40,7 @@ nav:
   - Overview: index.md
   - How it works: how-it-works.md
   - Step-by-step tutorial: step-by-step.md
+  - Post-processing: post-processing.md
   - Embedding: embedding.md
   - API reference: api.md
 

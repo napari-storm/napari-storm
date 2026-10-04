@@ -234,6 +234,8 @@ class StormDataClass(LocalizationDataBaseClass):
 
     @pixelsize_nm.setter
     def pixelsize_nm(self, value):
+        if self.table is not None:
+            self.table.check_position_write()
         self._pixelsize_nm = value
         # The nanometre columns are derived from it, so the table has to be told
         # rather than left holding coordinates computed with the old value.
@@ -373,7 +375,7 @@ class StormDataClass(LocalizationDataBaseClass):
         # locs_active, which only agreed while nothing else was filtered.
         # Intersecting masks over the canonical table cannot disagree.
         self.set_filter_mask(
-            self.filter_mask & (self.locs_all.photon_count >= min_photon_count)
+            self.table.user_selection & (self.locs_all.photon_count >= min_photon_count)
         )
 
     def load_info(self, path):

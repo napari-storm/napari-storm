@@ -166,7 +166,8 @@ class TraceOverlay:
     not need.
     """
 
-    def __init__(self, viewer):
+    def __init__(self, viewer, *, field="traces"):
+        self.field = field
         self.viewer = viewer
         self._layers = {}
         self._vertices = {}
@@ -201,6 +202,8 @@ class TraceOverlay:
     def appearance_fields(self, dataset_id):
         """The trace fields of `LayerAppearance`, as this overlay holds them."""
         style = self._styles.get(dataset_id, _Style())
+        if self.field == "pairs":
+            return {"pairs": style.traces}
         return {
             "traces": style.traces,
             "trace_color_by": style.color_by,
@@ -238,8 +241,10 @@ class TraceOverlay:
     def open(self, dataset_id, request):
         """A dataset was opened: hold its vertices, draw nothing yet."""
         self.close(dataset_id)
-        self._vertices[dataset_id] = request.traces
-        self._styles[dataset_id] = _Style()
+        self._vertices[dataset_id] = getattr(request, self.field)
+        self._styles[dataset_id] = _Style(
+            color_by="delta_time" if self.field == "pairs" else COLOR_BY_TRACE
+        )
         self._names[dataset_id] = request.name
         self._shown[dataset_id] = True
         self._opacity[dataset_id] = 1.0
@@ -249,8 +254,12 @@ class TraceOverlay:
         if dataset_id not in self._styles:
             return
         self._names[dataset_id] = request.name
-        if request.changed & _TRACE_CHANGES:
-            self._vertices[dataset_id] = request.traces
+        if request.changed & (
+            Changed.SELECTION
+            | Changed.POSITIONS
+            | (Changed.PAIRS if self.field == "pairs" else Changed.TRACES)
+        ):
+            self._vertices[dataset_id] = getattr(request, self.field)
             self._redraw(dataset_id, data=True)
 
     def set_shown(self, dataset_id, shown):
@@ -270,11 +279,12 @@ class TraceOverlay:
             self._shown[dataset_id] = bool(appearance.visible)
         style = self._styles[dataset_id]
         changes = {}
-        if appearance.traces is not None:
-            changes["traces"] = bool(appearance.traces)
-        if appearance.trace_color_by is not None:
+        enabled = getattr(appearance, self.field)
+        if enabled is not None:
+            changes["traces"] = bool(enabled)
+        if self.field != "pairs" and appearance.trace_color_by is not None:
             changes["color_by"] = validate_trace_color_by(appearance.trace_color_by)
-        if appearance.trace_width_px is not None:
+        if self.field != "pairs" and appearance.trace_width_px is not None:
             changes["width_px"] = validate_trace_width_px(appearance.trace_width_px)
         new_style = replace(style, **changes)
         self._styles[dataset_id] = new_style
@@ -338,7 +348,9 @@ class TraceOverlay:
         self._apply_visibility(dataset_id)
 
     def _layer_name(self, dataset_id):
-        return f"{self._names.get(dataset_id) or 'dataset'}{TRACE_LAYER_SUFFIX}"
+        return (self._names.get(dataset_id) or "dataset") + (
+            " pairs" if self.field == "pairs" else TRACE_LAYER_SUFFIX
+        )
 
     def _add_layer(self, dataset_id, vertices):
         from napari.layers import Tracks
@@ -447,6 +459,12 @@ class TracesMixin:
     """
 
     _traces: TraceOverlay
+
+    def draws_pairs(self, dataset_id):
+        return self._pairs.draws(dataset_id)
+
+    def pair_layer(self, dataset_id):
+        return self._pairs.layer(dataset_id)
 
     def draws_traces(self, dataset_id):
         return self._traces.draws(dataset_id)
