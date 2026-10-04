@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -24,7 +25,8 @@ class PostProcessingWindow(QScrollArea):
         self.setWidgetResizable(True)
         content = QWidget()
         self.setWidget(content)
-        layout = QVBoxLayout(content)
+        root_layout = QVBoxLayout(content)
+        layout = root_layout
         self.dataset = QComboBox()
         layout.addWidget(self.dataset)
         self.status = QLabel("Load localizations to begin.")
@@ -38,10 +40,37 @@ class PostProcessingWindow(QScrollArea):
         self.actions = {}
         self.inputs = {}
 
-        def section(title):
-            label = QLabel(title)
-            label.setStyleSheet("font-weight: bold; margin-top: 12px")
-            layout.addWidget(label)
+        def section(title, *, collapsible=False):
+            nonlocal layout
+            body = QWidget()
+            layout = QVBoxLayout(body)
+            layout.setContentsMargins(0, 0, 0, 0)
+            if collapsible:
+                title_button = QToolButton()
+                title_button.setText(title)
+                title_button.setCheckable(True)
+                title_button.setToolButtonStyle(
+                    Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+                )
+                title_button.setArrowType(Qt.ArrowType.RightArrow)
+                title_button.setStyleSheet(
+                    "QToolButton { font-weight: bold; border: none; padding: 12px 0 4px 0; }"
+                )
+
+                def toggle(expanded):
+                    body.setVisible(expanded)
+                    title_button.setArrowType(
+                        Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+                    )
+
+                title_button.toggled.connect(toggle)
+                root_layout.addWidget(title_button)
+                body.hide()
+            else:
+                label = QLabel(title)
+                label.setStyleSheet("font-weight: bold; margin-top: 12px")
+                root_layout.addWidget(label)
+            root_layout.addWidget(body)
 
         def button(key, label):
             b = QPushButton(label)
@@ -58,8 +87,7 @@ class PostProcessingWindow(QScrollArea):
             layout.addLayout(row)
             self.inputs[key] = control
 
-        section("1 · Fiducials")
-        number("max_drift", "Max drift [nm]", 300, 3, 100000)
+        section("Fiducials", collapsible=True)
         button("detect", "Detect fiducials")
         self.candidates = QListWidget()
         self.candidates.setMaximumHeight(140)
@@ -71,12 +99,13 @@ class PostProcessingWindow(QScrollArea):
         )
         note.setWordWrap(True)
         layout.addWidget(note)
-        section("2 · Grouping (STORM)")
+        section("Grouping (STORM)", collapsible=True)
         number("distance", "Max distance [nm]", 30, 0.1, 10000)
         number("dark", "Max dark frames", 1, 0, 10000, True)
         number("duration", "Max frames", 50, 1, 100000, True)
         button("group", "Group localizations")
-        section("3 · Drift correction · CPU")
+        section("Drift correction")
+        number("max_drift", "Max drift [nm]", 300, 3, 100000)
         self.comet_note = QLabel("")
         self.comet_note.setWordWrap(True)
         self.comet_note.setStyleSheet("color: grey")
@@ -105,7 +134,7 @@ class PostProcessingWindow(QScrollArea):
             button(key, label)
         self.plot_layout = QVBoxLayout()
         layout.addLayout(self.plot_layout)
-        section("4 · Explore")
+        section("Explore", collapsible=True)
         self.fraction_label = QLabel("Correction: 100 % (applied data is exported)")
         layout.addWidget(self.fraction_label)
         self.fraction = QSlider(Qt.Orientation.Horizontal)
@@ -126,4 +155,4 @@ class PostProcessingWindow(QScrollArea):
         )
         self.pair_status.setWordWrap(True)
         layout.addWidget(self.pair_status)
-        layout.addStretch()
+        root_layout.addStretch()
