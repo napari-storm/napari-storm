@@ -132,9 +132,13 @@ check that a container opens, not what a real acquisition looks like.
 
 ## Documentation
 
-Full documentation is at **https://napari-storm.readthedocs.io/** — a
-step-by-step tutorial, how the renderer works, and the embedding API for
-driving napari-storm from another application.
+Full documentation is at **https://napari-storm.readthedocs.io/** — getting
+started, a user guide by task with screenshots, a reference of every control,
+troubleshooting, the changelog, and for developers how the renderer works and
+the embedding API for driving napari-storm from another application.
+
+The screenshots are generated from `sample_data` by
+`python scripts/make_doc_images.py`; rerun it when the interface changes.
 
 There is also a custom Q&A GPT for this repo specifically, available at
 https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
