@@ -92,20 +92,31 @@ several are visible at once. Close the window to put the tab back.
 ## 5. Make it look right
 
 The defaults draw every localization 20 nm wide (FWHM), with the contrast
-set so that a single localization is at full brightness. On dense data that
-saturates; three changes make the spectrin rings visible:
+set so that a single localization is at full brightness. Neither suits this
+dataset:
 
-1. Set **FWHM in XY [nm]** and **FWHM in Z [nm]** to `40`.
-2. In the dataset's card, set the right-hand contrast box (**×Range**) to `4`:
-   now it takes four overlapping localizations to reach full brightness.
-3. Tick **Activate Rainbow colorcoding in Z** to colour by depth.
+1. **Draw it at its resolution.** The sample resolves better than 10 nm in
+   all three axes, so a 20 nm Gaussian blurs away detail the measurement
+   has. Set **FWHM in XY [nm]** and **FWHM in Z [nm]** to `8`.
+2. **Stop the dense bands clipping.** In the dataset's card, raise the
+   right-hand contrast box (**×Range**) until the brightest bands are no
+   longer flat red -- for the whole field of view, around `6`.
+   It now takes that many overlapping localizations to reach full
+   brightness.
+3. **Zoom in.** Scroll onto one of the bands. At 8 nm the spectrin
+   lattice resolves into separate clusters of localizations. Zoomed in,
+   each Gaussian covers more pixels and the bands clip again; around `12`
+   suits the close-up below.
 
+![A close-up of the spectrin sample at 8 nm FWHM](images/spectrin-detail.png)
+
+Tick **Activate Rainbow colorcoding in Z** to colour by depth as well.
 [Rendering and contrast](rendering.md) explains what these numbers mean.
 
 ## 6. Look at it in 3-D
 
 Drag in the canvas to rotate, scroll to zoom. **Reset view: XZ** looks at the
-data side-on -- for this 4Pi dataset that shows its two layers -- and **XY**
+data side-on -- for this 4Pi dataset, the full depth of the sample -- and **XY**
 returns to the top view. The keys <kbd>w</kbd>/<kbd>s</kbd> zoom,
 <kbd>a</kbd>/<kbd>d</kbd> and <kbd>q</kbd>/<kbd>e</kbd> rotate in 30° steps,
 and <kbd>r</kbd> resets the camera.

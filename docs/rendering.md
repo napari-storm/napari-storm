@@ -10,25 +10,27 @@ Gaussian is, and how the summed image is mapped to brightness.
 
 **Fixed-size gaussian** draws every localization at the same width. Set it
 with **FWHM in XY [nm]:** and **FWHM in Z [nm]:** -- both default to 20 nm.
+The spectrin sample resolves better than 10 nm, so 8 nm is its natural
+width:
 
 <div class="gallery wide" markdown>
 <figure markdown>
-![](images/fwhm-15.png)
-<figcaption>FWHM 15 nm</figcaption>
+![](images/fwhm-2.png)
+<figcaption>2 nm: below the resolution, the image breaks into specks</figcaption>
 </figure>
 <figure markdown>
-![](images/fwhm-40.png)
-<figcaption>FWHM 40 nm</figcaption>
+![](images/fwhm-8.png)
+<figcaption>8 nm: close to the resolution</figcaption>
 </figure>
 <figure markdown>
-![](images/fwhm-100.png)
-<figcaption>FWHM 100 nm</figcaption>
+![](images/fwhm-20.png)
+<figcaption>20 nm, the default: structure blurs together</figcaption>
 </figure>
 </div>
 
-Too narrow and the image breaks into specks; too wide and structure blurs
-together. A width close to the localization precision of the data is a good
-start.
+Choose a width close to the resolution of the data. Wider looks smoother
+but shows less than was measured. Each image here is exposed separately, with
+×Range set so that the brightest pixels just reach full brightness.
 
 **Variable-size gaussian** draws each localization at its own measured
 precision, taken from the uncertainty or photon count in the file. The fields
@@ -68,24 +70,26 @@ itself -- the sum of the Gaussians -- so with fixed-size Gaussians their
 numbers count overlapping localizations:
 
 * **×Range**, the right handle, is how many overlapping localizations it
-  takes to reach full brightness. The default, 1, saturates the centre of a
-  single Gaussian, which suits sparse data and saturates dense data.
+  takes to reach full brightness. The default, 1, brings the centre of a
+  single Gaussian to full brightness: right for sparse data, while dense
+  data clips to flat colour. Raise it until the densest parts keep their
+  detail.
 * **Cutoff**, the left handle, hides everything where fewer localizations
   overlap than this. At 2, a lone localization disappears while clusters
   stay.
 
 <div class="gallery wide" markdown>
 <figure markdown>
-![](images/contrast-default.png)
-<figcaption>Default: ×Range 1 saturates dense bands</figcaption>
+![](images/contrast-exposed.png)
+<figcaption>×Range set so the densest pixels just reach full brightness</figcaption>
 </figure>
 <figure markdown>
-![](images/contrast-top.png)
-<figcaption>×Range 10: the bands resolve</figcaption>
+![](images/contrast-dim.png)
+<figcaption>×Range 2.5 times higher: sparse localizations fade</figcaption>
 </figure>
 <figure markdown>
 ![](images/contrast-cutoff.png)
-<figcaption>Cutoff 2 as well: lone localizations drop out</figcaption>
+<figcaption>As the first, with Cutoff 1.2: lone localizations drop out</figcaption>
 </figure>
 </div>
 
