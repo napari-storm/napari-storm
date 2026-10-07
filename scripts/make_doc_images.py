@@ -59,17 +59,23 @@ class Session:
 
         enable_instanced_backend()
         import napari
+        from qtpy.QtCore import Qt
 
         from napari_storm._dock_widget import napari_storm
 
-        self.viewer = napari.Viewer()
+        # Shown without taking keyboard focus: the dock binds plain letter
+        # keys (r resets the camera), and whatever you type elsewhere while
+        # this runs must not land in the window being photographed.
+        self.viewer = napari.Viewer(show=False)
         self.dock = napari_storm(self.viewer)
         qt_viewer = get_qt_viewer(self.viewer)
         qt_viewer.dockLayerControls.setVisible(False)
         qt_viewer.dockLayerList.setVisible(False)
         self.viewer.window.add_dock_widget(self.dock, area="right", name="napari-STORM")
         self.window = self.viewer.window._qt_window
+        self.window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.window.resize(*WINDOW)
+        self.window.show()
         settle()
 
     # --- loading ---------------------------------------------------------
@@ -78,8 +84,18 @@ class Session:
         itf = self.dock.file_to_data_itf
         datasets = itf.open_known_filetype_and_import_dataset(str(path))
         self.dock._apply_loaded_datasets(datasets, merge=merge)
+        self._unbind_keys()
         settle()
         return datasets
+
+    def _unbind_keys(self):
+        """Drop the camera keys the dock binds on load.
+
+        A key typed while this runs can reach the window even when it was
+        shown without focus, and r resets the camera mid-shot.
+        """
+        for key in ("w", "s", "a", "d", "q", "e", "r", "Up", "Down", "Left", "Right"):
+            self.viewer.bind_key(key, None, overwrite=True)
 
     def add(self, datasets, merge=False):
         self.dock._apply_loaded_datasets(list(datasets), merge=merge)
@@ -155,12 +171,7 @@ class Session:
 
     def save_canvas(self, name, crop=None):
         """The canvas alone; *crop* is (top, bottom, left, right) fractions."""
-        image = self.canvas()
-        if crop is not None:
-            h, w = image.shape[:2]
-            t, b, l, r = crop
-            image = image[int(t * h) : int(b * h), int(l * w) : int(r * w)]
-        _write(name, image)
+        _write(name, _crop(self.canvas(), crop))
 
     def save_widget(self, widget, name):
         settle()
@@ -192,7 +203,18 @@ class Session:
 # --- the shots ---------------------------------------------------------------
 
 
-def spectrin(session, fwhm=40, top=4.0):
+#: The spectrin sample resolves better than 10 nm in all three axes; drawing
+#: it wider than that would misrepresent it.
+SPECTRIN_FWHM_NM = 8
+
+#: Share of lit pixels allowed to saturate where Gaussians are about a pixel.
+WIDE_LIMIT = 0.15
+
+#: ×Range values tried when exposing an image, from bright to dim.
+TOPS = (0.5, 0.7, 1, 1.4, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
+
+
+def spectrin(session, fwhm=SPECTRIN_FWHM_NM, top=1.0):
     session.open(SPECTRIN)
     session.fwhm(fwhm)
     session.contrast(cutoff=0.0, top=top)
@@ -200,21 +222,107 @@ def spectrin(session, fwhm=40, top=4.0):
     return session
 
 
-def zoom_on_densest(session, factor):
-    """Centre the XY view on the densest part of the canvas, then zoom."""
+def _crop(image, crop):
+    if crop is None:
+        return image
+    h, w = image.shape[:2]
+    t, b, l, r = crop
+    return image[int(t * h) : int(b * h), int(l * w) : int(r * w)]
+
+
+def saturated_fraction(image):
+    """Share of the lit pixels that have hit the top of the colormap.
+
+    Colourless pixels are left out: they are napari's scale bar and its
+    label, white whatever the contrast.
+    """
+    rgb = np.asarray(image)[..., :3].astype(int)
+    peak = rgb.max(axis=-1)
+    coloured = (peak - rgb.min(axis=-1)) > 40
+    lit = coloured & (peak > 12)
+    return float((peak[lit] >= 250).mean()) if lit.any() else 0.0
+
+
+def expose(session, crop=None, limit=0.05, cutoff=0.0):
+    """Set the brightest ×Range at which at most *limit* of the lit pixels
+    in *crop* saturate, and return it -- an exposure, not a guess.
+
+    Zoomed out, each Gaussian is smaller than a pixel and a few dense pixels
+    carry the sum; there a strict limit leaves everything else near black,
+    so whole-dataset views pass ``WIDE_LIMIT``.
+    """
+    for top in TOPS:
+        session.contrast(cutoff=cutoff, top=top)
+        if saturated_fraction(_crop(session.canvas(), crop)) <= limit:
+            return top
+    return TOPS[-1]
+
+
+def zoom_on(session, factor, quantile=1.0):
+    """Centre the XY view on a region of the canvas, then zoom by *factor*.
+
+    The canvas is cut into tiles the size of the view after zooming, each
+    scored by how much of it holds data.  *quantile* picks among the tiles
+    of the structure itself -- at least 30 % as full as the fullest, which
+    leaves out the scattered background: 1 is the fullest, 0 the sparsest.
+    """
     image = session.canvas()[..., :3].sum(axis=2).astype(float)
     h, w = image.shape
-    block = max(h, w) // 12
-    trimmed = image[: h // block * block, : w // block * block]
-    tiles = trimmed.reshape(h // block, block, w // block, block).sum(axis=(1, 3))
-    row, col = np.unravel_index(np.argmax(tiles), tiles.shape)
-    py, px = (row + 0.5) * block, (col + 0.5) * block
+    block = max(8, int(min(h, w) / factor))
+    trimmed = image[: h // block * block, : w // block * block] > 30
+    tiles = trimmed.reshape(h // block, block, w // block, block).mean(axis=(1, 3))
+    filled = np.flatnonzero(tiles.ravel() > 0.3 * tiles.max())
+    ranked = filled[np.argsort(tiles.ravel()[filled])]
+    pick = ranked[min(len(ranked) - 1, int(quantile * (len(ranked) - 1)))]
+    row, col = np.unravel_index(pick, tiles.shape)
+    # Centre on the data within the tile, not the tile: a partly filled one
+    # would otherwise leave its structure in a corner of the view.
+    window = trimmed[row * block : (row + 1) * block, col * block : (col + 1) * block]
+    py, px = _centroid(window.astype(float)) + (row * block, col * block)
     camera = session.viewer.camera
-    ratio = w / session.viewer.window._qt_viewer.canvas.native.width()
-    scale = camera.zoom * ratio  # physical pixels per world unit
     z, y, x = camera.center
-    camera.center = (z, y + (py - h / 2) / scale, x + (px - w / 2) / scale)
+    # How far, and which way, content moves on screen per world unit along
+    # y and x: measured rather than assumed, since the camera's angles flip
+    # the screen axes against the world's.
+    step = (
+        0.02
+        * w
+        / camera.zoom
+        / (w / session.viewer.window._qt_viewer.canvas.native.width())
+    )
+    before = _centroid(image)
+    camera.center = (z, y + step, x)
+    moved_y = _centroid(session.canvas()[..., :3].sum(axis=2).astype(float)) - before
+    camera.center = (z, y, x + step)
+    moved_x = _centroid(session.canvas()[..., :3].sum(axis=2).astype(float)) - before
+    # Solve for the world shift that brings the tile to the centre.
+    jacobian = (
+        np.column_stack((moved_y, moved_x)) / step
+    )  # screen (r, c) per world (y, x)
+    wanted = np.array((h / 2 - py, w / 2 - px))
+    dy, dx = np.linalg.solve(jacobian, wanted)
+    camera.center = (z, y + dy, x + dx)
     camera.zoom = camera.zoom * factor
+    settle()
+
+
+def _centroid(image):
+    """(row, column) of the image's brightness."""
+    total = image.sum()
+    rows, cols = np.indices(image.shape)
+    return np.array(((rows * image).sum() / total, (cols * image).sum() / total))
+
+
+def zoom_on_densest(session, factor):
+    zoom_on(session, factor, quantile=1.0)
+
+
+def depth_coloured(session, opacity):
+    """Rainbow depth colouring, every channel at *opacity* percent."""
+    session.dock.Bz_color_coding.setChecked(True)
+    settle()
+    for controls in session.dock.channel:
+        controls.Slider_opacity.setValue(opacity)
     settle()
 
 
@@ -251,21 +359,24 @@ def minflux_tracks(directory, n_traces=14, n_cycles=160, seed=3):
     return path
 
 
+#: Crop of a zoomed canvas kept for the side-by-side comparisons.
+DETAIL = (0.2, 0.8, 0.2, 0.8)
+
+#: Opacity of each channel under rainbow depth colouring: dense, overlapping
+#: data reads as colour rather than white at full opacity.
+DEPTH_OPACITY = 35
+
+
 def shot_overview(session):
     spectrin(session)
+    expose(session, limit=WIDE_LIMIT)
     session.tab("Data Controls")
     session.save_window("overview")
 
 
-def shot_hero(session):
-    spectrin(session)
-    session.dock.Bz_color_coding.setChecked(True)
-    settle()
-    session.save_canvas("hero")
-
-
 def shot_tabs(session):
     spectrin(session)
+    expose(session, limit=WIDE_LIMIT)
     for label, name in [
         ("Data Controls", "tab-data-controls"),
         ("File Infos", "tab-file-infos"),
@@ -276,64 +387,84 @@ def shot_tabs(session):
         session.save_tab(label, name)
 
 
+def shot_detail(session):
+    """Getting started's close-up: the spectrin rings at the data's own
+    resolution."""
+    spectrin(session)
+    zoom_on_densest(session, 8)
+    expose(session, crop=DETAIL)
+    session.save_canvas("spectrin-detail", crop=DETAIL)
+
+
 def shot_contrast(session):
     spectrin(session)
-    zoom_on_densest(session, 2.5)
-    # The default, then the top raised so dense bands resolve, then a cutoff
-    # on top of that to drop the lone localizations between them.
-    for cutoff, top, name in [
-        (0.0, 1.0, "contrast-default"),
-        (0.0, 10.0, "contrast-top"),
-        (2.0, 10.0, "contrast-cutoff"),
+    zoom_on_densest(session, 4)
+    # Exposed; then the same with full brightness 2.5 times further up, so
+    # sparse localizations fade; then exposed again with a cutoff that drops
+    # the lone localizations between the bands.
+    top = expose(session, crop=DETAIL)
+    for cutoff, scale, name in [
+        (0.0, 1, "contrast-exposed"),
+        (0.0, 2.5, "contrast-dim"),
+        (1.2, 1, "contrast-cutoff"),
     ]:
-        session.contrast(cutoff=cutoff, top=top)
-        session.save_canvas(name, crop=(0.15, 0.85, 0.15, 0.85))
+        session.contrast(cutoff=cutoff, top=top * scale)
+        session.save_canvas(name, crop=DETAIL)
 
 
 def shot_fwhm(session):
-    spectrin(session, top=10.0)
-    zoom_on_densest(session, 4)
-    for fwhm in (15, 40, 100):
+    spectrin(session)
+    # Close enough that a pixel is under 2 nm, or 2 and 8 nm look the same.
+    zoom_on_densest(session, 12)
+    # As bright as they go for the narrow widths, whose Gaussians are a
+    # pixel or two; strictly exposed for the wide one, which saturates first.
+    for fwhm, limit in ((2, WIDE_LIMIT), (8, WIDE_LIMIT), (20, 0.02)):
         session.fwhm(fwhm)
-        session.save_canvas(f"fwhm-{fwhm}", crop=(0.2, 0.8, 0.2, 0.8))
+        expose(session, crop=DETAIL, limit=limit)
+        session.save_canvas(f"fwhm-{fwhm}", crop=DETAIL)
 
 
 def shot_views(session):
     spectrin(session)
-    session.dock.Bz_color_coding.setChecked(True)
-    settle()
+    depth_coloured(session, DEPTH_OPACITY)
     session.save_canvas("view-xy")
     for plane in ("XZ", "YZ"):
         # The view buttons restore the dock's own zoom, so zoom afterwards.
         session.view(plane)
-        zoom_on_densest(session, 6)
-        session.save_canvas(f"view-{plane.lower()}", crop=(0.25, 0.75, 0.0, 1.0))
+        session.viewer.camera.zoom *= 5
+        settle()
+        session.save_canvas(f"view-{plane.lower()}", crop=(0.3, 0.7, 0.1, 0.9))
 
 
 def shot_styles(session):
     from napari_storm.core import PALETTE
 
-    # A high top, so that the densest region is found among unsaturated
-    # pixels rather than at the first of many saturated ones.
-    spectrin(session, top=15.0)
-    zoom_on_densest(session, 20)
+    spectrin(session)
+    # A sparse region rather than the densest, so single localizations
+    # stand apart, about 1.1 um across.
+    zoom_on(session, 20, quantile=0.3)
+    crop = (0.15, 0.85, 0.15, 0.85)
+    # At 8 nm a marker is a few pixels across; the dock's own floor keeps
+    # each style's shape readable.  The scientific Gaussian ignores it.
+    session.dock.Sfootprint_min_size.setValue(10)
     combo = session.dock.Bfootprint
     for footprint in PALETTE:
         combo.setCurrentIndex(combo.findData(footprint.name))
-        # Opaque markers keep their own contrast, at its default.  The additive
-        # ones sum, and this is the densest region, so they get a high top --
-        # all but glow, which is faint by design and would vanish under it.
-        if footprint.blend == "additive":
-            session.contrast(top=2.0 if footprint.name == "glow" else 15.0)
         settle()
-        session.save_canvas(f"style-{footprint.name}", crop=(0.25, 0.75, 0.25, 0.75))
+        expose(session, crop=crop)
+        session.save_canvas(f"style-{footprint.name}", crop=crop)
 
 
 def shot_grid(session):
     spectrin(session)
+    expose(session, limit=WIDE_LIMIT)
     session.dock.Cgrid_plane.setChecked(True)
     settle()
-    session.viewer.camera.angles = (-20, 35, 125)
+    opacity = session.dock.Sgrid_plane_opacity
+    opacity.setValue(round(opacity.value() * 0.65))
+    # The top view, tilted 25 degrees so the plane recedes like a table top.
+    alpha, beta, gamma = session.viewer.camera.angles
+    session.viewer.camera.angles = (alpha, beta, gamma + 25)
     settle()
     session.save_canvas("grid-plane")
 
@@ -372,8 +503,8 @@ def shot_traces(session):
 
 SHOTS = {
     "overview": shot_overview,
-    "hero": shot_hero,
     "tabs": shot_tabs,
+    "detail": shot_detail,
     "contrast": shot_contrast,
     "fwhm": shot_fwhm,
     "views": shot_views,

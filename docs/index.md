@@ -1,15 +1,11 @@
+![napari-storm](res/napari_storm_banner.png)
+
 # napari-storm
 
 **napari-storm** is a [napari](https://napari.org) plugin for looking at
 single-molecule localization microscopy data -- STORM, PALM, DNA-PAINT,
 MINFLUX -- interactively, in 2-D and 3-D, at the scale of millions of
 localizations.
-
-![A 4Pi STORM measurement of beta-II spectrin, coloured by depth](images/hero.png)
-
-*The sample dataset in the repository's `sample_data` folder: 350,949
-localizations of beta-II spectrin from a 4Pi STORM measurement, coloured by
-depth.*
 
 Each localization is drawn as a small Gaussian on the GPU rather than binned
 into a voxel grid, so the picture is a reconstruction you can rotate, zoom

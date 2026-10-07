@@ -38,7 +38,7 @@ centre. The buttons appear for 3-D data only.
 </figure>
 <figure markdown>
 ![](images/view-xz.png)
-<figcaption>XZ: the two layers of the 4Pi sample</figcaption>
+<figcaption>XZ: the sample from the side, coloured by depth</figcaption>
 </figure>
 <figure markdown>
 ![](images/view-yz.png)

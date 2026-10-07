@@ -6,7 +6,9 @@ is the default and the only style an export writes. The others, listed under
 **Alternative visualisations**, are for looking: for seeing individual
 localizations, for depth in 3-D, or for a figure.
 
-Every image on this page shows the same patch of the spectrin sample.
+Every image on this page shows the same patch of the spectrin sample, about
+1 µm across, at 8 nm FWHM with **Smallest on screen [px]:** at 10, each
+exposed so it does not clip.
 
 ## The reconstruction
 
