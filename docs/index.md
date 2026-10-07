@@ -1,55 +1,112 @@
 # napari-storm
 
-**napari-storm** is a [napari](https://napari.org) plugin for **interactive visualization and exploration of Single Molecule Localization Microscopy (SMLM) data** (STORM, PALM, MINFLUX).
+**napari-storm** is a [napari](https://napari.org) plugin for looking at
+single-molecule localization microscopy data -- STORM, PALM, DNA-PAINT,
+MINFLUX -- interactively, in 2-D and 3-D, at the scale of millions of
+localizations.
 
-Unlike voxel-based approaches, napari-storm renders each localization as a **billboarded Gaussian**, making it efficient enough to interactively explore **millions of points in 3D**.
+![A 4Pi STORM measurement of beta-II spectrin, coloured by depth](images/hero.png)
 
----
+*The sample dataset in the repository's `sample_data` folder: 350,949
+localizations of beta-II spectrin from a 4Pi STORM measurement, coloured by
+depth.*
 
-## Features
-- Import localizations from **Picasso HDF5, ThunderSTORM CSV, MINFLUX JSON/NPY/MFX**, or your own **custom format**.
-- Read MINFLUX datasets from **Imspector 24.10 and later** as well, in every container it and [pyMINFLUX](https://pyminflux.ethz.ch/) write: `.npy`, `.json`, `.mat`, `.zarr` and `.pmx`. Which layout a file uses is worked out from the file itself, so nothing has to be selected.
-- GPU-accelerated rendering of millions of points, drawing one instanced quad
-  per localization at 28 bytes each — see [How it works](how-it-works.md).
-- Adjustable point spread functions (fixed / variable Gaussian).
-- Multi-channel colormaps with per-channel contrast/opacity controls.
-- Interactive histogram-based filtering.
-- Overlays: grid planes, scalebars, and 3D camera views.
-- MINFLUX traces drawn as paths through their own localizations, in the order
-  they were measured -- a tracking run's trajectories, in 2-D and 3-D.
-- Export data in multiple formats, including **calibrated OME-TIFF** at a pixel
-  size you choose, which never downsamples to fit.
-- **Embeddable**: a host application can render localizations through the API
-  with no dock widget — see [embedding.md](embedding.md).
+Each localization is drawn as a small Gaussian on the GPU rather than binned
+into a voxel grid, so the picture is a reconstruction you can rotate, zoom
+and filter without waiting for it to be recomputed. See
+[How it works](how-it-works.md) for the detail.
 
 ---
 
-## Installation
+## What it does
 
-napari-storm needs Python 3.10–3.12. We recommend its own environment:
+<div class="grid cards" markdown>
+
+-   **Opens what your software writes**
+
+    ---
+
+    Picasso, ThunderSTORM, the SMLM zip format, and Abberior MINFLUX in both
+    of Imspector's layouts, including pyMINFLUX's `.pmx`.
+
+    [Importing data →](importing.md)
+
+-   **Renders a reconstruction you can trust**
+
+    ---
+
+    Fixed-size or precision-weighted Gaussians, with a contrast control that
+    acts on the summed image -- so its numbers count overlapping
+    localizations.
+
+    [Rendering and contrast →](rendering.md)
+
+-   **Shows the same data other ways**
+
+    ---
+
+    Seventeen rendering styles, from the scientific Gaussian to spheres,
+    rings and uncertainty ellipses.
+
+    [Rendering styles →](styles.md)
+
+-   **Follows MINFLUX traces**
+
+    ---
+
+    Each molecule's localizations joined in the order they were measured,
+    coloured by trace, by time or by a column of the data.
+
+    [MINFLUX →](minflux.md)
+
+-   **Filters by any property**
+
+    ---
+
+    Band-pass and band-stop filters on a histogram of photons, precision,
+    frame, `efo`, `cfr` -- whatever the file carries.
+
+    [Filtering →](filtering.md)
+
+-   **Exports calibrated images**
+
+    ---
+
+    OME-TIFF at the pixel size you ask for, never downsampled to fit, as a
+    2-D projection or a 3-D stack.
+
+    [Export and scenes →](export.md)
+
+</div>
+
+It can also run without its dock: a host application -- an acquisition GUI,
+a notebook -- can hand localizations to the renderer directly. See
+[Embedding](embedding.md).
+
+---
+
+## Install
+
+napari-storm needs Python 3.10–3.12:
 
 ```bash
 conda create --name napari-storm python=3.11 pip
 conda activate napari-storm
-```
-
-Then install from PyPI. The `[pyqt6]` extra brings in napari's Qt backend —
-without an extra no Qt binding is installed and napari cannot open a window.
-Use `[pyside6]` if you prefer PySide, or no extra at all if you are installing
-into an application that already provides a binding:
-
-```bash
 pip install "napari-storm[pyqt6]"
+napari-storm
 ```
 
-To work on napari-storm itself, install from a clone instead:
+[Getting started](getting-started.md) explains the choices -- the Qt
+binding, the `[minflux]` extra for `.zarr` files -- and walks through a first
+session with the sample data.
 
-```bash
-git clone https://github.com/napari-storm/napari-storm
-cd napari-storm
-pip install -e ".[dev,pyqt6]"
-```
+---
 
-Run `napari-storm` in that environment to open napari with the dock already
-docked, or start `napari` and open **Plugins → napari-storm**; the
-[step-by-step tutorial](step-by-step.md) takes it from there.
+## Where to go next
+
+* New to napari-storm: [Getting started](getting-started.md).
+* Looking for one control: [Every control](controls.md).
+* Something does not work: [Troubleshooting](troubleshooting.md).
+* What changed between versions: [Changelog](changelog.md).
+* Driving napari-storm from your own code: [Embedding](embedding.md) and the
+  [API reference](api.md).

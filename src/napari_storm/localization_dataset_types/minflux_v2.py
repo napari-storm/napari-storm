@@ -295,7 +295,13 @@ def _read_npy(path):
 
 
 def _read_zarr(path):
-    import zarr
+    try:
+        import zarr
+    except ImportError as error:
+        raise MinfluxV2FormatError(
+            "opening MINFLUX Zarr datasets needs zarr<3: "
+            "pip install 'napari-storm[minflux]'"
+        ) from error
 
     root = zarr_store_root(path)
     if root is None:

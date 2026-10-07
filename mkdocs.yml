@@ -37,11 +37,29 @@ theme:
     - toc.follow
 
 nav:
-  - Overview: index.md
-  - How it works: how-it-works.md
-  - Step-by-step tutorial: step-by-step.md
-  - Embedding: embedding.md
-  - API reference: api.md
+  - Home: index.md
+  - Getting started: getting-started.md
+  - User guide:
+      - Importing data: importing.md
+      - Rendering and contrast: rendering.md
+      - Rendering styles: styles.md
+      - Navigating in 2-D and 3-D: navigating.md
+      - Filtering and adjusting: filtering.md
+      - MINFLUX: minflux.md
+      - Export and scenes: export.md
+  - Reference:
+      - Every control: controls.md
+      - Troubleshooting: troubleshooting.md
+      - Changelog: changelog.md
+  - For developers:
+      - How it works: how-it-works.md
+      - Embedding: embedding.md
+      - API reference: api.md
+
+# The old single-page tutorial, now split across the user guide.  Kept so
+# links to it still land somewhere useful.
+not_in_nav: |
+  /step-by-step.md
 
 # mkdocstrings was configured here for a long time without a single `:::`
 # directive in docs/ to invoke it.  It rendered nothing, it made napari, Qt and
@@ -54,6 +72,10 @@ watch:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.keys
   - def_list
   - pymdownx.superfences
   - pymdownx.details

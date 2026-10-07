@@ -25,3 +25,37 @@
 
   --md-accent-fg-color:         #FF7A00;
 }
+
+/* Image grids: <div class="gallery" markdown> with figures inside. */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.8rem;
+}
+.gallery.wide {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+.gallery figure {
+  margin: 0;
+}
+.gallery img {
+  width: 100%;
+  border-radius: 0.2rem;
+}
+.gallery figcaption {
+  font-size: 0.7rem;
+  margin-top: 0.2rem;
+}
+/* Screenshots of the dock, floated beside the text that describes them. */
+img.dock {
+  max-width: 40%;
+  margin: 0 0 1rem 1.2rem;
+  border-radius: 0.2rem;
+}
+@media screen and (max-width: 44em) {
+  img.dock {
+    float: none !important;
+    max-width: 100%;
+    margin: 0 0 1rem 0;
+  }
+}
