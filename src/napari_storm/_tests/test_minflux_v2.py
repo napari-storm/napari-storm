@@ -12,6 +12,7 @@ file matches that layout in some detail nobody wrote down.
 """
 
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -276,6 +277,22 @@ def test_a_zarr_store_is_found_from_a_path_inside_it(tmp_path):
     group.create_dataset("mfx", data=a, shape=a.shape, dtype=a.dtype)
     assert zarr_store_root(str(root / ".zgroup")) == root.resolve()
     assert zarr_store_root(str(root / "mfx" / ".zarray")) == root.resolve()
+
+
+def test_a_zarr_store_without_zarr_installed_says_what_to_install(
+    tmp_path, monkeypatch
+):
+    """zarr is the [minflux] extra, not a core requirement, so its absence
+    has to name the extra rather than surface a bare ImportError."""
+    root = tmp_path / "exp.zarr"
+    (root / "mfx").mkdir(parents=True)
+    (root / ".zgroup").write_text('{"zarr_format": 2}')
+    (root / "mfx" / ".zarray").write_text("{}")
+    # Finding the store needs no zarr; only reading it does.
+    assert zarr_store_root(str(root)) == root.resolve()
+    monkeypatch.setitem(sys.modules, "zarr", None)
+    with pytest.raises(MinfluxV2FormatError, match=r"napari-storm\[minflux\]"):
+        MinfluxDataV2Class().load(str(root))
 
 
 def test_an_ordinary_directory_is_not_a_zarr_store(tmp_path):

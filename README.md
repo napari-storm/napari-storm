@@ -22,6 +22,11 @@ without an extra, no Qt binding is installed and napari cannot open a window
 
     pip install "napari-storm[pyqt6]"
 
+Opening MINFLUX `.zarr` datasets also needs `zarr<3`, which the `[minflux]`
+extra adds; every other format works without it:
+
+    pip install "napari-storm[pyqt6,minflux]"
+
 To work on napari-storm itself, install from a clone instead:
 
     git clone https://github.com/napari-storm/napari-storm
