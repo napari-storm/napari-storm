@@ -42,6 +42,14 @@ into an application that already provides a binding:
 pip install "napari-storm[pyqt6]"
 ```
 
+MINFLUX `.zarr` stores also need `zarr<3`, which zarr-3 environments cannot
+share, so it is an extra rather than a requirement. Add it if you open them;
+every other format works without:
+
+```bash
+pip install "napari-storm[pyqt6,minflux]"
+```
+
 To work on napari-storm itself, install from a clone instead:
 
 ```bash
