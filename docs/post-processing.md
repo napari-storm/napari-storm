@@ -6,14 +6,18 @@ two steps are optional.
 
 ## Installation
 
-COMET is optional. Once py-comet 1.2 is published, install it with:
+COMET is optional. It is published on PyPI as
+[comet-smlm](https://pypi.org/project/comet-smlm/); install it with napari-storm's
+extra:
 
 ```shell
 pip install 'napari-storm[comet]'
 ```
 
-Until then, development uses the local COMET 1.2 release checkout. The current
-integration runs the measured CPU backend. Importing napari-storm does not import
+or directly with `pip install comet-smlm`. Earlier COMET releases were called
+`py-comet` (up to 1.1) and install the same `comet` package: uninstall
+`py-comet` first, so the two do not overwrite each other's files. The
+integration runs COMET's CPU backend. Importing napari-storm does not import
 COMET, torch or numba. Grouping, loading and saving drift, Undo, and Explore
 work without COMET installed.
 
@@ -59,7 +63,7 @@ that, **Run** asks before going ahead; when the run alone would not fit in
 physical memory, it refuses. Reduce the estimation region or the maximum drift and estimate again. This reduces risk; running in the same process cannot guarantee
 that the operating system will not terminate it.
 
-py-comet 1.2 retains the tested `query_pairs` search: int64 pairs and their
+COMET 1.2 retains the tested `query_pairs` search: int64 pairs and their
 int32 copies coexist at a peak of roughly **24 bytes per pair**. The guard
 also includes coordinate copies, dense per-frame interpolation, a fixed working
 allowance and the reserve above. These are memory safeguards, not scientific

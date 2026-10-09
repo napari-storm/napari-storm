@@ -73,7 +73,11 @@ def run_comet(
     from packaging.version import Version
 
     if not Version("1.2.0") <= Version(comet.__version__) < Version("2"):
-        raise RuntimeError("Install napari-storm[comet]: COMET 1.2.x is required")
+        raise RuntimeError(
+            f"COMET {comet.__version__} is installed; 1.2.x is required. "
+            'Run: pip uninstall py-comet, then pip install "napari-storm[comet]" '
+            "(COMET is published as comet-smlm since 1.2)."
+        )
     segmentation = segment_by_num_locs_per_window(data[:, 3], params.window)
     if segmentation.n_segments < 2:
         raise ValueError("Fewer than two windows; reduce localizations per window")

@@ -38,7 +38,7 @@ def estimate_memory(coords, radius, *, total_rows=None, frame_count=0):
 
     pairs = count_pairs(coords, radius)
     physical = psutil.virtual_memory().total
-    # py-comet 1.2 finds pairs with one query_pairs call: int64 pairs (16 B)
+    # COMET 1.2 (comet-smlm) finds pairs with one query_pairs call: int64 pairs (16 B)
     # and their int32 copies (8 B) at the peak, 24 B per pair; the optimisation
     # after it holds the 8 B and allocates nothing per evaluation on the CPU.
     # Per localization: COMET's copies (~60 B) and ours.
