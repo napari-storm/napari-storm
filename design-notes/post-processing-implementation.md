@@ -4,7 +4,7 @@ Baseline: napari-storm `526c42c`; branch `codex/postprocessing-comet`.
 
 ## Phase 0 sanity check
 
-COMET checkout: `/Users/lenny/PycharmProjects/Comet-1.2`, release branch at
+COMET checkout: the COMET repository's 1.2 release branch, at
 `17383e8`, version 1.2.0. Release notes say not yet tagged/published.
 
 Focused progress/cancellation, segmentation, pair search, interpolation and
