@@ -120,7 +120,10 @@ class PostProcessingWindow(QScrollArea):
         self.keep.setRange(1, 100)
         self.keep.setValue(100)
         self.keep.valueChanged.connect(
-            lambda v: self.keep_label.setText(f"Keep localizations: {v} % (random, reproducible)"))
+            lambda v: self.keep_label.setText(
+                f"Keep localizations: {v} % (random, reproducible)"
+            )
+        )
         layout.addWidget(self.keep)
         note = QLabel(
             "Target sigma: 10 nm. With group or trace means, the count is means per window."

@@ -63,7 +63,9 @@ def subsample(data, params):
     if params.keep_percent >= 100:
         return data
     n = max(2, int(round(len(data) * params.keep_percent / 100)))
-    keep = np.sort(np.random.default_rng(params.seed).choice(len(data), n, replace=False))
+    keep = np.sort(
+        np.random.default_rng(params.seed).choice(len(data), n, replace=False)
+    )
     return data[keep]
 
 
@@ -82,7 +84,9 @@ def run_comet(
     params = params or CometParameters()
     report = progress or (lambda stage, info=None: None)
     report("preparing", {})
-    data = subsample(prepare_input(coords, times, params, time_origin=time_origin), params)
+    data = subsample(
+        prepare_input(coords, times, params, time_origin=time_origin), params
+    )
     import comet
     from comet.core.segmenter import segment_by_num_locs_per_window
     from packaging.version import Version

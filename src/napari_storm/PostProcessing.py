@@ -14,7 +14,12 @@ from qtpy.QtWidgets import QFileDialog, QInputDialog, QListWidgetItem, QMessageB
 from .core.dataset_state import DriftView
 from .core.dataset_store import DatasetClosed, DatasetOpened, StoreCleared
 from .core.traces import find_trace_column
-from .postprocessing.comet_runner import CometParameters, prepare_input, run_comet, subsample
+from .postprocessing.comet_runner import (
+    CometParameters,
+    prepare_input,
+    run_comet,
+    subsample,
+)
 from .postprocessing.drift import DriftModel
 from .postprocessing.jobs import JobRunner
 from .postprocessing.pair_budget import estimate_memory
@@ -513,7 +518,9 @@ class PostProcessingInterface:
         coords, times, _, _, _, time_origin = self.input(d, params)
 
         def work(progress):
-            data = subsample(prepare_input(coords, times, params, time_origin=time_origin), params)
+            data = subsample(
+                prepare_input(coords, times, params, time_origin=time_origin), params
+            )
             progress("counting pairs", {})
             estimate = estimate_memory(
                 data[:, :3],
@@ -526,13 +533,18 @@ class PostProcessingInterface:
         def done(estimate):
             if not estimate.fits and estimate.pairs:
                 # pairs fall with the square of the share kept: suggest one that fits
-                room = estimate.physical_bytes - estimate.resident_bytes - estimate.reserve_bytes
+                room = (
+                    estimate.physical_bytes
+                    - estimate.resident_bytes
+                    - estimate.reserve_bytes
+                )
                 share = np.sqrt(max(room, 0) / max(estimate.additional_bytes, 1))
                 suggestion = int(max(1, min(99, np.floor(params.keep_percent * share))))
                 self.widget.keep.setValue(suggestion)
                 self.widget.status.setText(
                     f"{estimate.pairs:,} pairs · {estimate.additional_bytes/1e9:.2f} GB is over budget · "
-                    f"'Keep localizations' set to {suggestion} %; Estimate again to confirm")
+                    f"'Keep localizations' set to {suggestion} %; Estimate again to confirm"
+                )
                 return
             self.widget.status.setText(
                 f"{estimate.pairs:,} pairs · estimated additional memory {estimate.additional_bytes/1e9:.2f} GB · "

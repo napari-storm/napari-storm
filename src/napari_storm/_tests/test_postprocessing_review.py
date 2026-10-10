@@ -246,10 +246,13 @@ def test_run_progress_follows_comets_schedule():
 
 def test_keep_percent_subsamples_reproducibly():
     from napari_storm.postprocessing.comet_runner import CometParameters, subsample
+
     data = np.column_stack([np.arange(1000.0)] * 4)
     half = subsample(data, CometParameters(keep_percent=50))
     assert len(half) == 500 and np.all(np.diff(half[:, 0]) > 0)
-    np.testing.assert_array_equal(half, subsample(data, CometParameters(keep_percent=50)))
+    np.testing.assert_array_equal(
+        half, subsample(data, CometParameters(keep_percent=50))
+    )
     assert subsample(data, CometParameters()) is data
     with pytest.raises(ValueError):
         CometParameters(keep_percent=0)
