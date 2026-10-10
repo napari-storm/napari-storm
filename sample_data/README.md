@@ -28,8 +28,7 @@ layout in some detail nobody wrote down — only a real export can.
 | `imspector_v2.mat` | The Matlab container |
 | `pyminflux_v2.pmx` | pyMINFLUX's own save format |
 
-No Zarr store is checked in. Building one needs `zarr<3` — which is what
-`setup.cfg` pins, because zarr 3 refuses the structured arrays Imspector
-writes — so a store cannot be created in an environment that has zarr 3
-installed. `test_minflux_v2.py` builds one in a temporary directory when the
+No Zarr store is checked in. Building one needs `zarr<3` — the `[minflux]`
+extra, because zarr 3 refuses the structured arrays Imspector writes — so a
+store cannot be created in an environment that has zarr 3 installed. `test_minflux_v2.py` builds one in a temporary directory when the
 right zarr is present, and skips otherwise.

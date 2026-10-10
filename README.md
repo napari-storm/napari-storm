@@ -22,6 +22,11 @@ without an extra, no Qt binding is installed and napari cannot open a window
 
     pip install "napari-storm[pyqt6]"
 
+If you open MINFLUX `.zarr` datasets, add the `[minflux]` extra -- see
+[MINFLUX data](#minflux-data):
+
+    pip install "napari-storm[pyqt6,minflux]"
+
 For drift correction in the Post-processing tab, add the `[comet]` extra. It
 installs [COMET](https://github.com/gpufit/Comet), published on PyPI as
 [comet-smlm](https://pypi.org/project/comet-smlm/):
@@ -63,12 +68,7 @@ Or start napari itself and open the dock from the Plugins menu:
 ### Importing data into napari-storm
 Drag & drop onto the dock widget supported file types (Picasso, ThunderSTORM, MINFLUX, etc.) directly into napari or use the import file dialog.
 
-MINFLUX data is read in both Abberior layouts: the original one, and the flat
-layout Imspector writes from **24.10** onwards. The newer one is accepted as
-`.npy`, `.json`, `.mat`, `.zarr`, and as pyMINFLUX's own `.pmx`. Which layout a
-file uses is determined from the file, so there is nothing to choose. A `.zarr`
-dataset is a folder rather than a file; since a file dialog cannot select one,
-pick any file inside it and the whole dataset opens.
+MINFLUX files have their own section below: [MINFLUX data](#minflux-data).
 
 If your file is not covered:
 
@@ -103,11 +103,55 @@ one of the apply buttons.
 - For STORM/PALM ... datasets, it is possible to change the rendering options in the data controls tab to **Variable-size gaussian**, to include the uncertainty values or photon counts for the rendering
 - hold shift and drag the mouse for panning
 
+## MINFLUX data
+
+napari-storm reads Abberior MINFLUX exports in both layouts Imspector has
+written: the original one, with every iteration nested inside each record, and
+the flat layout of Imspector **24.10** and later, one row per iteration. Which
+layout a file holds is read from the file itself, so there is nothing to
+choose.
+
+| Container | Layouts | Needs |
+|---|---|---|
+| `.npy` | both | -- |
+| `.json` | both | -- |
+| `.mat` | 24.10+ | -- (scipy, installed anyway) |
+| `.zarr` | 24.10+ | the `[minflux]` extra |
+| `.pmx` (pyMINFLUX 3.0) | 24.10+ | -- |
+| `.mfx` | original (napari-storm's own export) | -- |
+
+**Zarr.** Imspector writes its MINFLUX table as a structured array, which
+zarr 3 cannot read, so `.zarr` stores need `zarr<3`. It is not installed by
+default -- host applications that only use napari-storm to render may already
+be on zarr 3 -- so install it with the extra:
+
+    pip install "napari-storm[minflux]"
+
+Without it every other container still opens, and a `.zarr` store says which
+command to run. A store is a folder rather than a file; a file dialog cannot
+select one, so pick any file inside it (its `.zgroup`, say) and the whole
+dataset opens. Dropping the folder onto napari works too.
+
+**Traces.** Every MINFLUX localization carries the id of the trace it belongs
+to -- one molecule, localized again and again. **Decorators → Traces →
+Connect traces** draws each trace as a line through its localizations in the
+order they were measured, coloured by trace, by time, by progress along the
+trace, or by a column such as `efo` or `cfr`. Traces are for viewing; exports
+contain the Gaussian reconstruction only.
+
+**Trying it out.** `sample_data/` has a small synthetic file for every
+container, written to the documented layout rather than measured -- enough to
+check that a container opens, not what a real acquisition looks like.
+
 ## Documentation
 
-Full documentation is at **https://napari-storm.readthedocs.io/** — a
-step-by-step tutorial, how the renderer works, and the embedding API for
-driving napari-storm from another application.
+Full documentation is at **https://napari-storm.readthedocs.io/** — getting
+started, a user guide by task with screenshots, a reference of every control,
+troubleshooting, the changelog, and for developers how the renderer works and
+the embedding API for driving napari-storm from another application.
+
+The screenshots are generated from `sample_data` by
+`python scripts/make_doc_images.py`; rerun it when the interface changes.
 
 There is also a custom Q&A GPT for this repo specifically, available at
 https://chatgpt.com/g/g-68aebb6371a88191877094b48513d690-napari-storm-q-a
