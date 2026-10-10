@@ -34,7 +34,9 @@ work without COMET installed.
    one correction value per trace.
 2. **Estimate memory** counts pairs exactly for the selected input. Filters and
    the render-range crop select the estimation region. Fiducials and invalid
-   positions are excluded. The estimate never changes the input or settings.
+   positions are excluded. When the run would be over the memory budget, the
+   estimate sets **Keep localizations** to a share that should fit (pairs fall
+   with roughly the square of the share); estimate again to confirm.
 3. **Run COMET** runs in a background worker. Progress appears in the tab;
    **Cancel** takes effect at the next COMET callback. Pair search itself cannot
    currently be interrupted. Closing a dataset rejects its outstanding result.
@@ -60,7 +62,15 @@ parameter filters retain their row selection.
 The guard adds the run's predicted allocations to the process's current
 resident memory and a reserve (1 GB or 10 % of RAM, whichever is larger). Over
 that, **Run** asks before going ahead; when the run alone would not fit in
-physical memory, it refuses. Reduce the estimation region or the maximum drift and estimate again. This reduces risk; running in the same process cannot guarantee
+physical memory, it refuses. Lower **Keep localizations**, reduce the
+estimation region or the maximum drift, and estimate again.
+
+**Keep localizations** (1–100 %) estimates the drift from a random subset of the
+selected localizations, chosen with a fixed seed so the same setting always
+picks the same subset; the drift is still applied to every localization, and
+the share is recorded with the saved drift. Fewer localizations per window make
+each window's estimate noisier, so lower the share only as far as the memory
+budget requires. This reduces risk; running in the same process cannot guarantee
 that the operating system will not terminate it.
 
 COMET 1.2 retains the tested `query_pairs` search: int64 pairs and their
