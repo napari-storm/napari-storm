@@ -114,6 +114,14 @@ class PostProcessingWindow(QScrollArea):
         self.input_mode.addItems(["Localizations", "Group means"])
         layout.addWidget(self.input_mode)
         number("window", "Localizations per time window", 60, 1, 1000000, True)
+        self.keep_label = QLabel("Keep localizations: 100 % (random, reproducible)")
+        layout.addWidget(self.keep_label)
+        self.keep = QSlider(Qt.Orientation.Horizontal)
+        self.keep.setRange(1, 100)
+        self.keep.setValue(100)
+        self.keep.valueChanged.connect(
+            lambda v: self.keep_label.setText(f"Keep localizations: {v} % (random, reproducible)"))
+        layout.addWidget(self.keep)
         note = QLabel(
             "Target sigma: 10 nm. With group or trace means, the count is means per window."
         )

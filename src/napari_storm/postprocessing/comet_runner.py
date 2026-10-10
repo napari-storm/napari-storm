@@ -13,6 +13,10 @@ class CometParameters:
     window: int = 60
     max_drift_nm: float = 300.0
     target_sigma_nm: float = field(default=10.0, init=False)
+    #: Random share of the localizations COMET estimates from, when the memory
+    #: budget is too small for all of them (pairs fall with its square).
+    keep_percent: int = 100
+    seed: int = 0
 
     def __post_init__(self):
         if (
@@ -26,6 +30,8 @@ class CometParameters:
             or min(self.max_drift_nm, self.target_sigma_nm) <= 0
         ):
             raise ValueError("Drift radius and sigma must be positive and finite")
+        if not 1 <= self.keep_percent <= 100:
+            raise ValueError("Keep between 1 and 100 % of the localizations")
         if self.max_drift_nm // 3 <= 0:
             raise ValueError(
                 "Max drift must be at least 3 nm for COMET's initial sigma"
@@ -52,6 +58,15 @@ def prepare_input(coords, times, params, *, time_origin=None):
     return np.column_stack((coords, times))
 
 
+def subsample(data, params):
+    """A reproducible random `keep_percent` of the rows, in their original order."""
+    if params.keep_percent >= 100:
+        return data
+    n = max(2, int(round(len(data) * params.keep_percent / 100)))
+    keep = np.sort(np.random.default_rng(params.seed).choice(len(data), n, replace=False))
+    return data[keep]
+
+
 def run_comet(
     coords,
     times,
@@ -67,7 +82,7 @@ def run_comet(
     params = params or CometParameters()
     report = progress or (lambda stage, info=None: None)
     report("preparing", {})
-    data = prepare_input(coords, times, params, time_origin=time_origin)
+    data = subsample(prepare_input(coords, times, params, time_origin=time_origin), params)
     import comet
     from comet.core.segmenter import segment_by_num_locs_per_window
     from packaging.version import Version
@@ -95,7 +110,7 @@ def run_comet(
     if not budget.possible:
         raise MemoryError(
             f"Estimated additional memory {budget.additional_bytes / 1e9:.2f} GB exceeds physical memory. "
-            "Reduce max drift or select a smaller estimation region."
+            "Lower 'Keep localizations', reduce max drift or select a smaller region."
         )
     if not budget.fits and not allow_over_budget:
         # The dock recognises this text and asks before running anyway.

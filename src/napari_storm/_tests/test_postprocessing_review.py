@@ -242,3 +242,21 @@ def test_run_progress_follows_comets_schedule():
     assert fractions == sorted(fractions)
     progress.update("run_start", {"run": 3, "sigma_nm": 17.8})
     assert progress.text.startswith("Step 3 of ~5 (≤ 11) · σ 17.8 nm · ETA")
+
+
+def test_keep_percent_subsamples_reproducibly():
+    from napari_storm.postprocessing.comet_runner import CometParameters, subsample
+    data = np.column_stack([np.arange(1000.0)] * 4)
+    half = subsample(data, CometParameters(keep_percent=50))
+    assert len(half) == 500 and np.all(np.diff(half[:, 0]) > 0)
+    np.testing.assert_array_equal(half, subsample(data, CometParameters(keep_percent=50)))
+    assert subsample(data, CometParameters()) is data
+    with pytest.raises(ValueError):
+        CometParameters(keep_percent=0)
+
+
+def test_keep_slider_reaches_the_parameters(dock):
+    _load(dock)
+    post = dock.postprocessing
+    post.widget.keep.setValue(40)
+    assert post.parameters().keep_percent == 40
