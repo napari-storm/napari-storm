@@ -27,6 +27,19 @@ If you open MINFLUX `.zarr` datasets, add the `[minflux]` extra -- see
 
     pip install "napari-storm[pyqt6,minflux]"
 
+For drift correction in the Post-processing tab, add the `[comet]` extra. It
+installs [COMET](https://github.com/gpufit/Comet), published on PyPI as
+[comet-smlm](https://pypi.org/project/comet-smlm/):
+
+    pip install "napari-storm[pyqt6,comet]"
+
+COMET is optional: without it napari-storm works as before, and the tab's
+grouping, loading of saved drifts and slider still work. If an older COMET
+installed as `py-comet` is present, uninstall it first (`pip uninstall
+py-comet`): both install the same `comet` package. See
+[Post-processing](docs/post-processing.md) for the workflow and how
+memory is managed (the tab runs COMET's CPU backend).
+
 To work on napari-storm itself, install from a clone instead:
 
     git clone https://github.com/napari-storm/napari-storm

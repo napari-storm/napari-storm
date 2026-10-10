@@ -98,6 +98,32 @@ See [Adjusting values](filtering.md#adjusting-values).
 
 <div style="clear: both"></div>
 
+## Post-proc.
+
+Needs the `[comet]` extra to run COMET and detect fiducials; the rest works
+without it.
+
+| Control | Does |
+|---|---|
+| dataset menu | Which dataset the tab acts on |
+| **Fiducials** (collapsed) | **Detect fiducials**, tick candidates, **Exclude ticked fiducials** / **Restore fiducials** |
+| **Grouping** (collapsed, STORM) | **Max distance**, **Max dark frames**, **Max frames**; **Group localizations** |
+| **Max drift [nm]** | The largest distance the sample moved; COMET's pair radius |
+| **Localizations** / **Group means** | What COMET estimates from |
+| **Localizations per time window** | COMET's window size (means per window with group or trace means) |
+| **Keep localizations** | Random, reproducible share used when memory is short |
+| **Estimate memory** / **Run COMET** / **Cancel** | Check the memory budget, run, stop |
+| **Undo** / **Re-apply** / **Discard drift** | Restore the raw positions, apply again, forget the drift |
+| **Save drift…** / **Load drift…** / **Apply to other datasets…** | Share a drift between files and channels |
+| **Save corrected localizations…** | `.ns` with the correction applied |
+| **Correction** slider, **Play** | Show raw → corrected in 10 % steps; exports keep the applied data |
+| **x, y, time view (2D)** | Draw time as height |
+| **Show pair network**, **Pair radius**, mode | Vectors between localizations that belong together |
+
+See [Post-processing and drift correction](post-processing.md).
+
+<div style="clear: both"></div>
+
 ## Detaching tabs
 
 Double-click a tab, or drag it out of the dock, to open it in a window of its

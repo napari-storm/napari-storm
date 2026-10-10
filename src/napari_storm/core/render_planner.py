@@ -310,6 +310,8 @@ class RenderPlanner:
         trace_column=None,
         time_column=AUTO,
         trace_properties=(),
+        position_offset=None,
+        pairs=None,
     ):
         """Everything a backend needs to draw this dataset as it stands now.
 
@@ -345,6 +347,43 @@ class RenderPlanner:
         if size_limit is not None:
             size = min(size, float(size_limit))
         coords = self.coordinates(rows, traits, transform)
+        if position_offset is not None:
+            offset = np.asarray(position_offset(rows.ids), dtype=float)
+            if offset.shape != (rows.n, 3):
+                raise ValueError("Display offsets need shape (N, 3), x/y/z nanometres")
+            for i, a in enumerate(("z", "y", "x")):
+                coords[:, i] += offset[:, 2 - i] * (
+                    transform.scale[2 - i] if a != "z" or traits.zdim_present else 1.0
+                )
+        values = self.values(rows, settings, traits)
+        if settings.z_color_encoding and position_offset is not None:
+            # Colour follows the displayed depth, in data units like values()
+            # does without an offset -- not world units, which a mirrored
+            # transform would turn upside down.
+            depth = np.asarray(rows.coordinate_nm("z"), dtype=np.float64) + offset[:, 2]
+            values = require_positive_maximum(
+                _normalized(depth.astype(np.float32)), "render values"
+            )
+        pair_vertices = None
+        if pairs is not None:
+
+            def by_ids(ids):
+                result = np.ones((len(ids), 3), dtype=np.float32) * FLAT_DATA_Z_NM
+                offset = (
+                    np.zeros((len(ids), 3))
+                    if position_offset is None
+                    else np.asarray(position_offset(ids))
+                )
+                for i, axis in enumerate(("z", "y", "x")):
+                    if axis == "z" and not traits.zdim_present:
+                        result[:, i] += offset[:, 2 - i]
+                    else:
+                        result[:, i] = transform.apply_axis(
+                            axis, table.coordinate_nm(axis)[ids] + offset[:, 2 - i]
+                        )
+                return result
+
+            pair_vertices = pairs.vertices(table, by_ids)
         traces = None
         if trace_column is not None:
             traces = plan_traces(
@@ -360,13 +399,14 @@ class RenderPlanner:
             coords=coords,
             sigmas=sigmas,
             size=size,
-            values=self.values(rows, settings, traits),
+            values=values,
             name=name,
             colormap=colormap,
             antialias=antialias,
             active_ids=rows.ids,
             changed=changed,
             traces=traces,
+            pairs=pair_vertices,
         )
 
 

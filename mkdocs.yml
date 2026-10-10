@@ -46,6 +46,7 @@ nav:
       - Navigating in 2-D and 3-D: navigating.md
       - Filtering and adjusting: filtering.md
       - MINFLUX: minflux.md
+      - Post-processing and drift correction: post-processing.md
       - Export and scenes: export.md
   - Reference:
       - Every control: controls.md

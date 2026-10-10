@@ -711,6 +711,18 @@ class NapariStormGUI(QWidget):
         self.tabs.addTab(self.decorator_tab, "Decorators")
         self.tabs.addTab(self.datafilter_tab, "Data Filter")
         self.tabs.addTab(self.data_adjustment_tab, "Data adjustment")
+        if hasattr(self, "postprocessing"):
+            # The tabs above are re-added, so moved to the end, on every load.
+            # Move this one after them; add it only the first time, so a tab
+            # the user has detached is not pulled back mid-job.
+            index = self.tabs.indexOf(self.postprocessing.widget)
+            if index >= 0:
+                self.tabs.tabBar.moveTab(
+                    index, self.tabs.count() - 1
+                )  # an attribute here
+            elif not getattr(self, "_postprocessing_tab_added", False):
+                self.tabs.addTab(self.postprocessing.widget, "Post-proc.")
+            self._postprocessing_tab_added = True
         self.HL1.show()
         self.HL2.show()
 

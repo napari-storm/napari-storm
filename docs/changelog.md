@@ -5,6 +5,15 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
 ## Unreleased
 
+* **Drift correction with COMET.** A new **Post-proc.** tab runs
+  [COMET](https://github.com/gpufit/Comet) drift correction in the background,
+  with progress, Cancel and a memory estimate before each run, and optional
+  fiducial removal and STORM grouping before it. The correction is reversible
+  until **Discard drift**, can be saved, loaded and applied to other channels,
+  and a **Correction** slider shows raw to corrected in 10 % steps -- with the
+  network of localizations that belong together, and an x, y, time view for
+  2-D data. Install with the new `[comet]` extra (COMET is published as
+  `comet-smlm`). See [Post-processing](post-processing.md).
 * **zarr is optional.** `zarr<3` moved from the requirements into a new
   `[minflux]` extra, so napari-storm no longer holds an environment back on
   zarr 2. Only MINFLUX `.zarr` stores need it; opening one without it says
