@@ -47,6 +47,30 @@ class TransformChanged:
     transform: WorldTransform = None
 
 
+@dataclass(frozen=True)
+class DriftChanged:
+    dataset_id: int
+    positions_only: bool = False
+
+
+@dataclass(frozen=True)
+class DriftView:
+    model: object
+    row_times: object
+    applied: bool = True
+    alpha: float = 1.0
+    group: object = None
+    scale: tuple = (1.0, 1.0, 1.0)
+
+    def displacement(self, ids):
+        import numpy as np
+
+        return self.model.evaluate(self.row_times[ids]) * np.asarray(self.scale)
+
+    def offset(self, ids):
+        return (1 - self.alpha) * self.displacement(ids)
+
+
 @dataclass
 class DatasetState:
     """What the application knows about one loaded dataset.
@@ -58,6 +82,7 @@ class DatasetState:
 
     dataset_id: int
     name: str = ""
+    drift: DriftView = None
     appearance: LayerAppearance = field(default_factory=LayerAppearance)
     transform: WorldTransform = IDENTITY
     #: Extent per axis in world nanometres, derived from the table and cached
@@ -88,7 +113,7 @@ class DatasetState:
         for axis in axes:
             if not table.has_axis(axis):
                 continue
-            values = table.coordinate_nm(axis)
+            values = table.coordinate_nm(axis)[table.finite_position_mask()]
             bounds[axis] = Bounds.of(self.transform.apply_axis(axis, values))
         self.bounds = bounds
         return bounds

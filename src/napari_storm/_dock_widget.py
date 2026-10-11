@@ -172,6 +172,10 @@ class napari_storm(NapariStormGUI):
             parent=self, data_adjustment_window=self.data_adjustment_tab
         )
 
+        from .PostProcessing import PostProcessingInterface
+
+        self.postprocessing = PostProcessingInterface(self)
+
         # VisPy leaves one drag's camera state where the next drag reads it, so
         # releasing Shift mid-drag crashes the 3-D camera.  Re-applied when
         # napari swaps cameras on an ndisplay change.
@@ -202,6 +206,7 @@ class napari_storm(NapariStormGUI):
         if getattr(self, "_closed", False):
             return
         self._closed = True
+        self.postprocessing.close()
         for listener in list(self._store_listeners):
             self._dataset_store.unsubscribe(listener)
         self._store_listeners.clear()
@@ -1100,7 +1105,12 @@ class napari_storm(NapariStormGUI):
 
         def _apply(datasets):
             if datasets:
-                self._apply_loaded_datasets(datasets, merge=merge)
+                try:
+                    self._apply_loaded_datasets(datasets, merge=merge)
+                except ValueError as error:
+                    # e.g. no finite position at all: refused before the session
+                    # is touched, and said so rather than lost in a Qt slot
+                    _failed(error)
 
         def _failed(error):
             self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
@@ -1123,6 +1133,10 @@ class napari_storm(NapariStormGUI):
 
     def _apply_loaded_datasets(self, datasets, merge=False):
         """Add already-read datasets to the session.  GUI thread only."""
+        for dataset in datasets:
+            if not dataset.table.finite_position_mask().any():
+                self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
+                raise ValueError(f"{dataset.name}: no finite localization positions")
         incoming_dimensions = {bool(dataset.zdim_present) for dataset in datasets}
         if len(incoming_dimensions) != 1:
             self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)

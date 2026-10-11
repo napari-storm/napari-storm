@@ -196,13 +196,15 @@ def test_apply_filters_removes_after_keeping():
     assert table.active_ids.tolist() == [2, 3, 4]
 
 
-def test_non_finite_rows_are_kept_by_a_bandpass():
-    """The negated-exclusion form is deliberate; NaN must not be dropped."""
+def test_non_finite_rows_stay_excluded_after_bandpass_and_reset():
+    """Invalid measurements must not reappear through filtering or reset."""
     records = _nm_records()
     records.x_pos_nm[3] = np.nan
     table = LocalizationTable(records)
     table.bandpass("x_pos_nm", 2, 5)
-    assert 3 in table.active_ids.tolist()
+    assert 3 not in table.active_ids.tolist()
+    table.reset()
+    assert 3 not in table.active_ids.tolist()
 
 
 def test_restrict_by_percent_spans_the_current_extent():

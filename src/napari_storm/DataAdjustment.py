@@ -1,6 +1,3 @@
-import os
-
-import h5py
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import (
     QComboBox,
@@ -12,7 +9,6 @@ from qtpy.QtWidgets import (
 )
 
 from .CustomErrors import ParentError
-from .localization_dataset_types import StormDataClass
 
 
 class DataAdjustmentWindow(QWidget):
@@ -127,10 +123,16 @@ class DataAdjustmentInterface:
         # adjust_column is the sanctioned writer of the canonical table: it
         # applies the change and drops the cached nanometre columns derived
         # from it, which a bare setattr on locs_all would leave stale.
-        if self.math_modes[self.math_mode_active_idx] == self.math_modes[0]:
-            dataset.adjust_column(parameter, offset=self.value)
-        elif self.math_modes[self.math_mode_active_idx] == self.math_modes[1]:
-            dataset.adjust_column(parameter, scale=self.value)
+        try:
+            if self.math_modes[self.math_mode_active_idx] == self.math_modes[0]:
+                dataset.adjust_column(parameter, offset=self.value)
+            elif self.math_modes[self.math_mode_active_idx] == self.math_modes[1]:
+                dataset.adjust_column(parameter, scale=self.value)
+        except ValueError as error:
+            from qtpy.QtWidgets import QMessageBox
+
+            QMessageBox.warning(self.daw, "Cannot adjust dataset", str(error))
+            return
         if update_layers:
             self.parent.data_to_layer_itf.set_render_range_and_offset()
             self.parent.data_to_layer_itf.update_layers()
@@ -190,20 +192,14 @@ class DataAdjustmentInterface:
         tmp_dataset = self.list_of_datasets[self.current_dataset_idx]
         if not filename:
             filename = QFileDialog.getSaveFileName()[0]
-        with h5py.File(filename, "a") as f:
-            try:
-                dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
-            except ValueError:
-                del f["dataset"]
-                dset = f.create_dataset("dataset", data=tmp_dataset.locs_all)
-            dset.attrs["name"] = tmp_dataset.name
-            dset.attrs["zdim_present"] = tmp_dataset.zdim_present
-            dset.attrs["dataset_class"] = tmp_dataset.__class__.__name__
-            if isinstance(tmp_dataset, StormDataClass):
-                dset.attrs["pixelsize_nm"] = tmp_dataset.pixelsize_nm
-                dset.attrs["sigma_present"] = tmp_dataset.sigma_present
-                dset.attrs["photon_count_present"] = tmp_dataset.photon_count_present
-        os.rename(filename, filename.split(".")[0] + ".ns")
+        if not filename:
+            return
+        from .postprocessing.io import save_localizations
+
+        state = self.parent.dataset_store.state_of(tmp_dataset)
+        save_localizations(
+            filename, tmp_dataset, None if state is None else state.drift
+        )
 
     def _start_typing_timer(self, timer):
         timer.start(500)

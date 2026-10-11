@@ -77,7 +77,8 @@ class Changed(Flag):
     #: Implied by SELECTION and POSITIONS, which move every vertex; on its own
     #: it says the localizations are unchanged and only the overlay is not.
     TRACES = auto()
-    EVERYTHING = SELECTION | POSITIONS | SIGMAS | VALUES | TRACES
+    PAIRS = auto()
+    EVERYTHING = SELECTION | POSITIONS | SIGMAS | VALUES | TRACES | PAIRS
 
 
 #: Palette used when a caller does not choose one.  Visible on a dark canvas
@@ -142,6 +143,7 @@ class LayerAppearance:
     traces: bool = None
     trace_color_by: str = None
     trace_width_px: float = None
+    pairs: bool = None
 
     def __post_init__(self):
         if self.footprint is not None:
@@ -208,6 +210,7 @@ class RenderRequest:
     active_ids: np.ndarray = None
     changed: Changed = Changed.EVERYTHING
     traces: Any = None
+    pairs: Any = None
 
     def with_changes(self, changed):
         """The same request, declaring a narrower dirty set."""
@@ -279,6 +282,9 @@ class LocalizationRenderer:
         that windows every localization on its own -- all of them, before
         summed contrast existed -- is right to inherit False.
         """
+        return False
+
+    def draws_pairs(self, dataset_id):
         return False
 
     def draws_traces(self, dataset_id):
@@ -375,6 +381,19 @@ class NullRenderer(LocalizationRenderer):
             return None
         return float(np.min(request.values)), float(np.max(request.values))
 
+    def draws_pairs(self, dataset_id):
+        request = self.requests.get(dataset_id)
+        appearance = self.appearances.get(dataset_id)
+        return bool(
+            request is not None
+            and appearance is not None
+            and appearance.pairs
+            and request.pairs is not None
+            and request.pairs.n_segments > 0
+            and self.visibility.get(dataset_id, False)
+            and (appearance.opacity is None or appearance.opacity > 0)
+        )
+
     def draws_traces(self, dataset_id):
         request = self.requests.get(dataset_id)
         appearance = self.appearances.get(dataset_id)
@@ -407,8 +426,13 @@ class NullRenderer(LocalizationRenderer):
         request = self.requests.get(dataset_id)
         if request is None:
             return 0
+        extra = [
+            overlay.coords
+            for overlay in (request.traces, request.pairs)
+            if overlay is not None and hasattr(overlay, "coords")
+        ]
         return sum(
             array.nbytes
-            for array in (request.coords, request.sigmas, request.values)
+            for array in (request.coords, request.sigmas, request.values, *extra)
             if isinstance(array, np.ndarray)
         )

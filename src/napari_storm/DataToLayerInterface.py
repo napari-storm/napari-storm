@@ -15,6 +15,7 @@ from .core import (
     StoreCleared,
     TransformChanged,
 )
+from .core.dataset_state import DriftChanged
 from .core.footprints import BLEND_OPAQUE, FOOTPRINT_GAUSSIAN, footprint_named
 from .core.renderer import Changed, LayerAppearance
 from .core.traces import (
@@ -200,9 +201,23 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         elif isinstance(event, AppearanceChanged):
             if self.renderer.is_open(event.dataset_id):
                 self.renderer.set_appearance(event.dataset_id, event.appearance)
+        elif isinstance(event, DriftChanged):
+            dataset = self._dataset_for(event.dataset_id)
+            if dataset is not None:
+                if event.positions_only:
+                    self.refresh_positions(dataset)
+                else:
+                    self.refresh_dataset(dataset)
         elif isinstance(event, (MaskChanged, TransformChanged)):
             dataset = self._dataset_for(event.dataset_id)
             if dataset is not None:
+                if isinstance(event, TransformChanged):
+                    # The ranges are in world space: a moved dataset widens them
+                    # to its new place (camera untouched), or the crop, which is
+                    # in world space too, would cut it off.
+                    self.set_render_range(
+                        dataset.zdim_present, self.get_coords_from_all_locs(dataset)
+                    )
                 self.refresh_dataset(dataset)
 
     def _dataset_for(self, dataset_id):
@@ -434,6 +449,9 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         if coords.ndim != 2 or coords.shape[1] != 3:
             raise ValueError("coords must have shape (N, 3) in (z, y, x) order")
 
+        coords = coords[np.isfinite(coords).all(axis=1)]
+        if len(coords) == 0:
+            return
         self.render_range_x[1] = max(np.max(coords[:, 2]), self.render_range_x[1])
         self.render_range_y[1] = max(np.max(coords[:, 1]), self.render_range_y[1])
         self.render_range_x[0] = min(np.min(coords[:, 2]), self.render_range_x[0])
@@ -532,6 +550,22 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         if self.on_layer_updated:
             self.on_layer_updated(channel_index)
 
+    def refresh_positions(self, dataset, *, pairs_only=False):
+        """Redraw with new display positions, the selection unchanged.
+
+        `pairs_only` for a new pair set: the backends then rebuild only the
+        pairs overlay, not the splats or the trace layer.
+        """
+        if self.renderer.is_open(dataset.dataset_id) and dataset.table.n_active:
+            changed = (
+                Changed.PAIRS
+                if pairs_only
+                else Changed.POSITIONS | Changed.VALUES | Changed.TRACES | Changed.PAIRS
+            )
+            self.renderer.update(
+                dataset.dataset_id, self._render_request(dataset, changed=changed)
+            )
+
     def refresh_dataset(self, dataset):
         """Re-apply this dataset's filters and redraw it, and only it.
 
@@ -591,6 +625,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             changed=changed,
             size_limit=self._splat_size_limit(),
             **self._trace_plan_arguments(dataset),
+            **self._postprocessing_plan_arguments(dataset),
         )
         request = self._markers_at_full_value(request)
         # Kept for the resource-limit reporting and for tests that inspect what
@@ -603,6 +638,10 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         )
         self._note_clamped_splat(dataset, request.size)
         return request
+
+    def _postprocessing_plan_arguments(self, dataset):
+        interface = getattr(self.parent, "postprocessing", None)
+        return {} if interface is None else interface.plan_arguments(dataset)
 
     def _markers_at_full_value(self, request):
         """Draw opaque markers at their colour, not at an intensity weight.
@@ -784,9 +823,13 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         for axis in axes:
             axis_range, percent = ranges[axis]
             low, high = self.percent_to_absolute(axis_range, percent)
-            axis_mask = dataset.get_mask_of_specified_prop_all(
-                prop=f"{axis}_pos_nm", l_val=low, u_val=high
+            # The ranges are in world space (get_coords_from_all_locs applies
+            # each dataset's transform), so the crop must be too: comparing
+            # data-space columns against them cropped a shifted channel away.
+            values = self.transform_of(dataset).apply_axis(
+                axis, dataset.table.coordinate_nm(axis)
             )
+            axis_mask = (values >= low) & (values <= high)
             render_mask = (
                 axis_mask if render_mask is None else (render_mask & axis_mask)
             )
@@ -869,19 +912,14 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
 
     def get_coords_from_all_locs(self, dataset):
         """Every localization's coordinates, in the renderer's (z, y, x) order."""
-        if dataset.zdim_present:
-            num_of_locs = len(dataset.x_pos_nm_all)
-            coords = np.zeros([num_of_locs, 3], dtype=np.float32)
-            coords[:, 0] = dataset.z_pos_nm_all
-            coords[:, 1] = dataset.y_pos_nm_all
-            coords[:, 2] = dataset.x_pos_nm_all
-
-        else:
-            num_of_locs = len(dataset.x_pos_nm_all)
-            coords = np.zeros([num_of_locs, 3], dtype=np.float32)
-            coords[:, 1] = dataset.y_pos_nm_all
-            coords[:, 2] = dataset.x_pos_nm_all
-            coords[:, 0] = np.ones(num_of_locs, dtype=np.float32)
+        table = dataset.table
+        valid = table.finite_position_mask()
+        coords = np.ones((int(valid.sum()), 3), dtype=np.float32)
+        for i, axis in enumerate(("z", "y", "x")):
+            if axis != "z" or dataset.zdim_present:
+                coords[:, i] = self.transform_of(dataset).apply_axis(
+                    axis, table.coordinate_nm(axis)[valid]
+                )
         return coords
 
     def scalebar(self):

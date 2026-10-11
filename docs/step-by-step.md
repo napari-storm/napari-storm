@@ -13,4 +13,6 @@ This page used to hold the whole tutorial. It is now split by task:
   grid plane, scale bars.
 * [Filtering and adjusting](filtering.md)
 * [MINFLUX](minflux.md) -- layouts, `.zarr` stores, traces.
+* [Post-processing and drift correction](post-processing.md) -- fiducials,
+  grouping, COMET drift correction, the correction slider.
 * [Export and scenes](export.md)

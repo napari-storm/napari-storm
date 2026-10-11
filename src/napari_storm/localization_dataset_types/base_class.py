@@ -74,6 +74,8 @@ class LocalizationDataBaseClass:
 
     @locs_all.setter
     def locs_all(self, value):
+        if getattr(self, "dataset_id", None) is not None:
+            raise ValueError("Cannot replace records of a loaded dataset")
         if value is None:
             self._table = None
             return

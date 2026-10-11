@@ -37,6 +37,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
         self._traces = TraceOverlay(viewer)
+        self._pairs = TraceOverlay(viewer, field="pairs")
 
     # ------------------------------------------------------------------
     # Handles
@@ -58,6 +59,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         except (ValueError, TypeError, RuntimeError):
             pass
         self._traces.detach()
+        self._pairs.detach()
 
     def _on_layer_removed(self, event):
         layer = getattr(event, "value", None)
@@ -69,6 +71,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         self._layers.pop(dataset_id, None)
         layer.close()
         self._traces.close(dataset_id)
+        self._pairs.close(dataset_id)
         if self.on_layer_removed_by_host is not None:
             self.on_layer_removed_by_host(dataset_id)
 
@@ -89,15 +92,17 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         layer.add_to_viewer(self.viewer)
         self._layers[dataset_id] = layer
         self._traces.open(dataset_id, request)
+        self._pairs.open(dataset_id, request)
         return layer
 
     def update(self, dataset_id, request):
         layer = self._layers.get(dataset_id)
         if layer is None:
             raise KeyError(f"dataset {dataset_id} is not open")
-        if request.changed == Changed.TRACES:
+        if not (request.changed & ~(Changed.TRACES | Changed.PAIRS)):
             # Only the overlay differs: the splats are as they were.
             self._traces.update(dataset_id, request)
+            self._pairs.update(dataset_id, request)
             return layer
         layer.update_particle_data(
             coords=request.coords,
@@ -112,7 +117,9 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         # was drawn last.
         layer._apply_blend_state()
         self._traces.update(dataset_id, request)
+        self._pairs.update(dataset_id, request)
         self._traces.set_shown(dataset_id, True)
+        self._pairs.set_shown(dataset_id, True)
         return layer
 
     def set_visible(self, dataset_id, visible):
@@ -120,6 +127,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         if layer is not None:
             layer.visible = bool(visible)
             self._traces.set_shown(dataset_id, visible)
+            self._pairs.set_shown(dataset_id, visible)
 
     def set_appearance(self, dataset_id, appearance):
         layer = self._layers.get(dataset_id)
@@ -140,6 +148,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         if appearance.footprint is not None:
             layer.footprint = appearance.footprint
         self._traces.set_appearance(dataset_id, appearance)
+        self._pairs.set_appearance(dataset_id, appearance)
         return layer
 
     def appearance(self, dataset_id):
@@ -155,6 +164,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
             min_size_px=layer.min_size_px,
             summed_contrast=layer.summed_contrast,
             **self._traces.appearance_fields(dataset_id),
+            **self._pairs.appearance_fields(dataset_id),
         )
 
     def value_range(self, dataset_id):
@@ -167,6 +177,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
 
     def close(self, dataset_id):
         self._traces.close(dataset_id)
+        self._pairs.close(dataset_id)
         layer = self._layers.pop(dataset_id, None)
         if layer is None:
             return
@@ -186,4 +197,8 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         layer = self._layers.get(dataset_id)
         if layer is None:
             return 0
-        return layer.host_bytes() + self._traces.host_bytes(dataset_id)
+        return (
+            layer.host_bytes()
+            + self._traces.host_bytes(dataset_id)
+            + self._pairs.host_bytes(dataset_id)
+        )

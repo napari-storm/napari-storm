@@ -46,9 +46,10 @@ boundary, where it belongs.
 
 from __future__ import annotations
 
-import numpy as np
+from contextlib import contextmanager
+from enum import IntFlag
 
-from .validation import non_finite_mask
+import numpy as np
 
 __all__ = [
     "ACTIVE",
@@ -179,6 +180,18 @@ def _readonly(array):
     return array
 
 
+class ExclusionReason(IntFlag):
+    FIDUCIAL = 1
+    NON_FINITE = 2
+
+
+def _same_prefix(new, old):
+    """Whether an appended table keeps a column's old rows (NaN equal to NaN)."""
+    if new.dtype.kind in "fc":
+        return np.array_equal(new, old, equal_nan=True)
+    return np.array_equal(new, old)
+
+
 class LocalizationTable:
     """Canonical localization records plus the currently active subset."""
 
@@ -231,6 +244,12 @@ class LocalizationTable:
         self._photon_column = (
             DEFAULT_PHOTON_COLUMN if photon_column is None else photon_column
         )
+        self._position_stash = None
+        self._write_locks = 0
+        self._protected_columns = set()
+        self._side_columns = {}
+        self._user_mask = None
+        self._excluded = np.empty(0, dtype=np.uint8)
         self._records = None
         self._records_view = None
         self._filter_mask = None
@@ -254,19 +273,151 @@ class LocalizationTable:
 
     def set_records(self, records, *, copy=True):
         """Replace the canonical records and reset the active set to all rows."""
-        if records is None:
-            self._records = None
-            self._filter_mask = None
-            self._display_mask = None
-            self._n_filtered = 0
-            self._n_active = 0
-        else:
-            self._records = records.copy() if copy else records
-            self._filter_mask = _readonly(np.ones(len(self._records), dtype=bool))
-            self._display_mask = None
-            self._n_filtered = len(self._records)
-            self._n_active = len(self._records)
+        self.check_position_write()
+        old = self._records
+        extends = (
+            old is not None
+            and records is not None
+            and records.dtype == old.dtype
+            and len(records) > len(old)
+            and all(
+                _same_prefix(records[n][: len(old)], old[n]) for n in old.dtype.names
+            )
+        )
+        previous_mask, previous_excluded = self._user_mask, self._excluded
+        previous_side = dict(self._side_columns) if extends else {}
+        self._records = (
+            None if records is None else (records.copy() if copy else records)
+        )
+        self._side_columns.clear()
         self.invalidate_caches()
+        self._excluded = np.zeros(len(self), dtype=np.uint8)
+        self._reported_nonfinite = np.zeros(len(self), dtype=bool)
+        self._user_mask = np.ones(len(self), dtype=bool)
+        if extends:
+            self._user_mask[: len(old)] = previous_mask
+            self._excluded[: len(old)] = previous_excluded
+            # Side columns (group ids) keep their rows; new rows get "none".
+            for name, values in previous_side.items():
+                fill = -1 if np.issubdtype(values.dtype, np.integer) else np.nan
+                grown = np.full(len(self), fill, dtype=values.dtype)
+                grown[: len(old)] = values
+                self._side_columns[name] = _readonly(grown)
+        if records is None:
+            self._filter_mask = self._display_mask = None
+            self._n_filtered = self._n_active = 0
+        else:
+            self._update_non_finite()
+            self.set_filter_mask(self._user_mask)
+
+    @property
+    def has_position_stash(self):
+        return self._position_stash is not None
+
+    def check_position_write(self):
+        if self.has_position_stash or self._write_locks:
+            raise ValueError(
+                "Positions, time and trace identity are locked. Discard the drift first, or wait for the job to finish."
+            )
+
+    def protect_columns(self, *names):
+        self._protected_columns.update(n for n in names if n is not None)
+
+    @contextmanager
+    def position_write_lock(self):
+        self._write_locks += 1
+        try:
+            yield
+        finally:
+            self._write_locks -= 1
+
+    def raw_coordinate_nm(self, axis):
+        if self._position_stash is None or axis not in self._position_stash:
+            return self.coordinate_nm(axis)
+        return self._position_stash[axis].astype(np.float64) * self.position_scale_nm
+
+    def apply_position_delta(self, delta_nm, *, zdim_present=True):
+        delta = np.asarray(delta_nm, dtype=np.float64)
+        if delta.shape != (len(self), 3) or not np.isfinite(delta).all():
+            raise ValueError("Drift must be a finite (N, 3) array in x, y, z order")
+        axes = [a for a in (AXES if zdim_present else AXES[:2]) if self.has_axis(a)]
+        if not np.isfinite(self.position_scale_nm) or self.position_scale_nm <= 0:
+            raise ValueError("Position scale must be positive and finite")
+        stash = self._position_stash
+        if stash is None:
+            stash = {a: self.column(self.position_column(a)).copy() for a in axes}
+        elif any(a not in stash for a in axes):
+            raise ValueError(
+                "This correction moves an axis the first one did not; discard the drift first"
+            )
+        # Prepare every axis before committing, so an allocation/validation error is atomic.
+        updated = {}
+        for a in axes:
+            original = stash[a]
+            updated[a] = (
+                original.astype(np.float64)
+                - delta[:, AXES.index(a)] / self.position_scale_nm
+            ).astype(original.dtype)
+            if np.any(np.isfinite(original) & ~np.isfinite(updated[a])):
+                raise ValueError("Correction exceeds the coordinate storage range")
+        self._position_stash = stash
+        for a, values in updated.items():
+            self._records[self.position_column(a)] = values
+        self.invalidate_caches()
+
+    def restore_positions(self):
+        if self._position_stash is not None:
+            for axis, values in self._position_stash.items():
+                self._records[self.position_column(axis)] = values
+            self.invalidate_caches()
+
+    def discard_position_stash(self):
+        self.restore_positions()
+        self._position_stash = None
+
+    @property
+    def user_selection(self):
+        return _readonly(self._user_mask.view())
+
+    @property
+    def excluded(self):
+        return _readonly(self._excluded.view())
+
+    def set_excluded(self, mask, reason=ExclusionReason.FIDUCIAL, *, exclude=True):
+        mask = np.asarray(mask)
+        if mask.dtype != np.bool_ or mask.shape != (len(self),):
+            raise ValueError("Exclusion needs one boolean per row")
+        reason = int(reason)
+        if reason != int(ExclusionReason.FIDUCIAL):
+            raise ValueError("Only fiducial exclusions may be changed manually")
+        if exclude:
+            self._excluded[mask] |= reason
+        else:
+            self._excluded[mask] &= np.uint8(255 ^ reason)
+        self.set_filter_mask(self._user_mask)
+
+    def finite_position_mask(self):
+        mask = np.ones(len(self), dtype=bool)
+        for axis in AXES:
+            if self.has_axis(axis):
+                mask &= np.isfinite(self.coordinate_nm(axis))
+        return mask
+
+    def _update_non_finite(self):
+        self._excluded &= np.uint8(255 ^ int(ExclusionReason.NON_FINITE))
+        self._excluded[~self.finite_position_mask()] |= int(ExclusionReason.NON_FINITE)
+
+    @property
+    def side_column_names(self):
+        return tuple(self._side_columns)
+
+    def set_side_column(self, name, values):
+        if name in self.field_names:
+            raise ValueError("A side column cannot replace a measured column")
+        values = np.asarray(values)
+        if values.shape != (len(self),):
+            raise ValueError("Side columns need one value per row")
+        self._side_columns[name] = _readonly(values.copy())
 
     @property
     def records(self):
@@ -293,7 +444,7 @@ class LocalizationTable:
         return tuple(self._records.dtype.names)
 
     def has_field(self, name):
-        return name in self.field_names
+        return name in self.field_names or name in self._side_columns
 
     def has_axis(self, axis):
         """True when *axis* has a position column present in the records."""
@@ -307,6 +458,8 @@ class LocalizationTable:
         """One canonical column, by field name.  Read-only, like the records."""
         if self._records is None:
             raise ValueError("this table holds no localizations")
+        if name in self._side_columns:
+            return self._side_columns[name]
         return _readonly(np.asarray(getattr(self._records, name)))
 
     def set_column(self, name, values):
@@ -317,13 +470,28 @@ class LocalizationTable:
         write there leaves the coordinate caches holding values that no longer
         exist in the table.
         """
+        if name in set(self._position_columns.values()) | self._protected_columns | {
+            "frame_number",
+            "frame",
+            "time_s",
+            "trace_id",
+        }:
+            self.check_position_write()
         values = np.asarray(values)
         if len(values) != len(self):
             raise ValueError(
                 f"column {name!r} needs {len(self)} values, got {len(values)}"
             )
+        if name in self._side_columns:
+            # setattr on the records would add an attribute and change nothing
+            self.set_side_column(name, values.astype(self._side_columns[name].dtype))
+            self.invalidate_caches()
+            return
         setattr(self._records, name, values)
         self.invalidate_caches()
+        if name in self._position_columns.values():
+            self._update_non_finite()
+            self.set_filter_mask(self._user_mask)
 
     def adjust_column(self, name, offset=0.0, scale=1.0):
         """Apply ``column * scale + offset`` in place, and drop derived caches.
@@ -332,8 +500,7 @@ class LocalizationTable:
         exists so that cache invalidation lives in one place rather than at
         every call site that happens to know it changed the table.
         """
-        setattr(self._records, name, self.column(name) * scale + offset)
-        self.invalidate_caches()
+        self.set_column(name, self.column(name) * scale + offset)
 
     # ------------------------------------------------------------------
     # Active subset
@@ -396,8 +563,12 @@ class LocalizationTable:
             )
         # Copied: keeping the caller's array would let them desynchronise the
         # mask from the counts derived here simply by writing to it later.
-        self._filter_mask = _readonly(mask.copy())
-        self._n_filtered = int(np.count_nonzero(mask))
+        self._user_mask = mask.copy()
+        self._filter_mask = _readonly(mask & (self._excluded == 0))
+        self._n_filtered = int(np.count_nonzero(self._filter_mask))
+        # Bumped on every selection change, for caches keyed on the selection
+        # (an id() of the mask could be reused once the old one is freed).
+        self.selection_version = getattr(self, "selection_version", 0) + 1
         self._display_mask = None
         self._n_active = self._n_filtered
         self._invalidate_selection_caches()
@@ -452,7 +623,10 @@ class LocalizationTable:
 
     @position_scale_nm.setter
     def position_scale_nm(self, value):
+        self.check_position_write()
         value = float(value)
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError("Position scale must be positive and finite")
         if value != self._position_scale_nm:
             self._position_scale_nm = value
             self.invalidate_caches()
@@ -691,14 +865,12 @@ class LocalizationTable:
         """Narrow the selection to rows with ``low <= prop <= high``."""
         if low == -np.inf and high == np.inf:
             raise ValueError("Nothing to filter here")
-        self.set_filter_mask(
-            self._filter_mask & self.mask_for_property(prop, low, high)
-        )
+        self.set_filter_mask(self._user_mask & self.mask_for_property(prop, low, high))
 
     def keep_values(self, prop, values):
         """Narrow the selection to rows whose *prop* is one of *values*."""
         column, _, _ = self.resolve_property(prop)
-        self.set_filter_mask(self._filter_mask & np.isin(column, np.atleast_1d(values)))
+        self.set_filter_mask(self._user_mask & np.isin(column, np.atleast_1d(values)))
 
     def deactivate_positions(self, positions):
         """Deselect rows by their position *within the current selection*.
@@ -710,8 +882,8 @@ class LocalizationTable:
         positions = np.asarray(positions).ravel()
         if positions.size == 0:
             return
-        mask = np.array(self._filter_mask, copy=True)
-        mask[np.flatnonzero(mask)[positions.astype(np.intp, copy=False)]] = False
+        mask = np.array(self._user_mask, copy=True)
+        mask[self.filtered_ids[positions.astype(np.intp, copy=False)]] = False
         self.set_filter_mask(mask)
 
     def restrict_by_percent(self, ranges_pc):
@@ -754,14 +926,12 @@ class LocalizationTable:
         """
         if self._records is None:
             return 0
-        columns = [self.coordinate_nm(axis) for axis in AXES if self.has_axis(axis)]
-        if not columns:
-            return 0
-        bad = non_finite_mask(*columns)
-        n_bad = int(np.count_nonzero(bad & self._filter_mask))
-        if n_bad:
-            self.set_filter_mask(self._filter_mask & ~bad)
-        return n_bad
+        self._update_non_finite()
+        self.set_filter_mask(self._user_mask)
+        bad = (self._excluded & int(ExclusionReason.NON_FINITE)) != 0
+        count = int(np.count_nonzero(bad & ~self._reported_nonfinite))
+        self._reported_nonfinite = bad.copy()
+        return count
 
     def limit_active_to(self, max_active):
         """Show at most *max_active* of the selected rows, evenly spaced.

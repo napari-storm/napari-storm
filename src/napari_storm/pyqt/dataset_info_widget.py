@@ -140,20 +140,24 @@ def _collect_rows(dataset):
     if n_drawn != n_filtered:
         rows.append(("Drawn", f"{_fmt_n(n_drawn)} (render budget)"))
 
+    if getattr(dataset, "postprocessing_status", None):
+        rows.append(("Post-processing", dataset.postprocessing_status))
+
     # Dimensions
     rows.append(("Dimensions", "3D" if dataset.zdim_present else "2D"))
 
     # Spatial extents (all locs)
-    x_all = dataset.x_pos_nm_all
-    y_all = dataset.y_pos_nm_all
-    x_ext = float(np.max(x_all) - np.min(x_all))
-    y_ext = float(np.max(y_all) - np.min(y_all))
+    valid = dataset.table.finite_position_mask()
+    x_all = dataset.x_pos_nm_all[valid]
+    y_all = dataset.y_pos_nm_all[valid]
+    x_ext = float(np.ptp(x_all)) if len(x_all) else 0.0
+    y_ext = float(np.ptp(y_all)) if len(y_all) else 0.0
     rows.append(("X extent", _fmt_um(x_ext)))
     rows.append(("Y extent", _fmt_um(y_ext)))
 
     if dataset.zdim_present:
-        z_all = dataset.z_pos_nm_all
-        z_ext = float(np.max(z_all) - np.min(z_all))
+        z_all = dataset.z_pos_nm_all[valid]
+        z_ext = float(np.ptp(z_all)) if len(z_all) else 0.0
         rows.append(("Z extent", _fmt_um(z_ext)))
 
     # STORM/PALM specific
@@ -250,6 +254,15 @@ class DatasetInfoPanel(QWidget):
 
     def update_dataset_ref(self):
         self.datasets = self._parent_ref.localization_datasets
+
+    def refresh_dataset(self, idx):
+        if not 0 <= idx < len(self._cards):
+            return
+        old = self._cards[idx]
+        new = _make_card(self.datasets[idx])
+        self._cards_layout.replaceWidget(old, new)
+        old.deleteLater()
+        self._cards[idx] = new
 
     def show_infos(self, filename, idx):
         """Add a card for the dataset at *idx* in self.datasets."""
