@@ -22,7 +22,7 @@ are written as the interface shows them.
 | **Save Scene…**, **Load Scene…** | Saves and restores settings | [Scenes](export.md#scenes) |
 | **Export OME-TIFF…** | Writes a calibrated image | [Exporting](export.md) |
 | **Scalebar**, **Size of Scalebar [nm]:** | A scale bar in the scene | [Scale bars](navigating.md#scale-bars) |
-| **Activate Rainbow colorcoding in Z** | Colours 3-D data by depth | [Colour](rendering.md#colour) |
+| **Colour code by:**, colormap, limits, **Auto** | Colours every localization by one property | [Colour](rendering.md#colour) |
 
 One card per dataset follows:
 

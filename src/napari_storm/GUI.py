@@ -2,8 +2,8 @@ import logging
 
 import numpy as np
 from qtpy import QtCore
-from qtpy.QtCore import Qt
-from qtpy.QtGui import QDoubleValidator, QFont
+from qtpy.QtCore import QLocale, Qt, Signal
+from qtpy.QtGui import QDoubleValidator, QFont, QIcon
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from napari_storm.colormap_factory import colormap_pixmap
 from napari_storm.core.footprints import DEFAULT_MIN_SIZE_PX, PALETTE
 from napari_storm.core.traces import (
     COLOR_BY_PROGRESS,
@@ -31,6 +32,8 @@ from napari_storm.core.traces import (
 )
 from napari_storm.CustomErrors import ParentError
 from napari_storm.ns_constants import (
+    COLOR_CODING_COLORMAPS,
+    DEFAULT_COLOR_CODING_COLORMAP,
     FWHM_TO_SIGMA,
     MAX_FWHM_NM,
     MIN_FWHM_NM,
@@ -318,10 +321,22 @@ class NapariStormGUI(QWidget):
         self.Cscalebar.setText("Scalebar")
         self.data_controls_tab_layout.addWidget(self.Cscalebar, 16, 0, 1, 1)
 
-        self.Bz_color_coding = QCheckBox()
-        self.Bz_color_coding.setText("Activate Rainbow colorcoding in Z")
-        self.Bz_color_coding.stateChanged.connect(self.colorcoding)
-        self.data_controls_tab_layout.addWidget(self.Bz_color_coding, 16, 2, 1, 2)
+        # Colour coding: any property, not only z.  "Off" carries no data.
+        self.Bcolor_by = QComboBox()
+        self.Bcolor_by.addItem("Off", None)
+        self.Bcolor_by.setToolTip(
+            "Colour every localization by this property instead of by the "
+            "channel colormap. Only in fixed-Gaussian mode, where the "
+            "colour carries no intensity weighting."
+        )
+        self.Bcolor_by.currentIndexChanged.connect(self._color_by_changed)
+        color_by_layout = QHBoxLayout()
+        color_by_layout.setContentsMargins(0, 0, 0, 0)
+        color_by_layout.addWidget(QLabel("Colour code by:"))
+        color_by_layout.addWidget(self.Bcolor_by, 1)
+        self.Wcolor_by = QWidget()
+        self.Wcolor_by.setLayout(color_by_layout)
+        self.data_controls_tab_layout.addWidget(self.Wcolor_by, 16, 2, 1, 2)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText("Size of Scalebar [nm]:")
@@ -346,7 +361,10 @@ class NapariStormGUI(QWidget):
         )
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
-        self.Lcolor_encoding_bar = ZColorCodingColorBarWidget()
+        self.Lcolor_encoding_bar = ColorCodingWidget()
+        self.Lcolor_encoding_bar.colormap_changed.connect(self._color_colormap_changed)
+        self.Lcolor_encoding_bar.limits_edited.connect(self._color_limits_edited)
+        self.Lcolor_encoding_bar.auto_toggled.connect(self._color_auto_toggled)
         self.Lcolor_encoding_bar.hide()
 
         self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_bar, 21, 0, 1, 4)
@@ -661,7 +679,7 @@ class NapariStormGUI(QWidget):
         self.Lsigma_z_min.hide()
         self.Esigma_min_xy.hide()
         self.Esigma_min_z.hide()
-        self.Bz_color_coding.hide()
+        self.Wcolor_by.hide()
         self.Lscalebarsize.hide()
         self.Esbsize.hide()
         self.Bmerge_with_additional_file.hide()
@@ -734,8 +752,6 @@ class NapariStormGUI(QWidget):
             self.Baxis_xz.show()
             self.Baxis_yz.show()
             self.Lresetview.show()
-            if self.z_color_encoding_mode == 0:
-                self.Bz_color_coding.show()
             self.Brenderoptions.show()
             self.Lrenderoptions.show()
             self.Esigma_z.show()
@@ -757,6 +773,7 @@ class NapariStormGUI(QWidget):
             # localizations' depth range, which for flat data *is* their plane,
             # so both are on the slice napari shows.
             self.viewer.dims.ndisplay = 2
+        self._sync_color_coding_controls()
 
 
 class TestListView(QListWidget):
@@ -835,88 +852,152 @@ class TestListView(QListWidget):
         )
 
 
-def _format_z_nm(value):
-    """A z coordinate, in nanometres below a micrometre and in µm above it."""
-    if abs(value) >= 1000:
-        return f"{value / 1000:.2f} µm"
-    return f"{value:.0f} nm"
+def _format_limit(value):
+    """A colour limit as the user would type it: short, without trailing zeros."""
+    return f"{value:.6g}"
 
 
-class ZColorCodingColorBarWidget(QWidget):
-    """The rainbow ramp, with the z values its two ends stand for.
+class ColorCodingWidget(QWidget):
+    """The colour-coding colormap, with the property values its ends stand for.
 
-    The ends were labelled with the literal words "min" and "max", held apart
-    by a run of spaces inside a single centred label.  So the bar said which
-    way z ran but not over what interval (issue #37), and the padding drifted
-    out of line with the bar's ends whenever the font or DPI changed.
+    The ends are editable, so the user can fix the interval -- frames 0 to
+    5000, say, or one z slab across several datasets -- and "Auto" hands them
+    back to the data.  One pair for every dataset, so the numbers describe the
+    whole scene: the bar no longer needs a note that each dataset is scaled to
+    its own range.
+
+    The ends used to be the literal words "min" and "max", held apart by a run
+    of spaces inside one centred label (issue #37); they are anchored to the
+    ends of the bar instead, so each number stays under its colour.
     """
 
-    def __init__(self):
-        super().__init__()
+    colormap_changed = Signal(str)
+    limits_edited = Signal(float, float)
+    auto_toggled = Signal(bool)
 
-        self.colorbar_set = False
-        self.setFixedWidth(256)
-        self.setFixedHeight(128)
-        self.title = QLabel("Z-color-encoding scalebar:")
+    BAR_WIDTH = 194
+
+    def __init__(self, colormaps=COLOR_CODING_COLORMAPS):
+        super().__init__()
+        self.title = QLabel("Colour code:")
+
+        self.colormap_selector = QComboBox()
+        for label, name in colormaps:
+            self.colormap_selector.addItem(
+                QIcon(colormap_pixmap(name, 64, 12)), label, name
+            )
+        self.colormap_selector.setCurrentIndex(
+            self.colormap_selector.findData(DEFAULT_COLOR_CODING_COLORMAP)
+        )
+        self.colormap_selector.currentIndexChanged.connect(
+            lambda _index: self._on_colormap_selected()
+        )
+
         self.colorbar = QLabel("")
 
-        # Anchored to the ends of the bar rather than centred with padding, so
-        # each number stays under the colour it describes at any font size.
-        self.low_label = QLabel()
-        self.high_label = QLabel()
-        self.high_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
+        self.low_edit = QLineEdit()
+        self.high_edit = QLineEdit()
+        for edit, hint in ((self.low_edit, "min"), (self.high_edit, "max")):
+            validator = QDoubleValidator(edit)
+            # A decimal point whatever the system locale, because float()
+            # reads the text.
+            validator.setLocale(QLocale.c())
+            edit.setValidator(validator)
+            edit.setPlaceholderText(hint)
+            edit.setMaximumWidth(90)
+            edit.editingFinished.connect(self._on_limits_edited)
+        self.high_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.unit_label = QLabel()
+        self.unit_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ends_layout = QHBoxLayout()
         ends_layout.setContentsMargins(0, 0, 0, 0)
-        ends_layout.addWidget(self.low_label)
+        ends_layout.addWidget(self.low_edit)
         ends_layout.addStretch(1)
-        ends_layout.addWidget(self.high_label)
+        ends_layout.addWidget(self.unit_label)
+        ends_layout.addStretch(1)
+        ends_layout.addWidget(self.high_edit)
         self.ends = QWidget()
         self.ends.setLayout(ends_layout)
 
-        # Every dataset is normalized to its own z extent by the planner, so a
-        # single pair of numbers speaks for the whole scene only while there is
-        # one dataset in it.  Saying so beats quietly labelling the bar with a
-        # range that is right for one channel and wrong for the others.
-        self.note = QLabel("Each dataset is scaled to its own z range.")
-        self.note.setWordWrap(True)
-        self.note.hide()
+        self.Cauto = QCheckBox("Auto")
+        self.Cauto.setChecked(True)
+        self.Cauto.setToolTip(
+            "Follow the data: a position spans the render-range window, any "
+            "other property the 1st to 99th percentile of the selected "
+            "localizations. Typing a limit turns this off."
+        )
+        self.Cauto.toggled.connect(self.auto_toggled.emit)
 
         self.layout = QFormLayout()
-        self.layout.addRow(self.title)
+        self.layout.addRow(self.title, self.colormap_selector)
         self.layout.addRow(self.colorbar)
         self.layout.addRow(self.ends)
-        self.layout.addRow(self.note)
-
+        self.layout.addRow(self.Cauto)
         self.setLayout(self.layout)
+        self._show_colormap(self.colormap)
         self.set_range(None, None)
 
-    def set_range(self, low_nm, high_nm, shared=True):
-        """Label the ends of the bar with the z values they encode.
+    @property
+    def colormap(self):
+        return self.colormap_selector.currentData()
 
-        A range of None -- no dataset, or no usable z extent -- falls back to
-        the words the bar showed before, which claim nothing.  *shared* is
-        False when more than one dataset is drawn, each on its own scale.
+    def set_colormap(self, name):
+        """Select *name* without announcing it; unknown names are ignored."""
+        index = self.colormap_selector.findData(name)
+        if index < 0:
+            return
+        self.colormap_selector.blockSignals(True)
+        self.colormap_selector.setCurrentIndex(index)
+        self.colormap_selector.blockSignals(False)
+        self._show_colormap(name)
+
+    def set_property(self, label, unit=""):
+        """Name the property being encoded, and the unit its limits are in."""
+        self.title.setText(f"Colour code: {label}")
+        self.unit_label.setText(unit)
+
+    def set_range(self, low, high, auto=None):
+        """Show the values at the two ends of the bar.
+
+        None -- no dataset, or nothing usable to scale against -- leaves the
+        fields empty under their "min"/"max" placeholders, which claim nothing.
+        *auto*, when given, also sets the Auto box without announcing it.
         """
         # bool(), because np.isfinite hands back numpy.bool_ and PyQt6 will
         # not accept that where it wants a bool.
         finite = bool(
-            low_nm is not None
-            and high_nm is not None
-            and np.isfinite(low_nm)
-            and np.isfinite(high_nm)
-            and high_nm >= low_nm
+            low is not None
+            and high is not None
+            and np.isfinite(low)
+            and np.isfinite(high)
         )
-        if finite:
-            self.low_label.setText(_format_z_nm(low_nm))
-            self.high_label.setText(_format_z_nm(high_nm))
-        else:
-            self.low_label.setText("min")
-            self.high_label.setText("max")
-        self.note.setVisible(finite and not shared)
+        self._shown = (
+            _format_limit(low) if finite else "",
+            _format_limit(high) if finite else "",
+        )
+        self.low_edit.setText(self._shown[0])
+        self.high_edit.setText(self._shown[1])
+        if auto is not None:
+            self.Cauto.blockSignals(True)
+            self.Cauto.setChecked(bool(auto))
+            self.Cauto.blockSignals(False)
 
-    def set_pixmap(self, scalebar_pixmap):
-        if not self.colorbar_set:
-            self.colorbar.setPixmap(scalebar_pixmap.scaledToWidth(194))
-            self.colorbar_set = True
+    def _show_colormap(self, name):
+        self.colorbar.setPixmap(colormap_pixmap(name, self.BAR_WIDTH, 24))
+
+    def _on_colormap_selected(self):
+        self._show_colormap(self.colormap)
+        self.colormap_changed.emit(self.colormap)
+
+    def _on_limits_edited(self):
+        if (self.low_edit.text(), self.high_edit.text()) == self._shown:
+            return  # focus left a field without changing it
+        try:
+            low = float(self.low_edit.text())
+            high = float(self.high_edit.text())
+        except ValueError:
+            return  # one end still empty or half typed
+        self.Cauto.blockSignals(True)
+        self.Cauto.setChecked(False)
+        self.Cauto.blockSignals(False)
+        self.limits_edited.emit(low, high)

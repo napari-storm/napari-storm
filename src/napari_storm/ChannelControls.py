@@ -134,7 +134,7 @@ class ChannelControls(QWidget):
         self.Slider_opacity.setRange(0, 100)
         self.Slider_opacity.setValue(100)
         self.Slider_opacity.hide()
-        self.Slider_opacity.valueChanged.connect(self.adjust_z_color_encoding_opacity)
+        self.Slider_opacity.valueChanged.connect(self.adjust_color_coding_opacity)
 
         # ── Layout ──
         layout = QGridLayout(self)
@@ -189,13 +189,9 @@ class ChannelControls(QWidget):
         self.setLayout(layout)
 
     @property
-    def z_color_encoding_mode(self):
-        # proxy to the parent widget's flag
-        return self._parent.z_color_encoding_mode
-
-    @z_color_encoding_mode.setter
-    def z_color_encoding_mode(self, value):
-        self._parent.z_color_encoding_mode = value
+    def color_coding_active(self):
+        # proxy to the parent widget's state
+        return bool(getattr(self._parent, "color_coding_active", False))
 
     @property
     def render_gaussian_mode(self):
@@ -272,10 +268,11 @@ class ChannelControls(QWidget):
         """Follow the backend into the other contrast model, if it moved.
 
         Called whenever something that decides the model may have changed:
-        the footprint, Z colour coding, or a rebuilt layer.
+        the footprint, colour coding, or a rebuilt layer.
         """
         summed = self.data_to_layer_itf.contrast_is_summed(self.dataset)
         if summed == self._summed:
+            self._sync_control_visibility()
             return
         self._slider_positions[self._summed] = self.Slider_colormap_range.value()
         self._summed = summed
@@ -285,9 +282,13 @@ class ChannelControls(QWidget):
         self.Slider_colormap_range.setValue(positions)
         self.Slider_colormap_range.blockSignals(False)
         self._on_contrast_slider_changed(self.Slider_colormap_range.value())
+        self._sync_control_visibility()
 
     def _on_contrast_slider_changed(self, vals):
         """Slider moved: compute/apply cutoff & max, then sync spins."""
+        if self.color_coding_active and not self._summed:
+            self._apply_color_coding_contrast()
+            return
         s_cutoff, s_logpos = vals
         data_min = self._orig_min
 
@@ -330,22 +331,63 @@ class ChannelControls(QWidget):
         self._on_contrast_slider_changed((lo, s_log))
 
     def change_color_map(self):
-        """Switch between HSV and the selected colormap."""
-        idx = self.Colormap_selector.currentIndex()
+        """Switch between the colour-coding colormap and the channel's own."""
+        coding = self.color_coding_active
+        if coding:
+            colormap = self._parent.render_config.color_colormap
+        else:
+            colormap = self.data_to_layer_itf.colormap[
+                self.Colormap_selector.currentIndex()
+            ]
         self.data_to_layer_itf.set_appearance(
             self.dataset,
-            colormap=(
-                "hsv"
-                if self.z_color_encoding_mode
-                else self.data_to_layer_itf.colormap[idx]
-            ),
-            # Z colour coding windows each localization's depth; everything
-            # else windows the summed image where the footprint has one.
-            summed_contrast=not self.z_color_encoding_mode,
+            colormap=colormap,
+            # The window acts on the summed image wherever the footprint has
+            # one.  While colour coding, overlapping localizations blend to
+            # their mean colour and the window sets only the brightness.
+            summed_contrast=True,
+            color_coded=coding,
         )
         self.sync_contrast_model()
+        if coding and not self._summed:
+            self._apply_color_coding_contrast()
 
-    def adjust_z_color_encoding_opacity(self):
+    def _apply_color_coding_contrast(self):
+        """Colour each localization on its own: show its [0, 1] unchanged.
+
+        For a footprint or backend without a sum.  The planner has mapped the
+        colour limits onto [0, 1]; the slider's window is scaled to whatever
+        value range the layer had when the control was built, and a colour
+        must not depend on which values happened to be drawn.
+        """
+        self.data_to_layer_itf.set_appearance(self.dataset, contrast_limits=(0.0, 1.0))
+
+    def set_color_coding_controls(self, enabled):
+        """The colour-coding controls while colour coding, and back."""
+        if self.show_channel_state:
+            # Not while hidden: the opacity reset would show the channel.
+            self.reset()
+        self.change_color_map()
+        self._sync_control_visibility()
+
+    def _sync_control_visibility(self):
+        """Show the controls that mean something in the current state.
+
+        Colour coding replaces the channel's colormap, and adds an opacity
+        slider for overlaying channels. The contrast window stays while there
+        is a sum for it to act on -- it then sets brightness from density --
+        and goes where each localization is coloured on its own.
+        """
+        coding = self.color_coding_active
+        shown = self.show_channel_state
+        contrast = shown and (not coding or self._summed)
+        self.Colormap_selector.setVisible(shown and not coding)
+        self.Slider_colormap_range.setVisible(contrast)
+        self.cutoff_spin.setVisible(contrast)
+        self.factor_spin.setVisible(contrast)
+        self.Slider_opacity.setVisible(shown and coding)
+
+    def adjust_color_coding_opacity(self):
         self.data_to_layer_itf.set_appearance(
             self.dataset, opacity=self.Slider_opacity.value() / 100.0
         )
@@ -407,25 +449,13 @@ class ChannelControls(QWidget):
             self.show_channel_state = False
             self.Bshow_channel.setChecked(False)
             self.data_to_layer_itf.set_appearance(self.dataset, opacity=0.0)
-            self.Slider_colormap_range.hide()
-            self.cutoff_spin.hide()
-            self.factor_spin.hide()
-            self.Colormap_selector.hide()
-            self.Slider_opacity.hide()
         else:
             # show channel
             self.show_channel_state = True
             self.Bshow_channel.setChecked(True)
-            if self.z_color_encoding_mode:
-                self.Slider_opacity.show()
-                self.Slider_colormap_range.hide()
-                self.cutoff_spin.hide()
-                self.factor_spin.hide()
-                self.Colormap_selector.hide()
+            if self.color_coding_active:
+                # Back at the opacity the slider shows, not left at zero.
+                self.adjust_color_coding_opacity()
             else:
                 self.data_to_layer_itf.set_appearance(self.dataset, opacity=1.0)
-                self.Slider_colormap_range.show()
-                self.cutoff_spin.show()
-                self.factor_spin.show()
-                self.Colormap_selector.show()
-                self.Slider_opacity.hide()
+        self._sync_control_visibility()

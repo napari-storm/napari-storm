@@ -47,7 +47,8 @@ in the [Data adjustment](filtering.md#adjusting-values) tab.
 
 * each dataset's name, the file it came from, its alignment and its
   appearance -- colormap, contrast, visibility;
-* the Gaussian width settings, the rendering style and the trace settings;
+* the Gaussian width settings, the rendering style, the trace settings and
+  the colour coding -- property, colormap and limits, or **Auto**;
 * reference images and their placement;
 * the camera.
 
@@ -56,3 +57,5 @@ from rather than duplicating it, so it stays small.
 
 **Load Scene…** applies a saved scene to the datasets that are loaded now; it
 does not open files itself. Open the same files first, then load the scene.
+If the scene colours by a property the loaded datasets do not all have, it
+says so and leaves colour coding off.

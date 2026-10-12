@@ -17,6 +17,7 @@ from .core import (
 )
 from .core.dataset_state import DriftChanged
 from .core.footprints import BLEND_OPAQUE, FOOTPRINT_GAUSSIAN, footprint_named
+from .core.render_planner import COLOR_AXES
 from .core.renderer import Changed, LayerAppearance
 from .core.traces import (
     BUILTIN_COLOR_BY,
@@ -650,7 +651,7 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         localizations brighter -- which the Gaussian sums into the image.  A
         marker is not summed: weighting its colour by them drew most of the
         cloud near-black, and the marker already shows the uncertainty as its
-        size and shape.  Z colour coding, the other use of the values, is only
+        size and shape.  Colour coding, the other use of the values, is only
         offered in fixed-size mode, where they are all equal anyway.
         """
         config = self.render_config
@@ -861,8 +862,70 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
             var_psf_sigma_z_nm=config.var_psf_sigma_z_nm,
             var_sigma_min_xy_nm=config.var_sigma_min_xy_nm,
             var_sigma_min_z_nm=config.var_sigma_min_z_nm,
-            z_color_encoding=bool(config.z_color_encoding),
+            color_by=config.color_by if config.gaussian_mode == 0 else None,
+            color_limits=self.color_limits(),
         )
+
+    #: Percentiles a column's automatic colour limits are taken at, so a few
+    #: extreme localizations -- a bright blink, a stray frame -- do not squeeze
+    #: everything else into one colour.
+    COLOR_LIMIT_PERCENTILES = (1, 99)
+
+    def color_limits(self):
+        """The property values at the two ends of the colour-coding colormap.
+
+        One pair for every dataset, so a single colour bar describes the whole
+        scene.  The user's, when they typed some; otherwise
+        :meth:`auto_color_limits`.  None when there is nothing to colour by.
+        """
+        config = self.render_config
+        if config.color_by is None:
+            return None
+        if config.color_limits is not None:
+            return tuple(float(v) for v in config.color_limits)
+        return self.auto_color_limits(config.color_by)
+
+    def auto_color_limits(self, name):
+        """Colour limits that follow the data, for property *name*.
+
+        An axis spans the current render-range window, so the colours stretch
+        over what is visible and recolour as the window moves -- what z colour
+        coding always did.  A column spans the 1st to 99th percentile of the
+        selected localizations of every dataset that has it.  None when no
+        dataset has a usable value.
+        """
+        if name in COLOR_AXES:
+            low, high = self.percent_to_absolute(
+                getattr(self, f"render_range_{name}"),
+                getattr(self.render_config, f"range_{name}_percent"),
+            )
+            if np.isfinite(low) and np.isfinite(high) and high >= low:
+                return float(low), float(high)
+            return None
+        datasets = [
+            d for d in self.parent.localization_datasets if d.table.has_field(name)
+        ]
+        key = (
+            name,
+            tuple(
+                (d.dataset_id, getattr(d.table, "selection_version", 0), id(d.table))
+                for d in datasets
+            ),
+        )
+        cached = getattr(self, "_auto_color_limits_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        parts = [np.asarray(d.table.filtered_field(name)) for d in datasets]
+        values = np.concatenate(parts) if parts else np.empty(0)
+        values = values[np.isfinite(values)]
+        limits = None
+        if values.size:
+            low, high = np.percentile(values, self.COLOR_LIMIT_PERCENTILES)
+            if not high > low:
+                low, high = values.min(), values.max()
+            limits = (float(low), float(high))
+        self._auto_color_limits_cache = (key, limits)
+        return limits
 
     @staticmethod
     def traits_of(dataset):

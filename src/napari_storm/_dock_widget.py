@@ -190,6 +190,7 @@ class napari_storm(NapariStormGUI):
         self.hide_testing_mode()
         self._sync_footprint_controls()
         self._sync_trace_controls()
+        self._sync_color_coding_controls()
         self._instances[id(napari_viewer)] = self
 
     @property
@@ -282,33 +283,34 @@ class napari_storm(NapariStormGUI):
     @render_gaussian_mode.setter
     def render_gaussian_mode(self, value):
         if value == 0 or value == 1:
-            if self.render_config.z_color_encoding == 1 and value == 1:
-                self.z_color_encoding_mode = 0
-                self.Bz_color_coding.hide()
-            else:
-                self.Bz_color_coding.show()
+            if value == 1 and self.render_config.color_by is not None:
+                # Variable mode's values are intensities; there is nothing
+                # left to carry a colour.
+                self.set_color_coding(color_by=None)
             self.render_config.gaussian_mode = value
+            self._sync_color_coding_controls()
         else:
             raise ValueError(
                 f"Wrong value for gaussian render mode, either 0 or 1 not {value} of type {type(value)}"
             )
 
     @property
+    def color_coding_active(self):
+        """Whether localizations are coloured by a property right now."""
+        return self.render_config.color_by is not None
+
+    @property
     def z_color_encoding_mode(self):
+        """1 while colouring by z.  Kept for callers from before `set_color_coding`."""
         return self.render_config.z_color_encoding
 
     @z_color_encoding_mode.setter
     def z_color_encoding_mode(self, value):
-        if value == 0 or value == 1:
-            if self.render_config.gaussian_mode == 0:
-                self.render_config.z_color_encoding = value
-            else:
-                self.render_config.z_color_encoding = 0
-                raise ValueError("Color Encoding only works for fixed gaussian mode")
-        else:
+        if value not in (0, 1):
             raise ValueError(
                 f"Wrong value for Z colorcoding, either 0 or 1 not {value} of type {type(value)}"
             )
+        self.set_color_coding(color_by="z" if value else None)
 
     @property
     def zdim(self):
@@ -510,7 +512,7 @@ class napari_storm(NapariStormGUI):
     def _on_layer_updated(self, channel_index):
         """Callback: DTL finished updating a layer, refresh channel controls."""
         self.channel[channel_index].adjust_colormap_range()
-        self.channel[channel_index].adjust_z_color_encoding_opacity()
+        self.channel[channel_index].adjust_color_coding_opacity()
         self.channel[channel_index].change_color_map()
 
     def scalebar_state_changed(self):
@@ -546,10 +548,10 @@ class napari_storm(NapariStormGUI):
         self._render_range_preview = None
         self.reset_render_range(full_reset=True)
         self.Lnumberoflocs.clear()
-        self.Bz_color_coding.setCheckState(Qt.CheckState.Unchecked)
         self.render_config.zdim = None
         self.hide_non_available_widgets()
         self._sync_trace_controls()
+        self._sync_color_coding_controls()
 
     def unload_dataset(self, dataset_or_index):
         """Unload one localization dataset and all of its associated UI state."""
@@ -595,6 +597,7 @@ class napari_storm(NapariStormGUI):
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
             )
         self._sync_trace_controls()
+        self._sync_color_coding_controls()
         return True
 
     def reset_render_range(self, full_reset=False):
@@ -616,7 +619,9 @@ class napari_storm(NapariStormGUI):
             self.render_range_slider_y_percent = values
         else:
             self.render_range_slider_z_percent = values
-            self._refresh_z_colorbar()
+        if self.render_config.color_by == slider_type:
+            # Auto limits on an axis follow the window just moved.
+            self._refresh_color_bar()
         if self.Cgrid_plane.isChecked():
             self.data_to_layer_itf.update_grid_plane(
                 line_distance_nm=self.grid_plane_line_distance_um * 1000
@@ -664,61 +669,154 @@ class napari_storm(NapariStormGUI):
             ChannelControls(parent=self, name=name, channel_index=len(self.channel))
         )
         self.channel_controls_widget_layout.addRow(self.channel[-1])
-        # A second dataset changes both the z extent and whether one pair of
-        # numbers can speak for the scene at all.
-        self._refresh_z_colorbar()
+        if self.color_coding_active:
+            self.channel[-1].set_color_coding_controls(True)
+        # A second dataset can change the extent the auto limits span.
+        self._refresh_color_bar()
 
-    def _refresh_z_colorbar(self):
-        """Label the z colour bar with the interval it currently encodes.
+    # ------------------------------------------------------------------
+    # Colour coding
+    # ------------------------------------------------------------------
 
-        The planner normalizes each dataset against its own z extent, so the
-        numbers only describe the whole scene while one dataset is loaded;
-        past that the bar says so rather than picking a channel to speak for.
+    #: Axis properties, as (label, unit).  They come first in the list, and z
+    #: only when every dataset has depth.
+    COLOR_AXIS_LABELS = {"x": ("x", "nm"), "y": ("y", "nm"), "z": ("z (depth)", "nm")}
+
+    _UNCHANGED = object()
+
+    def set_color_coding(
+        self, color_by=_UNCHANGED, colormap=_UNCHANGED, limits=_UNCHANGED
+    ):
+        """Colour every localization by a property, or stop.
+
+        Args:
+            color_by: ``"x"``, ``"y"``, ``"z"`` or the name of a numeric
+                column; None switches colour coding off and gives each channel
+                its own colormap back.  Fixed-Gaussian mode only.
+            colormap: a napari colormap name, e.g. one of
+                `ns_constants.COLOR_CODING_COLORMAPS`.  hsv by default.
+            limits: ``(low, high)`` in the property's unit, shared by every
+                dataset; None follows the data.
+
+        Arguments left out keep their current value.
         """
-        itf = getattr(self, "data_to_layer_itf", None)
-        if itf is None:
-            return
-        low, high = itf.percent_to_absolute(
-            itf.render_range_z, self.render_config.range_z_percent
-        )
-        self.Lcolor_encoding_bar.set_range(
-            low, high, shared=len(self.localization_datasets) <= 1
-        )
+        config = self.render_config
+        if color_by is not self._UNCHANGED:
+            if color_by is not None and config.gaussian_mode != 0:
+                raise ValueError("Colour coding only works in fixed Gaussian mode")
+            if color_by != config.color_by:
+                # Limits are in the old property's unit.
+                config.color_limits = None
+            config.color_by = color_by
+        if colormap is not self._UNCHANGED:
+            config.color_colormap = colormap
+        if limits is not self._UNCHANGED:
+            config.color_limits = (
+                None if limits is None else tuple(float(v) for v in limits)
+            )
+        self._sync_color_coding_controls()
+        self._apply_color_coding()
 
-    def colorcoding(self):
-        """Check if Colorcoding is choosen"""
-        enabled = self.Bz_color_coding.isChecked()
-        self.z_color_encoding_mode = enabled
-        if enabled:
-            for i in range(len(self.channel)):
-                self.channel[i].Colormap_selector.hide()
-                self.channel[i].Slider_opacity.show()
-                self.channel[i].Slider_colormap_range.hide()
-                self.channel[i].reset()
-                self.channel[i].Label.setText("Contrast " + self.channel[i].name)
-                self.Lcolor_encoding_bar.set_pixmap(
-                    self.data_to_layer_itf.colormap_icons[-1]
-                )
-                self.Lcolor_encoding_bar.show()
-            self._refresh_z_colorbar()
-        else:
-            for i in range(len(self.channel)):
-                self.channel[i].Colormap_selector.show()
-                self.channel[i].Slider_opacity.hide()
-                self.channel[i].Slider_colormap_range.show()
-                self.channel[i].Label.setText("Opacity " + self.channel[i].name)
-                self.channel[i].reset()
-                self.Lcolor_encoding_bar.hide()
+    def _sync_color_coding_controls(self):
+        """Offer the properties every loaded dataset can be coloured by.
+
+        The same intersection the trace colours use, plus the position axes:
+        a property only some datasets have would leave the others with no
+        colour at all.  A choice that is no longer offered switches off.
+        """
+        if not hasattr(self, "Bcolor_by"):
+            return
+        datasets = list(self.localization_datasets)
+        choices = [("Off", None)]
+        if datasets:
+            for axis, (label, _unit) in self.COLOR_AXIS_LABELS.items():
+                if axis != "z" or all(d.zdim_present for d in datasets):
+                    choices.append((label, axis))
+            choices += [(name, name) for name in self._color_columns(datasets)]
+        combo = self.Bcolor_by
+        offered = [(combo.itemText(i), combo.itemData(i)) for i in range(combo.count())]
+        config = self.render_config
+        fell_back = config.color_by not in {name for _label, name in choices}
+        if fell_back:
+            config.color_by = None
+            config.color_limits = None
+        combo.blockSignals(True)
+        if offered != choices:
+            combo.clear()
+            for label, name in choices:
+                combo.addItem(label, name)
+        combo.setCurrentIndex(max(combo.findData(config.color_by), 0))
+        combo.blockSignals(False)
+        self.Wcolor_by.setVisible(bool(datasets) and config.gaussian_mode == 0)
+        self.Lcolor_encoding_bar.set_colormap(config.color_colormap)
+        if fell_back and datasets:
+            self._apply_color_coding()
+
+    def _color_columns(self, datasets):
+        """Numeric columns every dataset in *datasets* has, positions left out.
+
+        Positions are offered as the x/y/z axes instead, which read them in
+        nanometres whatever unit the file stores, and follow drift correction.
+        """
+        common = None
+        for dataset in datasets:
+            table = dataset.table
+            positions = {
+                table.position_column(axis)
+                for axis in ("x", "y", "z")
+                if table.has_axis(axis)
+            }
+            names = [
+                name
+                for name in table.field_names
+                if name not in positions
+                and table.records.dtype[name].kind in "iuf"
+                and table.records.dtype[name].shape == ()
+            ]
+            common = names if common is None else [n for n in common if n in set(names)]
+        return common or []
+
+    def _color_by_changed(self, _index=None):
+        self.set_color_coding(color_by=self.Bcolor_by.currentData())
+
+    def _color_colormap_changed(self, name):
+        self.set_color_coding(colormap=name)
+
+    def _color_limits_edited(self, low, high):
+        self.set_color_coding(limits=(low, high))
+
+    def _color_auto_toggled(self, auto):
+        # Unticking keeps the colours where they are: the limits in use become
+        # the typed ones.
+        current = None if auto else self.data_to_layer_itf.color_limits()
+        self.set_color_coding(limits=current)
+
+    def _refresh_color_bar(self):
+        """Label the colour bar with the property and the interval it encodes."""
+        itf = getattr(self, "data_to_layer_itf", None)
+        config = self.render_config
+        if itf is None or config.color_by is None:
+            return
+        label, unit = self.COLOR_AXIS_LABELS.get(config.color_by, (config.color_by, ""))
+        bar = self.Lcolor_encoding_bar
+        bar.set_property(label, unit)
+        limits = itf.color_limits() if self.localization_datasets else None
+        bar.set_range(*(limits or (None, None)), auto=config.color_limits is None)
+
+    def _apply_color_coding(self):
+        """Bring the channel controls and every layer in line with the config."""
+        enabled = self.color_coding_active
+        for channel in self.channel:
+            channel.set_color_coding_controls(enabled)
+        self.Lcolor_encoding_bar.setVisible(enabled)
+        self._refresh_color_bar()
         self.data_to_layer_itf.update_layer_appearance()
 
     def _render_options_changed(self):
-        only_storm_datasets = True
-        zdim_present = True
-        for dataset in self.localization_datasets:
-            if not isinstance(dataset, StormDataClass):
-                only_storm_datasets = False
-            if not dataset.zdim_present:
-                zdim_present = False
+        only_storm_datasets = all(
+            isinstance(dataset, StormDataClass)
+            for dataset in self.localization_datasets
+        )
         if only_storm_datasets is False:
             self.Brenderoptions.setCurrentIndex(0)
         if self.Brenderoptions.currentText() == self.gaussian_render_modes[1]:
@@ -727,9 +825,6 @@ class napari_storm(NapariStormGUI):
             self.Lsigma_z.setText("PSF FWHM in Z [nm]")
             self.Esigma_xy.setText("300")
             self.Esigma_z.setText("700")
-            self.Bz_color_coding.hide()
-            self.Bz_color_coding.setCheckState(Qt.CheckState.Unchecked)
-            self.Lcolor_encoding_bar.hide()
             self.Esigma_min_xy.show()
             if self.zdim:
                 self.Esigma_min_z.show()
@@ -742,13 +837,10 @@ class napari_storm(NapariStormGUI):
             self.Lsigma_xy.setText("FWHM in XY [nm]")
             self.Esigma_xy.setText("20")
             self.Esigma_z.setText("20")
-            self.Bz_color_coding.show()
             self.Esigma_min_xy.hide()
             self.Esigma_min_z.hide()
             self.Lsigma_xy_min.hide()
             self.Lsigma_z_min.hide()
-        if not zdim_present:
-            self.Bz_color_coding.hide()
         self.data_to_layer_itf.update_layer_appearance()
         self._sync_footprint_controls()
 
@@ -1169,6 +1261,7 @@ class napari_storm(NapariStormGUI):
             )
         self._sync_footprint_controls()
         self._sync_trace_controls()
+        self._sync_color_coding_controls()
         return True
 
     def add_dataset_entries_for_all_itfs(self, dataset):
@@ -1190,6 +1283,7 @@ class napari_storm(NapariStormGUI):
         self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
         self._sync_footprint_controls()
         self._sync_trace_controls()
+        self._sync_color_coding_controls()
 
     # ------------------------------------------------------------------
     # Scene persistence
@@ -1228,7 +1322,13 @@ class napari_storm(NapariStormGUI):
         files and re-applies these, so a scene cannot go stale against the data
         it describes.
         """
-        from .core import CameraState, DatasetEntry, ReferenceImageEntry, Scene
+        from .core import (
+            CameraState,
+            ColorCodingEntry,
+            DatasetEntry,
+            ReferenceImageEntry,
+            Scene,
+        )
 
         store = self.dataset_store
         datasets = []
@@ -1269,6 +1369,11 @@ class napari_storm(NapariStormGUI):
             datasets=tuple(datasets),
             reference_images=tuple(images),
             gaussian=self.data_to_layer_itf.gaussian_settings(),
+            color_coding=ColorCodingEntry(
+                color_by=self.render_config.color_by,
+                colormap=self.render_config.color_colormap,
+                limits=self.render_config.color_limits,
+            ),
             camera=CameraState(
                 center_nm=tuple(float(v) for v in camera.center),
                 zoom=float(camera.zoom),
@@ -1301,6 +1406,9 @@ class napari_storm(NapariStormGUI):
         unmatched = []
         restored_style = {}
         restored_traces = {}
+        # Before the per-dataset appearance: switching colour coding resets
+        # each channel's contrast, which the scene's own contrast then replaces.
+        self._restore_color_coding(scene.color_coding)
         for entry in scene.datasets:
             dataset = by_name.get(entry.name)
             if dataset is None:
@@ -1353,6 +1461,32 @@ class napari_storm(NapariStormGUI):
                 + ". Open them and load the scene again to place them."
             )
         return unmatched
+
+    def _restore_color_coding(self, entry):
+        """Put a saved colour coding back, or say why it cannot be."""
+        if entry is None:
+            return  # the scene predates colour coding: leave it alone
+        offered = {self.Bcolor_by.itemData(i) for i in range(self.Bcolor_by.count())}
+        color_by = entry.color_by
+        if color_by is not None and (
+            color_by not in offered or self.render_config.gaussian_mode != 0
+        ):
+            self._warn_user(
+                f"the scene colours by {color_by!r}, which "
+                + (
+                    "needs fixed-size Gaussians"
+                    if self.render_config.gaussian_mode != 0
+                    else "not every loaded dataset has"
+                )
+                + "; colour coding is off."
+            )
+            color_by = None
+        # One call: a new property drops the old limits before these apply.
+        self.set_color_coding(
+            color_by=color_by,
+            colormap=entry.colormap,
+            limits=entry.limits if color_by is not None else None,
+        )
 
     def load_scene_from(self, path):
         """Read a scene from *path* and apply it."""

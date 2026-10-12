@@ -48,8 +48,9 @@ single localization. Raise **×Range** in the dataset's card; see
 with precisions; it is not offered while MINFLUX or plain localizations are
 loaded.
 
-**Rainbow depth colouring is missing.** It needs 3-D data and fixed-size
-Gaussians.
+**"Colour code by" is missing.** It needs fixed-size Gaussians. Colouring by
+**z (depth)** also needs every loaded dataset to be 3-D, and a column is only
+offered when every loaded dataset has it.
 
 **"Connect traces" is greyed out.** None of the loaded datasets records which
 localizations form a trace -- only MINFLUX data does.

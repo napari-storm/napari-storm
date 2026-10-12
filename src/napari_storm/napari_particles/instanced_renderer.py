@@ -141,6 +141,8 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
             layer.contrast_limits = list(appearance.contrast_limits)
         if appearance.summed_contrast is not None:
             layer.summed_contrast = appearance.summed_contrast
+        if appearance.color_coded is not None:
+            layer.color_coded = appearance.color_coded
         if appearance.visible is not None:
             layer.visible = bool(appearance.visible)
         if appearance.min_size_px is not None:
@@ -163,6 +165,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
             footprint=layer.footprint,
             min_size_px=layer.min_size_px,
             summed_contrast=layer.summed_contrast,
+            color_coded=layer.color_coded,
             **self._traces.appearance_fields(dataset_id),
             **self._pairs.appearance_fields(dataset_id),
         )

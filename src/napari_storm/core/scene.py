@@ -12,7 +12,8 @@ the localizations:
 * where each dataset's file is, and where the dataset sits in world space,
 * how it is displayed -- colormap, opacity, contrast, visibility, rendering
   style, and whether its traces are connected and how,
-* how localizations are turned into Gaussians,
+* how localizations are turned into Gaussians, and what colours them when
+  colour coding,
 * where reference images are and how they are placed,
 * where the camera was.
 
@@ -38,6 +39,7 @@ __all__ = [
     "SCENE_FORMAT",
     "SCENE_VERSION",
     "CameraState",
+    "ColorCodingEntry",
     "DatasetEntry",
     "ReferenceImageEntry",
     "Scene",
@@ -70,6 +72,21 @@ class CameraState:
     zoom: float = 1.0
     angles: tuple = (0.0, 0.0, 90.0)
     ndisplay: int = 3
+
+
+@dataclass
+class ColorCodingEntry:
+    """Colour coding by a property, as the user set it.
+
+    *limits* are the ones the user typed, or None for "Auto" -- not the values
+    Auto happened to resolve to when the scene was saved, which would freeze
+    a choice the user left to the data.  `Scene.gaussian` carries those, as
+    what was drawn.
+    """
+
+    color_by: str = None
+    colormap: str = "hsv"
+    limits: tuple = None
 
 
 @dataclass
@@ -106,6 +123,9 @@ class Scene:
     reference_images: tuple = ()
     gaussian: GaussianSettings = field(default_factory=GaussianSettings)
     camera: CameraState = field(default_factory=CameraState)
+    #: None when the scene says nothing about colour coding -- one written
+    #: before it was saved -- so loading it leaves colour coding as it is.
+    color_coding: ColorCodingEntry = None
 
     # ------------------------------------------------------------------
 
@@ -117,6 +137,13 @@ class Scene:
             "length_unit": LENGTH_UNIT,
             "gaussian": asdict(self.gaussian),
             "camera": asdict(self.camera),
+            # Written only when set, like the newer appearance fields, so a
+            # reader that predates it ignores it and needs no new version.
+            **(
+                {}
+                if self.color_coding is None
+                else {"color_coding": _color_coding_to_dict(self.color_coding)}
+            ),
             "datasets": [
                 {
                     "name": entry.name,
@@ -186,6 +213,7 @@ class Scene:
             ),
             gaussian=_dataclass_from_dict(GaussianSettings, raw.get("gaussian")),
             camera=_dataclass_from_dict(CameraState, raw.get("camera")),
+            color_coding=_color_coding_from_dict(raw),
         )
 
 
@@ -248,6 +276,39 @@ def _appearance_from_dict(raw):
         )
     except ValueError as exc:
         raise SceneFormatError(f"invalid appearance: {exc}") from None
+
+
+def _color_coding_to_dict(entry):
+    return {
+        "color_by": entry.color_by,
+        "colormap": entry.colormap,
+        "limits": None if entry.limits is None else [float(v) for v in entry.limits],
+    }
+
+
+def _color_coding_from_dict(raw):
+    """The scene's colour coding, or None if it does not say.
+
+    Scenes from before colour coding took any property record only
+    ``gaussian.z_color_encoding``; true there means colour by z, in hsv,
+    scaled to the data.
+    """
+    block = raw.get("color_coding")
+    if isinstance(block, dict):
+        limits = block.get("limits")
+        if limits is not None:
+            if len(limits) != 2:
+                raise SceneFormatError(f"colour limits need two values, not {limits!r}")
+            limits = (float(limits[0]), float(limits[1]))
+        return ColorCodingEntry(
+            color_by=block.get("color_by"),
+            colormap=block.get("colormap") or "hsv",
+            limits=limits,
+        )
+    gaussian = raw.get("gaussian")
+    if isinstance(gaussian, dict) and "z_color_encoding" in gaussian:
+        return ColorCodingEntry(color_by="z" if gaussian["z_color_encoding"] else None)
+    return None
 
 
 def _transform_from_dict(raw):

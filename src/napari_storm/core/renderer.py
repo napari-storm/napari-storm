@@ -116,9 +116,16 @@ class LayerAppearance:
             the number of localizations overlapping on screen -- so the lower
             one hides sparse regions and keeps dense ones, as on any image.
             Opaque footprints have no sum and are always windowed per
-            localization; so is Z colour coding, which turns it off because
-            its values are depths, not weights.  On unless set otherwise, on
-            backends that can; see `LocalizationRenderer.contrast_is_summed`.
+            localization.  On unless set otherwise, on backends that can; see
+            `LocalizationRenderer.contrast_is_summed`.
+        color_coded: the values are positions on the colormap -- a property
+            mapped onto ``[0, 1]`` by the planner -- not intensities.  With
+            summed contrast, overlapping localizations then blend to the
+            weighted mean of their colours, and the window acts on the summed
+            weight alone: it sets brightness, the property sets colour.
+            Without summed contrast each localization is coloured on its own,
+            and ``contrast_limits`` of ``(0, 1)`` show the property unchanged.
+            Off until set.
         traces: connect each trace's localizations in time order, drawn over
             the dataset.  Needs trace vertices in the request -- plan with
             ``RenderPlanner.plan(..., trace_column=...)``; see `core.traces`.
@@ -144,6 +151,7 @@ class LayerAppearance:
     trace_color_by: str = None
     trace_width_px: float = None
     pairs: bool = None
+    color_coded: bool = None
 
     def __post_init__(self):
         if self.footprint is not None:
@@ -176,8 +184,9 @@ class RenderRequest:
             screen-space budget.  It is the *support* of the Gaussian, never
             its scale: a request whose size was clamped draws a Gaussian cut
             short, not a narrower one.
-        values: ``(N,)`` float32 per-localization intensity, or colour index
-            when Z encoding is on.
+        values: ``(N,)`` float32 per-localization intensity, or the position
+            on the colormap while colour coding; see
+            ``LayerAppearance.color_coded``.
         name: what the layer is called in the host.
         colormap: backend-defined palette handle, passed through untouched.
             Defaults to :data:`DEFAULT_COLORMAP` rather than to None, because

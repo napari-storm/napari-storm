@@ -110,7 +110,7 @@ dataset:
 
 ![A close-up of the spectrin sample at 8 nm FWHM](images/spectrin-detail.png)
 
-Tick **Activate Rainbow colorcoding in Z** to colour by depth as well.
+Choose **z (depth)** under **Colour code by** to colour by depth as well.
 [Rendering and contrast](rendering.md) explains what these numbers mean.
 
 ## 6. Look at it in 3-D

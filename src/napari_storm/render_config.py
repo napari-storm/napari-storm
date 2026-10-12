@@ -6,6 +6,7 @@ from .core.footprints import DEFAULT_MIN_SIZE_PX, FOOTPRINT_GAUSSIAN
 from .core.traces import COLOR_BY_TRACE, DEFAULT_TRACE_WIDTH_PX
 from .memory_budget import MAX_SPLAT_FRACTION_OF_FOV, default_render_budget_mb
 from .ns_constants import (
+    DEFAULT_COLOR_CODING_COLORMAP,
     DEFAULT_FIXED_FWHM_XY_NM,
     DEFAULT_FIXED_FWHM_Z_NM,
     DEFAULT_GRID_LINE_DISTANCE_UM,
@@ -41,8 +42,13 @@ class RenderConfig:
     var_sigma_min_xy_nm: float = DEFAULT_VAR_MIN_FWHM_XY_NM / FWHM_TO_SIGMA
     var_sigma_min_z_nm: float = DEFAULT_VAR_MIN_FWHM_Z_NM / FWHM_TO_SIGMA
 
-    # Z color encoding: False/0 = off, True/1 = on
-    z_color_encoding: int = 0
+    # Colour coding: colour every localization by one property -- "x", "y",
+    # "z" or a column name -- instead of the channel colormap.  None is off.
+    color_by: str | None = None
+    color_colormap: str = DEFAULT_COLOR_CODING_COLORMAP
+    # Property values at the two ends of the colormap, shared by every
+    # dataset.  None follows the data: see DataToLayerInterface.color_limits.
+    color_limits: tuple[float, float] | None = None
 
     # What every localization is drawn as: a name from core.footprints.PALETTE.
     # The scientific Gaussian, or an alternative visualisation.
@@ -80,3 +86,16 @@ class RenderConfig:
     # a single Gaussian's on-screen footprint, which memory cannot bound.
     render_budget_mb: float = field(default_factory=default_render_budget_mb)
     max_splat_fraction_of_fov: float = MAX_SPLAT_FRACTION_OF_FOV
+
+    @property
+    def z_color_encoding(self):
+        """1 while colouring by z, else 0.  Kept for embedders written before
+        colour coding took any property; new code sets `color_by`."""
+        return int(self.color_by == "z")
+
+    @z_color_encoding.setter
+    def z_color_encoding(self, value):
+        if value:
+            self.color_by = "z"
+        elif self.color_by == "z":
+            self.color_by = None

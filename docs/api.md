@@ -70,6 +70,12 @@ drawn. `DatasetTraits` is what a format actually recorded — variable-size mode
 needs some measure of uncertainty, and which one exists is a property of the
 file, not a guess from a column full of ones.
 
+`GaussianSettings(color_by=..., color_limits=(low, high))` colours by a
+property instead of by intensity: `"x"`, `"y"`, `"z"` (in nanometres, following
+display offsets) or any numeric column. The planner maps the limits onto
+`[0, 1]` and clips beyond them; without limits each dataset spans its own
+extent. Fixed-size mode only.
+
 ### `RenderRequest`, `LayerAppearance`, `Changed`
 
 `RenderRequest` is everything a backend needs for one dataset. Its `colormap`
@@ -84,7 +90,9 @@ as the smallest on-screen size; see
 [alternative visualisations](embedding.md#alternative-visualisations).
 `summed_contrast` says whether an additive footprint's `contrast_limits` window
 the summed image (the default) or each localization; a backend reports what is
-in effect through `contrast_is_summed(dataset_id)`. `traces`,
+in effect through `contrast_is_summed(dataset_id)`. `color_coded` says the
+values are colormap positions rather than intensities: summed, overlaps blend
+to their weighted mean colour and the window sets brightness. `traces`,
 `trace_color_by` and `trace_width_px` draw a dataset's traces over it; see
 [traces](embedding.md#traces).
 
@@ -189,6 +197,12 @@ viewing.
 
 The dock widget. Owns the store, the interfaces and the tabs (Data Controls,
 File Infos, Decorators, Data Filter, Data adjustment).
+
+`set_color_coding(color_by=..., colormap=..., limits=...)` sets colour coding
+-- saved in scenes as `Scene.color_coding`, a `ColorCodingEntry` --
+the way the Data Controls do; arguments left out keep their value, and
+`color_by=None` switches it off. `z_color_encoding_mode = 1` still means
+`color_by="z"`.
 
 ### `DataToLayerInterface`
 

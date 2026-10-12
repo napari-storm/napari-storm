@@ -167,6 +167,12 @@ class TableSelection:
     def has_photons(self):
         return self._table.has_photons()
 
+    def field(self, name):
+        """Any one numeric column over these rows, as stored."""
+        if self.kind == FILTERED:
+            return self._table.filtered_field(name)
+        return self._table.active_field(name)
+
     def __len__(self):
         return self.n
 
@@ -256,10 +262,10 @@ class LocalizationTable:
         self._display_mask = None
         self._n_filtered = 0
         self._n_active = 0
-        # Keyed by ``("pos", axis)``, ``("sigma", axis)`` and ``("photons",)``
-        # rather than by axis alone: every derived column wants the same
-        # three-stage caching, and one mechanism is cheaper to keep correct
-        # than three that have to be invalidated in step.
+        # Keyed by ``("pos", axis)``, ``("sigma", axis)``, ``("photons",)`` and
+        # ``("field", name)`` rather than by axis alone: every derived column
+        # wants the same three-stage caching, and one mechanism is cheaper to
+        # keep correct than several that have to be invalidated in step.
         self._all_nm_cache = {}
         self._filtered_nm_cache = {}
         self._active_nm_cache = {}
@@ -418,6 +424,14 @@ class LocalizationTable:
         if values.shape != (len(self),):
             raise ValueError("Side columns need one value per row")
         self._side_columns[name] = _readonly(values.copy())
+        # A derived copy of the old values must not outlive them.
+        key = ("field", name)
+        for cache in (
+            self._all_nm_cache,
+            self._filtered_nm_cache,
+            self._active_nm_cache,
+        ):
+            cache.pop(key, None)
 
     @property
     def records(self):
@@ -713,6 +727,8 @@ class LocalizationTable:
 
     def _compute(self, key):
         kind = key[0]
+        if kind == "field":
+            return np.asarray(self.column(key[1]), dtype=COORDINATE_DTYPE)
         if kind == "photons":
             # No length unit, so no conversion -- only the dtype normalization
             # every other derived column gets.
@@ -774,6 +790,16 @@ class LocalizationTable:
     def active_photons(self):
         """Photon counts over the rows actually drawn."""
         return self._active(("photons",))
+
+    # -- any other column ----------------------------------------------
+
+    def filtered_field(self, name):
+        """Column *name* over the user-selected rows, in its stored unit."""
+        return self._filtered(("field", name))
+
+    def active_field(self, name):
+        """Column *name* over the rows actually drawn, in its stored unit."""
+        return self._active(("field", name))
 
     def selection(self, kind=ACTIVE):
         """A uniform accessor for one of the two row selections.

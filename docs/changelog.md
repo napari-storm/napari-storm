@@ -5,6 +5,14 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
 ## Unreleased
 
+* **Colour coding by any property.** **Colour code by** replaces **Activate
+  Rainbow colorcoding in Z**: colour by x, y, z or any numeric column -- frame,
+  photons, uncertainty -- in 2-D as well as 3-D, with HSV (still the default),
+  grey, perceptual or diverging colormaps. The limits are shared by every
+  dataset, follow the data by default and can be typed. Overlapping
+  localizations blend to their mean colour, so dense regions no longer turn
+  white, and the contrast slider sets brightness from density. Colour coding
+  is saved in scenes. See [Colour](rendering.md#colour).
 * **Drift correction with COMET.** A new **Post-proc.** tab runs
   [COMET](https://github.com/gpufit/Comet) drift correction in the background,
   with progress, Cancel and a memory estimate before each run, and optional

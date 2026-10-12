@@ -29,7 +29,12 @@ from .validation import (
 )
 from .world_transform import IDENTITY
 
-__all__ = ["GaussianSettings", "DatasetTraits", "RenderPlanner"]
+__all__ = ["COLOR_AXES", "GaussianSettings", "DatasetTraits", "RenderPlanner"]
+
+#: Colour-coding properties that name a position axis rather than a column.
+#: They are read in nanometres and follow display offsets, so a drift-corrected
+#: dataset is coloured by where it is drawn.
+COLOR_AXES = ("x", "y", "z")
 
 #: Percentile above which variable-mode sigmas are clipped, so a handful of
 #: enormous uncertainties cannot set the scale for everything else.
@@ -71,8 +76,13 @@ class GaussianSettings:
     var_psf_sigma_z_nm: float = 700 / 2.354
     var_sigma_min_xy_nm: float = 10 / 2.354
     var_sigma_min_z_nm: float = 10 / 2.354
-    #: Colour by depth instead of by intensity.  Fixed mode only.
-    z_color_encoding: bool = False
+    #: Colour by this property instead of by intensity: an axis from
+    #: :data:`COLOR_AXES` or a column name.  None is off.  Fixed mode only,
+    #: because in variable mode the values carry the intensity weighting.
+    color_by: str | None = None
+    #: The property values mapped onto the two ends of the colormap, in the
+    #: property's own unit.  None scales each dataset to its own extent.
+    color_limits: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -194,7 +204,7 @@ class RenderPlanner:
     # ------------------------------------------------------------------
 
     def values(self, rows, settings, traits):
-        """Per-localization intensity, or depth when Z encoding is on."""
+        """Per-localization intensity, or the colour-coding property when set."""
         if settings.mode == 0:
             values = np.ones(rows.n, dtype=np.float32)
         else:
@@ -205,13 +215,45 @@ class RenderPlanner:
                 )
             values = self._variable_values(rows, settings, traits)
 
-        if settings.z_color_encoding:
-            if not traits.zdim_present:
-                raise InvalidLocalizationData("no z coordinate to colour by")
-            values = np.array(rows.coordinate_nm("z"), dtype=np.float32, copy=True)
-            values = _normalized(values)
+        values = require_positive_maximum(values, "render values")
+        if settings.color_by is not None:
+            values = self.color_values(rows, settings, traits)
+        return values
 
-        return require_positive_maximum(values, "render values")
+    def color_values(self, rows, settings, traits, offset_nm=None):
+        """Each localization's colour-coding property, mapped onto ``[0, 1]``.
+
+        Values outside ``settings.color_limits`` take the colour at that end,
+        and a missing (NaN) value the colour of the low end.  *offset_nm*, the
+        ``(N, 3)`` x/y/z display offsets, moves an axis property along with the
+        drawn positions; in data units like the positions, not world units,
+        which a mirrored transform would turn upside down.
+        """
+        name = settings.color_by
+        if name in COLOR_AXES:
+            if name == "z" and not traits.zdim_present:
+                raise InvalidLocalizationData("no z coordinate to colour by")
+            raw = np.asarray(rows.coordinate_nm(name), dtype=np.float64)
+            if offset_nm is not None:
+                raw = raw + np.asarray(offset_nm)[:, COLOR_AXES.index(name)]
+        else:
+            try:
+                raw = np.asarray(rows.field(name), dtype=np.float64)
+            except (KeyError, AttributeError, ValueError):
+                raise InvalidLocalizationData(f"no column {name!r} to colour by")
+        if settings.color_limits is not None:
+            low, high = (float(v) for v in settings.color_limits)
+        else:
+            finite = raw[np.isfinite(raw)]
+            low, high = (
+                (float(finite.min()), float(finite.max())) if finite.size else (0, 1)
+            )
+        if not high > low:
+            # One value, or limits typed the wrong way round: everything
+            # takes the middle colour rather than dividing by nothing.
+            return np.full(raw.shape, 0.5, dtype=np.float32)
+        scaled = np.clip((raw - low) / (high - low), 0.0, 1.0)
+        return np.nan_to_num(scaled, nan=0.0).astype(np.float32)
 
     def _variable_values(self, rows, settings, traits):
         """Unit-volume weighting: brighter where the Gaussian is tighter."""
@@ -340,7 +382,7 @@ class RenderPlanner:
                 "variable-Gaussian mode needs either uncertainty or photon "
                 "counts, and this dataset carries neither"
             )
-        if settings.z_color_encoding and not traits.zdim_present:
+        if settings.color_by == "z" and not traits.zdim_present:
             raise InvalidLocalizationData("no z coordinate to colour by")
         rows = table.selection(selection)
         sigmas, size = self.sigmas(rows, settings, traits)
@@ -356,14 +398,9 @@ class RenderPlanner:
                     transform.scale[2 - i] if a != "z" or traits.zdim_present else 1.0
                 )
         values = self.values(rows, settings, traits)
-        if settings.z_color_encoding and position_offset is not None:
-            # Colour follows the displayed depth, in data units like values()
-            # does without an offset -- not world units, which a mirrored
-            # transform would turn upside down.
-            depth = np.asarray(rows.coordinate_nm("z"), dtype=np.float64) + offset[:, 2]
-            values = require_positive_maximum(
-                _normalized(depth.astype(np.float32)), "render values"
-            )
+        if settings.color_by in COLOR_AXES and position_offset is not None:
+            # Colour follows the displayed position.
+            values = self.color_values(rows, settings, traits, offset_nm=offset)
         pair_vertices = None
         if pairs is not None:
 

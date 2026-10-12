@@ -82,7 +82,7 @@ and lets you assign your data. This should work for any .hdf5, .csv or .npy file
 When a dataset is imported you should be able to see five tabs in the widget: Data Controls, File Infos, Decorators,
 Data Filter and Data adjustment. In the data controls tab you can change the render range, load
 a new file, merge the currently open dataset with another file and change your view.
-There is also the option to change the colormap, add a scalebar or activate rainbow colour coding (for 3D datasets),
+There is also the option to change the colormap, add a scalebar or colour code the localizations by any property -- depth, frame, photons, ... -- with a choice of colormaps,
 and adjust the contrast with the slider beneath the colormap. The contrast acts on the reconstruction itself -- the
 Gaussians summed where they overlap -- so its lower handle hides sparse regions while keeping dense ones, and its upper
 handle sets how many overlapping localizations it takes to reach full brightness.

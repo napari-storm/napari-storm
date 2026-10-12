@@ -80,7 +80,7 @@ def test_a_correction_cannot_add_an_axis_to_an_existing_stash():
 def test_z_colour_does_not_flip_on_a_mirrored_dataset_with_a_drift():
     table = LocalizationTable(fixture(10))
     planner = RenderPlanner()
-    settings = GaussianSettings(z_color_encoding=True)
+    settings = GaussianSettings(color_by="z")
     traits = DatasetTraits(zdim_present=True)
     mirrored = WorldTransform(scale=(1.0, 1.0, -1.0))
     plain = planner.plan(table, settings, traits, name="d", transform=mirrored)
@@ -99,7 +99,7 @@ def test_new_fields_come_last_for_hosts_that_construct_positionally():
     names = [f.name for f in RenderRequest.__dataclass_fields__.values()]
     assert names[-2:] == ["traces", "pairs"]
     names = [f.name for f in LayerAppearance.__dataclass_fields__.values()]
-    assert names[-1] == "pairs"
+    assert names[-2:] == ["pairs", "color_coded"]
 
 
 def test_frame_column_is_guarded_whatever_its_name(dock):
