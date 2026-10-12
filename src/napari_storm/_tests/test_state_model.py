@@ -264,7 +264,7 @@ def test_z_colouring_without_z_is_refused():
     with pytest.raises(InvalidLocalizationData):
         RenderPlanner().plan(
             _table(),
-            GaussianSettings(z_color_encoding=True),
+            GaussianSettings(color_by="z"),
             DatasetTraits(zdim_present=False),
             name="flat",
         )

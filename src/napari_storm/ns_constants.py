@@ -15,6 +15,24 @@ DEFAULT_VAR_MIN_FWHM_XY_NM = 10
 DEFAULT_VAR_MIN_FWHM_Z_NM = 10
 DEFAULT_SCALEBAR_NM = 500
 DEFAULT_GRID_LINE_DISTANCE_UM = 1.0
+
+# Colour coding by a property: the colormaps offered, as (label, napari name).
+# hsv first and the default, because it was the only one before.  Grey and the
+# perceptual maps read as "more is brighter"; the diverging ones put the middle
+# of the range at a neutral colour and the two ends at opposite hues.
+DEFAULT_COLOR_CODING_COLORMAP = "hsv"
+COLOR_CODING_COLORMAPS = (
+    ("HSV (rainbow)", "hsv"),
+    ("Grey", "gray"),
+    ("Viridis", "viridis"),
+    ("Magma", "magma"),
+    ("Plasma", "plasma"),
+    ("Turbo", "turbo"),
+    ("Cool-warm", "coolwarm"),
+    ("Blue-white-red", "bwr"),
+    ("Red-white-blue", "RdBu"),
+    ("Pink-white-green", "PiYG"),
+)
 PERCENTILE_CLIP = 99
 
 #: The plane flat (2-D) localizations are drawn on, in nanometres.  A reference

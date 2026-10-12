@@ -108,11 +108,30 @@ The **colormap** menu in each card offers red, green, blue, yellow, cyan,
 pink, orange, mint, purple, gray and red hot. Choosing different colormaps for
 different datasets is how channels are told apart.
 
-**Activate Rainbow colorcoding in Z** colours 3-D data by depth instead. A
-colour bar with the depth range appears in Data Controls; each dataset is
-scaled to its own z range. While it is on, each card shows an opacity slider
-instead of a colormap. It is not available for 2-D data or with
-variable-size Gaussians.
+**Colour code by** colours every localization by one property instead: x, y,
+z (depth), or any numeric column the loaded datasets share, such as frame,
+photons or uncertainty. 2-D data can be colour coded too, by anything but z.
+While it is on, each card's colormap menu gives way to an opacity slider, and a
+colour bar appears in Data Controls with:
+
+* a **colormap** menu: HSV (rainbow, the default), grey, viridis, magma,
+  plasma, turbo, and the diverging cool-warm, blue-white-red, red-white-blue
+  and pink-white-green, which put the middle of the range at a neutral colour;
+* the **limits** -- the property values at the two ends of the bar. One pair
+  holds for every dataset. With **Auto** ticked they follow the data: an axis
+  spans the render-range window, any other property the 1st to 99th
+  percentile of the selected localizations. Type a value into either end to
+  fix them; values beyond a limit take the colour at that end.
+
+Where localizations overlap, their colours blend to the average rather than
+adding up, so a dense region keeps its colour instead of turning white. The
+card's contrast slider still works while colour coding: it sets brightness
+from how many localizations overlap, just as without colour coding, and an
+opacity slider sits beside it for overlaying channels. Opaque rendering
+styles colour each marker on its own and have no contrast slider.
+
+Colour coding is not available with variable-size Gaussians, whose values
+carry the intensity weighting. It is saved in [scenes](export.md#scenes).
 
 ## How much is drawn
 

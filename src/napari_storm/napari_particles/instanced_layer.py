@@ -217,7 +217,20 @@ class InstancedBillboardsFilter(Filter):
             if ($opaque > 0.5 && layer_alpha <= 0.0) {
                 discard;
             }
-            if ($accumulate > 0.5) {
+            if ($accumulate > 0.5 && $mean_colour > 0.5) {
+                // Colour coding through the sum (see summed_contrast.py): add
+                // this localization's colour times its footprint weight w to
+                // RGB, and w to alpha, so the resolve can divide the two into
+                // the weighted mean colour.  Both go out scaled by sqrt(w),
+                // because the additive blend (src_alpha, one) multiplies every
+                // channel by the alpha written: RGB adds colour * w and alpha
+                // adds w, with no change of blend state.  The value is already
+                // a position on the colormap; the window acts on the weight.
+                vec4 weight = $shape(x, q, 0.25 * q, vec4(1.0));
+                float root = sqrt(max(weight.r * weight.a, 0.0));
+                vec3 colour = $cmap(clamp(v_instance_value, 0.0, 1.0)).rgb;
+                gl_FragColor = vec4(colour * root, root);
+            } else if ($accumulate > 0.5) {
                 // Summed contrast (see summed_contrast.py): write only what
                 // this localization adds here -- its value times what the
                 // footprint puts on the square, colour times alpha exactly as
@@ -252,6 +265,7 @@ class InstancedBillboardsFilter(Filter):
         ffunc["opaque"] = 0.0
         # Colours, until the layer hands the sum to a SummedContrastPass.
         ffunc["accumulate"] = 0.0
+        ffunc["mean_colour"] = 0.0
         vfunc["quad_scale"] = 1.0
         vfunc["min_half_px"] = 0.0
 
@@ -297,9 +311,14 @@ class InstancedBillboardsFilter(Filter):
         self.fshader["clim_low"] = low
         self.fshader["clim_range"] = max(high - low, 1e-8)
 
-    def set_accumulate(self, accumulate):
-        """Write summed weights (True) or windowed colours (False)."""
+    def set_accumulate(self, accumulate, mean_colour=False):
+        """Write summed weights (True) or windowed colours (False).
+
+        *mean_colour* accumulates each localization's colour beside its weight
+        instead, for colour coding; see `LayerAppearance.color_coded`.
+        """
         self.fshader["accumulate"] = 1.0 if accumulate else 0.0
+        self.fshader["mean_colour"] = 1.0 if mean_colour else 0.0
 
     def set_billboard_size(self, size):
         """The quad edge, needed to recover the quad coordinate in the shader."""
@@ -372,6 +391,7 @@ class InstancedParticles(Surface):
         self._footprint = FOOTPRINT_GAUSSIAN
         self._min_size_px = DEFAULT_MIN_SIZE_PX
         self._summed_contrast = True
+        self._color_coded = False
         self._summed_pass = None
         self._viewer = None
         self._visual = None
@@ -418,14 +438,23 @@ class InstancedParticles(Surface):
         """Whether an additive footprint's window applies to the sum.
 
         See `LayerAppearance.summed_contrast`.  Off, every localization is
-        windowed and colormapped on its own, which is what Z colour coding
-        needs: there the value is a depth, not a weight.
+        windowed and colormapped on its own.
         """
         return self._summed_contrast
 
     @summed_contrast.setter
     def summed_contrast(self, value):
         self._summed_contrast = bool(value)
+        self._apply_contrast_model()
+
+    @property
+    def color_coded(self):
+        """Whether the values are colormap positions; see `LayerAppearance`."""
+        return self._color_coded
+
+    @color_coded.setter
+    def color_coded(self, value):
+        self._color_coded = bool(value)
         self._apply_contrast_model()
 
     @property
@@ -440,9 +469,10 @@ class InstancedParticles(Surface):
     def _apply_contrast_model(self):
         """Switch the shader and the resolve pass together, never apart."""
         summed = self.contrast_is_summed
-        self._billboard_filter.set_accumulate(summed)
+        self._billboard_filter.set_accumulate(summed, mean_colour=self._color_coded)
         if self._summed_pass is not None:
             self._summed_pass.enabled = summed
+            self._summed_pass.mean_colour = self._color_coded
         if self._visual is not None:
             self._visual.update()
 

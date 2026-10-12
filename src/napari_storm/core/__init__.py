@@ -65,6 +65,7 @@ from .renderer import (
 )
 from .scene import (
     CameraState,
+    ColorCodingEntry,
     DatasetEntry,
     ReferenceImageEntry,
     Scene,
@@ -95,6 +96,7 @@ from .world_transform import IDENTITY, WorldTransform
 __all__ = [
     "ACTIVE",
     "CameraState",
+    "ColorCodingEntry",
     "DatasetEntry",
     "ReferenceImageEntry",
     "Scene",

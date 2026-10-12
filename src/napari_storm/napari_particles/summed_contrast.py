@@ -18,6 +18,15 @@ This draws such a layer in two passes instead:
 The window's limits are therefore in units of summed weight.  With fixed-size
 Gaussians every weight peaks at 1, so they count overlapping localizations.
 
+**Colour coding** goes through the same two passes with a four-channel target.
+Each splat adds its colour -- the colormap at its value, a property's position
+on it -- times its weight, and the weight on its own; the resolve divides the
+two into the weighted mean colour and scales it by the windowed weight.  So the
+property sets the hue and density sets the brightness.  Adding colours straight
+onto the canvas, as colour coding did before, saturated every colour with a
+light component to white wherever localizations overlapped: grey, a diverging
+map's pale middle, most of viridis.
+
 It hooks the layer's VisPy node rather than napari: the node's ``draw`` is
 shadowed on the instance, and everything else is left as napari drew it.  The
 target is sized to whatever framebuffer is current, so screenshots rendered
@@ -68,6 +77,22 @@ void main() {
 }
 """
 
+_RESOLVE_MEAN_COLOUR_FRAG = """
+void main() {
+    vec4 summed = texture2D($summed, gl_FragCoord.xy / $target_size);
+    float weight = summed.a;
+    if (weight <= $low) {
+        discard;
+    }
+    // The mean of the colours, weighted as the footprints overlap here, at the
+    // brightness the window gives the summed weight.  It starts from black at
+    // the lower limit, so no floor colour needs fading in.
+    vec3 mean = summed.rgb / max(weight, 1e-8);
+    float brightness = clamp((weight - $low) / $range, 0.0, 1.0);
+    gl_FragColor = vec4(mean * brightness, $opacity);
+}
+"""
+
 #: Summed weight above the lower limit over which the floor colour fades in.
 #: In weight, not as a share of the window, because what it has to hide is
 #: fixed in weight: a Gaussian's quad ends where it is still exp(-4), 1.8% of
@@ -100,19 +125,25 @@ class SummedContrastPass:
         self._target = None
         self._framebuffer = None
         self._target_size = None
+        self._target_channels = None
 
         self._program = ModularProgram(_RESOLVE_VERT, _RESOLVE_FRAG)
-        self._program.vert["position"] = gloo.VertexBuffer(_FULL_VIEWPORT)
         self._program.frag["cmap"] = Function(
             "vec4 napari_storm_grey(float t) { return vec4(t, t, t, 1.0); }"
         )
-        self._program.frag["low"] = 0.0
-        self._program.frag["range"] = 1.0
-        self._program.frag["opacity"] = 1.0
         self._program.frag["fade"] = FADE_WEIGHT
-        self._program.frag["target_size"] = (1.0, 1.0)
+        # The colour-coding resolve; the colormap was applied per splat.
+        self._mean_program = ModularProgram(_RESOLVE_VERT, _RESOLVE_MEAN_COLOUR_FRAG)
+        for program in (self._program, self._mean_program):
+            program.vert["position"] = gloo.VertexBuffer(_FULL_VIEWPORT)
+            program.frag["low"] = 0.0
+            program.frag["range"] = 1.0
+            program.frag["opacity"] = 1.0
+            program.frag["target_size"] = (1.0, 1.0)
 
         self.enabled = False
+        #: Resolve the weighted mean colour rather than colormapping the sum.
+        self.mean_colour = False
         self.opacity = 1.0
         # Shadow the class's draw on this instance only.  VisPy calls
         # ``node.draw()`` for every node it draws, so this is the whole hook.
@@ -135,8 +166,9 @@ class SummedContrastPass:
     def set_contrast_limits(self, low, high):
         """The window, in units of summed weight.  Floored like the splat one."""
         low, high = float(low), float(high)
-        self._program.frag["low"] = low
-        self._program.frag["range"] = max(high - low, 1e-8)
+        for program in (self._program, self._mean_program):
+            program.frag["low"] = low
+            program.frag["range"] = max(high - low, 1e-8)
 
     def release(self):
         """Give the node its own draw back."""
@@ -157,7 +189,8 @@ class SummedContrastPass:
             return None  # a hidden channel adds nothing; skip both passes
 
         size = self._current_framebuffer_size(canvas)
-        self._ensure_target(size)
+        self._ensure_target(size, 4 if self.mean_colour else 1)
+        program = self._mean_program if self.mean_colour else self._program
 
         # Pass 1: the weights, summed without clipping.  The node keeps its
         # own forced additive state; its shader writes alpha 1 in this mode,
@@ -170,9 +203,9 @@ class SummedContrastPass:
             self._framebuffer.deactivate()
 
         # Pass 2: window, colormap, add to whatever was current before.
-        self._program.frag["opacity"] = float(self.opacity)
+        program.frag["opacity"] = float(self.opacity)
         canvas.context.set_state(**_RESOLVE_STATE)
-        self._program.draw("triangle_strip")
+        program.draw("triangle_strip")
         return None
 
     @staticmethod
@@ -185,16 +218,27 @@ class SummedContrastPass:
         height, width = framebuffer.color_buffer.shape[:2]
         return int(width), int(height)
 
-    def _ensure_target(self, size):
-        if size == self._target_size and self._framebuffer is not None:
+    def _ensure_target(self, size, channels=1):
+        """A float target of *size*: one channel for a sum, four for colours.
+
+        Four only while colour coding, because the target is four times the
+        memory and the fill bandwidth of the one-channel sum.
+        """
+        if (
+            size == self._target_size
+            and channels == self._target_channels
+            and self._framebuffer is not None
+        ):
             return
         width, height = size
         self._target = gloo.Texture2D(
-            shape=(height, width, 1),
-            internalformat="r32f",
+            shape=(height, width, channels),
+            internalformat="r32f" if channels == 1 else "rgba32f",
             interpolation="nearest",
         )
         self._framebuffer = gloo.FrameBuffer(color=self._target)
-        self._program.frag["summed"] = self._target
-        self._program.frag["target_size"] = (float(width), float(height))
+        for program in (self._program, self._mean_program):
+            program.frag["summed"] = self._target
+            program.frag["target_size"] = (float(width), float(height))
         self._target_size = size
+        self._target_channels = channels

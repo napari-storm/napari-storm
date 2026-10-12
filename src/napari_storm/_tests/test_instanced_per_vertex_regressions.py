@@ -78,7 +78,7 @@ def test_z_colour_coding_spans_the_colormap(make_napari_viewer, backend_class):
     """
     widget, viewer = _widget(make_napari_viewer, backend_class, zdim=True)
 
-    widget.Bz_color_coding.setChecked(True)
+    widget.set_color_coding(color_by="z")
 
     image = _rendered(viewer)
     lit = image[image.sum(axis=2) > 40]
@@ -158,6 +158,17 @@ def test_opacity_is_a_continuum_not_a_switch(make_napari_viewer, backend_class):
 # ---------------------------------------------------------- contrast limits
 
 
+def _per_localization(widget, dataset):
+    """Window each localization in the splat shader, which these tests are about.
+
+    Colour coding goes through the summed pass on the instanced backend, where
+    the window sets brightness from density and the colour limits set the hue
+    (see test_color_coding).  The per-localization path is what opaque
+    footprints, and the billboard backend always, draw with.
+    """
+    widget.data_to_layer_itf.set_appearance(dataset, summed_contrast=False)
+
+
 @pytest.mark.parametrize("backend_class", BACKENDS)
 def test_contrast_limits_reach_the_pixels(make_napari_viewer, backend_class):
     """The colormap-range slider and cutoff/factor boxes drive these.
@@ -167,8 +178,9 @@ def test_contrast_limits_reach_the_pixels(make_napari_viewer, backend_class):
     changed the layer state and nothing else.
     """
     widget, viewer = _widget(make_napari_viewer, backend_class, zdim=True)
-    widget.Bz_color_coding.setChecked(True)
+    widget.set_color_coding(color_by="z")
     dataset = widget.localization_datasets[0]
+    _per_localization(widget, dataset)
     before = _rendered(viewer)
 
     widget.data_to_layer_itf.set_appearance(dataset, contrast_limits=(0.4, 0.6))
@@ -187,8 +199,9 @@ def test_the_contrast_window_selects_which_values_are_coloured(
     hues towards the colormap's upper end.
     """
     widget, viewer = _widget(make_napari_viewer, backend_class, zdim=True)
-    widget.Bz_color_coding.setChecked(True)
+    widget.set_color_coding(color_by="z")
     dataset = widget.localization_datasets[0]
+    _per_localization(widget, dataset)
 
     widget.data_to_layer_itf.set_appearance(dataset, contrast_limits=(0.0, 1.0))
     full = _rendered(viewer)

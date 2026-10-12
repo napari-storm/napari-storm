@@ -104,7 +104,7 @@ def test_blending_survives_every_redrawing_gesture(make_napari_viewer, gesture):
         widget.channel[0].show_channel()
         widget.channel[0].show_channel()
     elif gesture == "z_colour":
-        widget.Bz_color_coding.setChecked(True)
+        widget.set_color_coding(color_by="z")
     elif gesture == "another_layer":
         viewer.add_image(np.zeros((8, 8), dtype="f4"), name="unrelated")
     elif gesture == "another_layer_hidden":

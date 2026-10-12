@@ -130,9 +130,20 @@ window and colormap are applied once, to the total. The limits are in units of
 summed weight -- each localization's value times its footprint -- so with values
 of 1 they count overlapping localizations, and the lower limit hides sparse
 regions while keeping dense ones. `renderer.contrast_is_summed(dataset_id)`
-says which model is in effect. Set `LayerAppearance(summed_contrast=False)` when
-the values are not weights -- the dock does for Z colour coding, where they are
-depths -- to window each localization on its own instead.
+says which model is in effect. Set `LayerAppearance(summed_contrast=False)` to
+window each localization on its own instead.
+
+**Colour coding through the sum.** With `LayerAppearance(color_coded=True)` the
+values are positions on the colormap -- a property the planner mapped onto
+`[0, 1]` -- not weights. The float target then has four channels: each splat
+adds its colour times its footprint weight, and the weight. The resolve
+divides them into the weighted mean colour and scales it by the windowed
+weight, so the property sets the hue, density the brightness, and colours
+with a light component no longer add up to white where localizations overlap.
+The blend state is unchanged: the splats write `(colour·√w, √w)`, which
+`(src_alpha, one)` sums to `Σ colour·w` and `Σ w`. On a backend or footprint
+without a sum, colour each localization on its own with
+`contrast_limits=(0, 1)`.
 
 Below the lower limit nothing is drawn, so a channel never tints the canvas.
 A colormap that does not start at black -- viridis, turbo, hsv -- has its lowest

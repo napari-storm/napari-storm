@@ -85,7 +85,7 @@ def test_opaque_footprints_keep_the_per_localization_window(make_napari_viewer):
     assert renderer.contrast_is_summed(1)
 
 
-def test_z_colour_coding_turns_it_off(make_napari_viewer):
+def test_it_can_be_switched_off(make_napari_viewer):
     _viewer_, renderer = _viewer(
         make_napari_viewer, _request([0.0]), summed_contrast=False
     )
@@ -278,15 +278,19 @@ def test_a_marker_footprint_keeps_its_own_handles(make_napari_viewer, two_d_data
     assert limits() == pytest.approx(summed_limits)
 
 
-def test_z_colour_coding_windows_each_localization(make_napari_viewer, three_d_dataset):
+def test_colour_coding_keeps_the_sum_for_brightness(
+    make_napari_viewer, three_d_dataset
+):
     widget, channel, _limits = _dock(make_napari_viewer, three_d_dataset)
     renderer = widget.data_to_layer_itf.renderer
     dataset_id = widget.localization_datasets[0].dataset_id
 
-    widget.Bz_color_coding.setChecked(True)
-    assert not renderer.contrast_is_summed(dataset_id)
-    assert not channel._summed
-
-    widget.Bz_color_coding.setChecked(False)
+    widget.set_color_coding(color_by="z")
     assert renderer.contrast_is_summed(dataset_id)
+    assert renderer.appearance(dataset_id).color_coded
+    assert channel._summed
+
+    widget.set_color_coding(color_by=None)
+    assert renderer.contrast_is_summed(dataset_id)
+    assert not renderer.appearance(dataset_id).color_coded
     assert channel._summed

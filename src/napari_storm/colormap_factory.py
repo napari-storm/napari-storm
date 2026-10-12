@@ -24,6 +24,14 @@ def _rgba_pixmap(rgba):
     )
 
 
+def colormap_pixmap(name, width=194, height=16):
+    """A horizontal ramp of napari colormap *name*, low end on the left."""
+    from napari.utils.colormaps import ensure_colormap
+
+    rgba = ensure_colormap(name).map(np.linspace(0.0, 1.0, width))
+    return _rgba_pixmap(np.broadcast_to(rgba, (height, width, 4)))
+
+
 def make_colormaps():
     """Build the 11 custom colormaps used for STORM channel display.
 

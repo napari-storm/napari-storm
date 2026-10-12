@@ -225,7 +225,7 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
     gaussian_filter = layer.filter[0]
     original_colormap = layer.colormap.name
 
-    widget.Bz_color_coding.setChecked(True)
+    widget.set_color_coding(color_by="z")
 
     assert layer.colormap.name == "hsv"
     np.testing.assert_array_equal(
@@ -237,7 +237,7 @@ def test_rainbow_round_trip_preserves_billboard_vertex_attributes(
         rainbow_values, np.repeat(rainbow_values[:, :1], 6, axis=1)
     )
 
-    widget.Bz_color_coding.setChecked(False)
+    widget.set_color_coding(color_by=None)
 
     assert widget.data_to_layer_itf.layer_for(dataset) is layer
     assert layer._visual is visual
