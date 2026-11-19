@@ -7,6 +7,7 @@ from qtpy.QtWidgets import QFileDialog
 import napari_storm.localization_dataset_types as dataset_classes
 
 from .background_loading import run_on_main_thread
+from .core import RecordingMetadataProvider, StaticMetadataProvider
 from .CustomErrors import (
     FileImportAbortedError,
     ParentError,
@@ -31,6 +32,43 @@ from .localization_dataset_types.storm_class import (
 )
 from .ns_constants import HDF5_EXTENSIONS, LOCS_DTYPE
 from .pyqt.prompts import QtMetadataProvider
+
+#: How a file was opened, so a scene can open it the same way again.
+IMPORT_ROUTE_KNOWN = "known"  # by its file type: the Open / Merge buttons
+IMPORT_ROUTE_RECOGNITION = "recognition"  # the file recognition dialog
+IMPORT_ROUTE_CUSTOM = "custom"  # the user's Custom_Import function
+IMPORT_ROUTES = (IMPORT_ROUTE_KNOWN, IMPORT_ROUTE_RECOGNITION, IMPORT_ROUTE_CUSTOM)
+
+
+def _file_name(file_path):
+    """The last component of *file_path*, whichever separator it uses.
+
+    Readers named datasets with ``file_path.split("/")[-1]``, which is right
+    for the forward slashes a Qt file dialog returns and wrong for everything
+    else on Windows -- a dropped file, the reader hook, a scene reopening its
+    files -- where the dataset was named after its whole path.
+    """
+    return _ospath.basename(str(file_path).replace("\\", "/").rstrip("/"))
+
+
+def label_source(dataset, file_path, index=0, route=IMPORT_ROUTE_KNOWN, answers=None):
+    """Record on *dataset* where it was read from and how.
+
+    * ``file_path`` -- absolute, so a scene saved from another working
+      directory still finds it;
+    * ``source_index`` -- which of the datasets read from that file this is: a
+      molecule set holds one per channel, all from one path;
+    * ``import_route`` -- one of :data:`IMPORT_ROUTES`;
+    * ``import_answers`` -- what the user typed in while it was read.
+
+    A scene used to read ``file_path`` and find nothing, because no importer
+    ever set it: every saved scene said ``"source_path": null``.
+    """
+    dataset.file_path = _ospath.abspath(str(file_path))
+    dataset.source_index = int(index)
+    dataset.import_route = route
+    dataset.import_answers = dict(answers or {})
+    return dataset
 
 
 class FileToLocalizationDataInterface:
@@ -65,6 +103,7 @@ class FileToLocalizationDataInterface:
         file_type_recognizer=False,
         custom_import=False,
         handle=None,
+        metadata_answers=None,
     ):
         """Determine which file type is being opened, and call the
         corresponding importer function.
@@ -72,6 +111,13 @@ class FileToLocalizationDataInterface:
         *handle* is an optional :class:`~napari_storm.background_loading.LoadHandle`.
         When given, this may be running on a worker thread: progress is reported
         and cancellation is honoured at the checkpoints below.
+
+        *metadata_answers* are answers from an earlier import of the same file,
+        keyed like the questions -- a scene reopening its files passes what was
+        typed in last time, so the user is asked only about anything new.
+
+        Every dataset returned is labelled with where it came from (see
+        :func:`label_source`), which is what lets a scene reopen it later.
         """
         if file_path is None:
             file_path = self.choose_file_path()
@@ -82,6 +128,16 @@ class FileToLocalizationDataInterface:
 
         if handle is not None:
             handle.checkpoint(f"Reading {_ospath.basename(file_path)}…")
+
+        # The readers ask `self.metadata_provider`, so the recorder stands in
+        # for it for the length of this import.  Imports do not overlap: the
+        # background path is behind a window-modal progress dialog.
+        asking = self.metadata_provider
+        if metadata_answers:
+            asking = StaticMetadataProvider(metadata_answers, fallback=asking)
+        recorder = RecordingMetadataProvider(asking)
+        provider_outside = self.metadata_provider
+        self.metadata_provider = recorder
 
         previous_names = list(self.dataset_names)
         try:
@@ -111,11 +167,22 @@ class FileToLocalizationDataInterface:
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             raise
+        finally:
+            self.metadata_provider = provider_outside
 
         if not datasets or any(dataset is None for dataset in datasets):
             self.dataset_names = previous_names
             self.n_datasets = len(previous_names)
             return None
+
+        if file_type_recognizer:
+            route = IMPORT_ROUTE_RECOGNITION
+        elif custom_import:
+            route = IMPORT_ROUTE_CUSTOM
+        else:
+            route = IMPORT_ROUTE_KNOWN
+        for index, dataset in enumerate(datasets):
+            label_source(dataset, file_path, index, route, recorder.answers)
 
         if handle is not None:
             # Last point at which a cancel costs nothing: past here the caller
@@ -233,7 +300,7 @@ class FileToLocalizationDataInterface:
 
     def load_mfx(self, file_path):
         """wrapper to load .mfx files"""
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         return [
@@ -274,7 +341,7 @@ class FileToLocalizationDataInterface:
 
     def load_hdf5(self, file_path):
         """wrapper to load .hdf5 files in the picasso format"""
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         return [
@@ -287,7 +354,7 @@ class FileToLocalizationDataInterface:
 
     def load_h5(self, file_path):
         """Loads localizations from .h5 files"""
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         dataset_collection = StormDatasetCollection().load_h5(
@@ -311,7 +378,7 @@ class FileToLocalizationDataInterface:
         self.reject_unknown_minflux_layout(file_path)
         if file_layout(file_path) == LAYOUT_V2:
             return self.load_mfx_v2(file_path, itr=itr)
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         dataset = MinfluxDataAIIterationClass().load_single_itr(
@@ -328,7 +395,7 @@ class FileToLocalizationDataInterface:
         self.reject_unknown_minflux_layout(file_path)
         if file_layout(file_path) == LAYOUT_V2:
             return self.load_mfx_v2(file_path, itr=itr)
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         dataset = MinfluxDataAIIterationClass().load_single_itr(
@@ -338,7 +405,7 @@ class FileToLocalizationDataInterface:
 
     def load_csv(self, file_path):
         """loads localizations thunderstorms csv format"""
-        filename = file_path.split("/")[-1]
+        filename = _file_name(file_path)
         filename = self.check_namespace(filename)
         self.dataset_names.append(filename)
         return StormDataClass().load_csv(file_path=file_path, name=filename)

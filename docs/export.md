@@ -42,20 +42,37 @@ in the [Data adjustment](filtering.md#adjusting-values) tab.
 
 ## Scenes
 
-**Save Scene…** writes this session's *settings* to a small JSON file,
+A scene is a saved *view*: load it later, on this computer or another, and
+napari-storm opens the same files and shows them exactly as they were.
+
+**Save Scene…** writes this session to a small JSON file,
 `session.napari-storm.json` by default:
 
-* each dataset's name, the file it came from, its alignment and its
-  appearance -- colormap, contrast, visibility;
-* the Gaussian width settings, the rendering style, the trace settings and
+* each dataset's file -- by absolute path, and relative to the scene file --
+  and how it was opened, including anything you typed in at the time, such as
+  a pixel size the file did not carry;
+* the [filters](filtering.md) and [adjustments](filtering.md#adjusting-values)
+  applied to each dataset, in order;
+* each dataset's alignment and its channel controls -- colormap, contrast,
+  shown or hidden;
+* the Gaussian mode and widths, the rendering style, the trace settings and
   the colour coding -- property, colormap and limits, or **Auto**;
-* reference images and their placement;
-* the camera.
+* the render range, the grid plane and the scale bar;
+* reference images, their placement, colormap and contrast;
+* the camera: centre, zoom, angles, 2-D or 3-D, and perspective.
 
 The localizations are not copied into it. A scene records where the data came
-from rather than duplicating it, so it stays small.
+from and what was done to it, rather than duplicating it, so it stays small.
 
-**Load Scene…** applies a saved scene to the datasets that are loaded now; it
-does not open files itself. Open the same files first, then load the scene.
-If the scene colours by a property the loaded datasets do not all have, it
-says so and leaves colour coding off.
+**Load Scene…** opens the scene's files and restores the view. If data is
+open already, it asks first, because the scene replaces it. Each file is
+looked for at its saved path, then beside the scene file, so a folder that
+holds the scene and its data can be moved or shared. A file opened with
+**File recognition** asks its questions again; a file opened by type does not.
+If every dataset in the scene is open already, the scene is applied to it
+without reopening anything. If the scene colours by a property the loaded
+datasets do not all have, it says so and leaves colour coding off.
+
+A scene does not hold [drift correction](post-processing.md) or the other
+Post-processing results. **Save Scene…** says so when one is applied: save the
+drift with **Save drift…**, and load it again after the scene.

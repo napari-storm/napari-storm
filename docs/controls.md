@@ -19,7 +19,7 @@ are written as the interface shows them.
 | **FWHM in XY [nm]:**, **FWHM in Z [nm]:** | Width of every Gaussian (in variable mode: of the PSF) | [Gaussian width](rendering.md#gaussian-width) |
 | **Min. FWHM in XY [nm]:**, **Min. FWHM in Z [nm]:** | Smallest width in variable mode | [Gaussian width](rendering.md#gaussian-width) |
 | **Render range**: X-, Y-, Z-range, **Reset Render Range** | Restricts what is drawn to a box | [Render range](navigating.md#render-range) |
-| **Save Scene…**, **Load Scene…** | Saves and restores settings | [Scenes](export.md#scenes) |
+| **Save Scene…**, **Load Scene…** | Saves a view; reopens its files and restores it | [Scenes](export.md#scenes) |
 | **Export OME-TIFF…** | Writes a calibrated image | [Exporting](export.md) |
 | **Scalebar**, **Size of Scalebar [nm]:** | A scale bar in the scene | [Scale bars](navigating.md#scale-bars) |
 | **Colour code by:**, colormap, limits, **Auto** | Colours every localization by one property | [Colour](rendering.md#colour) |

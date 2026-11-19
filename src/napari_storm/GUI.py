@@ -288,17 +288,19 @@ class NapariStormGUI(QWidget):
 
         self.Bsave_scene = QPushButton("Save Scene…")
         self.Bsave_scene.setToolTip(
-            "Save this session's decisions -- alignment, colours, render "
-            "settings, camera -- as a small JSON file. Localizations are not "
-            "copied into it; the scene points at the files it came from."
+            "Save this view -- the files, filters, alignment, colours, render "
+            "settings, render range, grid, scalebar and camera -- as a small "
+            "JSON file. Localizations are not copied into it; the scene points "
+            "at the files it came from."
         )
         self.Bsave_scene.clicked.connect(self.save_scene_dialog)
         self.data_controls_tab_layout.addWidget(self.Bsave_scene, 22, 0, 1, 2)
 
         self.Bload_scene = QPushButton("Load Scene…")
         self.Bload_scene.setToolTip(
-            "Re-apply a saved scene to the datasets loaded now. It does not "
-            "open files: which data is loaded stays your choice."
+            "Open a saved scene: its files are opened -- at their saved paths, "
+            "or beside the scene file -- and the view is restored as it was "
+            "saved. If its data is open already, the scene is applied to it."
         )
         self.Bload_scene.clicked.connect(self.load_scene_dialog)
         self.data_controls_tab_layout.addWidget(self.Bload_scene, 22, 2, 1, 2)

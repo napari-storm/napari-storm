@@ -4,9 +4,19 @@ from matplotlib.figure import Figure
 from qtpy import QtCore
 from qtpy.QtWidgets import QComboBox, QFormLayout, QPushButton, QSpinBox, QWidget
 
-from .core import DatasetClosed, StoreCleared
+from .core import DatasetClosed, StoreCleared, drop_edits, record_edit
 from .CustomErrors import ParentError
 from .pyqt.filter_slider import RangeSlider3, RangeSlider4
+
+
+def _band_fields(edit):
+    """The four fields that define a band, as plain values."""
+    return {
+        "parameter": str(edit["parameter"]),
+        "low": float(edit["low"]),
+        "high": float(edit["high"]),
+        "mode": str(edit["mode"]),
+    }
 
 
 class DataFilterWindow(QWidget):
@@ -254,29 +264,54 @@ class DataFilterInterface:
         everywhere, not recomputing a different band per dataset.  The two
         near-identical 40-line blocks this replaces differed only in that.
         """
+        return self.band_indices(dataset, **self._current_band(reference_dataset))
+
+    def _current_band(self, reference_dataset):
+        """The band the sliders select, in the parameter's own units."""
         parameter = self.list_of_filterable_parameters[self.current_parameter_idx]
         reference = getattr(reference_dataset.locs_active, parameter)
         span = np.max(reference) - np.min(reference)
         low = self.filter_slider_values_decimal[0] * span + np.min(reference)
         high = self.filter_slider_values_decimal[1] * span + np.min(reference)
+        return {
+            "parameter": parameter,
+            "low": float(low),
+            "high": float(high),
+            "mode": self.filter_modes[self.filter_mode_active_idx],
+        }
 
+    @staticmethod
+    def band_indices(dataset, parameter, low, high, mode):
+        """Canonical-row indices of *dataset* outside (Bandpass) or inside
+        (Bandstop) the band, or None for a mode this does not know."""
         values = getattr(dataset.locs_all, parameter)
-        mode = self.filter_modes[self.filter_mode_active_idx]
         if mode == "Bandpass":
             return np.where((values > high) | (values < low))[0]
         if mode == "Bandstop":
             return np.where((values < high) & (values > low))[0]
         return None
 
+    def replay_band(self, dataset, edit):
+        """Apply a band recorded by a scene, without touching the sliders."""
+        indices = self.band_indices(
+            dataset, edit["parameter"], edit["low"], edit["high"], edit["mode"]
+        )
+        if indices is None:
+            raise ValueError(f"unknown filter mode {edit['mode']!r}")
+        self._record_indices(dataset, indices)
+        record_edit(dataset, {"kind": "filter", **_band_fields(edit)})
+
     def apply_filtering(self, idx=None, update_layers=True):
         """Record which datapoints the current band filters out."""
         if isinstance(idx, bool) or idx is None:
             idx = self.current_dataset_idx
         dataset = self.list_of_datasets[idx]
-        indices = self._band_indices(dataset, dataset)
+        band = self._current_band(dataset)
+        indices = self.band_indices(dataset, **band)
         if indices is None:
             return
         self._record_indices(dataset, indices)
+        record_edit(dataset, {"kind": "filter", **band})
         if update_layers:
             self.parent.data_to_layer_itf.set_render_range_and_offset()
             # Only this dataset's selection changed.  Announcing it redraws
@@ -287,11 +322,13 @@ class DataFilterInterface:
     def apply_filtering_to_all(self):
         """like apply_filtering but apply the same band to all open datasets"""
         reference = self.list_of_datasets[self.current_dataset_idx]
+        band = self._current_band(reference)
         for dataset in self.list_of_datasets:
-            indices = self._band_indices(dataset, reference)
+            indices = self.band_indices(dataset, **band)
             if indices is None:
                 return
             self._record_indices(dataset, indices)
+            record_edit(dataset, {"kind": "filter", **band})
         self.parent.data_to_layer_itf.set_render_range_and_offset()
         self.parent.data_to_layer_itf.update_layers()
         self.current_parameter_changed()
@@ -301,6 +338,7 @@ class DataFilterInterface:
         self.filter_indices.clear()
         for dataset in self.list_of_datasets:
             dataset.reset_filters()
+            drop_edits(dataset, "filter")
         self.current_parameter_changed()
         self.parent.data_to_layer_itf.update_layers()
 

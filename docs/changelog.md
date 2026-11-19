@@ -5,6 +5,17 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
 ## Unreleased
 
+* **Load Scene reopens the data.** A scene is now a saved view: **Load
+  Scene…** opens the files it names -- at their saved paths, or beside the
+  scene if the folder moved -- replays the filters and adjustments, and
+  restores the Gaussian widths, render range, grid plane, scale bar, channel
+  controls, reference images and camera, perspective included. Answers typed in
+  when a file was first opened, such as a pixel size, are not asked again.
+  Scenes saved before this recorded no file paths -- every one said
+  `"source_path": null` -- so they still apply only to data opened by hand;
+  save them again to make them reopen their files. See [Scenes](export.md#scenes).
+* **A hidden channel stays hidden** when a filter, crop or width change
+  redraws the layers.
 * **Colour coding by any property.** **Colour code by** replaces **Activate
   Rainbow colorcoding in Z**: colour by x, y, z or any numeric column -- frame,
   photons, uncertainty -- in 2-D as well as 3-D, with HSV (still the default),

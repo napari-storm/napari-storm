@@ -53,6 +53,7 @@ from .metadata import (
     SIGMA_PRESENT,
     ZDIM_PRESENT,
     MetadataProvider,
+    RecordingMetadataProvider,
     StaticMetadataProvider,
 )
 from .render_planner import DatasetTraits, GaussianSettings, RenderPlanner
@@ -70,7 +71,12 @@ from .scene import (
     ReferenceImageEntry,
     Scene,
     SceneFormatError,
+    ViewState,
+    drop_edits,
+    edits_of,
     load_scene,
+    record_edit,
+    resolve_source_path,
     save_scene,
 )
 from .traces import (
@@ -101,7 +107,12 @@ __all__ = [
     "ReferenceImageEntry",
     "Scene",
     "SceneFormatError",
+    "ViewState",
+    "drop_edits",
+    "edits_of",
     "load_scene",
+    "record_edit",
+    "resolve_source_path",
     "save_scene",
     "AXES",
     "FILTERED",
@@ -117,6 +128,7 @@ __all__ = [
     "DatasetStore",
     "StoreCleared",
     "MetadataProvider",
+    "RecordingMetadataProvider",
     "StaticMetadataProvider",
     "DATA_IN_NM",
     "PHOTON_COUNT_PRESENT",

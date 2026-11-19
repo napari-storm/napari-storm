@@ -237,8 +237,15 @@ def test_a_scene_naming_absent_datasets_reports_rather_than_guesses(
     assert reported and "not loaded" in reported[0]
 
 
-def test_loading_a_scene_does_not_open_files(make_napari_viewer, tmp_path):
-    """A scene that silently loaded gigabytes on open would be a surprise."""
+def test_a_scene_whose_files_are_gone_opens_nothing_and_says_so(
+    make_napari_viewer, tmp_path
+):
+    """Loading a scene opens its files -- but only files that are there.
+
+    It used to open nothing at all; see test_scene_reopen.py for the files it
+    now does open. A file at neither its saved path nor beside the scene is
+    reported, and the session is left as it was rather than cleared.
+    """
     widget, _ = _widget(make_napari_viewer, names=("a",))
     before = len(widget.localization_datasets)
     path = tmp_path / "session.json"
@@ -246,11 +253,13 @@ def test_loading_a_scene_does_not_open_files(make_napari_viewer, tmp_path):
         path,
         Scene(datasets=(DatasetEntry(name="b", source_path="/nonexistent.hdf5"),)),
     )
-    widget._warn_user = lambda message: None
+    reported = []
+    widget._warn_user = reported.append
 
     widget.load_scene_from(path)
 
     assert len(widget.localization_datasets) == before
+    assert any("not found" in message for message in reported)
 
 
 def test_an_unreadable_scene_is_reported_not_raised(make_napari_viewer, tmp_path):

@@ -7,7 +7,7 @@ from qtpy.QtCore import Qt
 
 from .background_loading import load_in_background
 from .ChannelControls import ChannelControls
-from .core import DatasetStore, LayerAppearance, WorldTransform
+from .core import DatasetStore
 from .core.footprints import FOOTPRINTS, footprint_named
 from .core.traces import BUILTIN_COLOR_BY, COLOR_BY_TRACE, resolve_time_column
 from .CustomErrors import (
@@ -1132,6 +1132,10 @@ class napari_storm(NapariStormGUI):
         file_recognition=False,
         custom_import=False,
         background=False,
+        metadata_answers=None,
+        on_loaded=None,
+        on_failed=None,
+        on_cancelled=None,
     ):
         """Open a localization file and add it to the session.
 
@@ -1143,6 +1147,11 @@ class napari_storm(NapariStormGUI):
         that mode the return value is the worker (whose ``load_handle`` can
         cancel it), or ``True`` if no worker was available and it ran inline, or
         ``False`` if the user closed the file picker.
+
+        *metadata_answers* replays what was typed in when the file was opened
+        before (see `FileToLocalizationDataInterface`).  *on_loaded*,
+        *on_failed* and *on_cancelled* report the background outcome, which is
+        how a scene opens its files one after another.
         """
         if background:
             return self._open_in_background(
@@ -1150,6 +1159,10 @@ class napari_storm(NapariStormGUI):
                 file_path=file_path,
                 file_recognition=file_recognition,
                 custom_import=custom_import,
+                metadata_answers=metadata_answers,
+                on_loaded=on_loaded,
+                on_failed=on_failed,
+                on_cancelled=on_cancelled,
             )
         # File selection and import happen before touching the current session.
         # Closing a dialog is therefore a no-op instead of an accidental clear.
@@ -1159,6 +1172,7 @@ class napari_storm(NapariStormGUI):
                     file_path=file_path,
                     file_type_recognizer=file_recognition,
                     custom_import=custom_import,
+                    metadata_answers=metadata_answers,
                 )
             )
         except (FileNotFoundError, UnknownFileLayoutError) as error:
@@ -1175,7 +1189,17 @@ class napari_storm(NapariStormGUI):
             return False
         return self._apply_loaded_datasets(datasets, merge=merge)
 
-    def _open_in_background(self, merge, file_path, file_recognition, custom_import):
+    def _open_in_background(
+        self,
+        merge,
+        file_path,
+        file_recognition,
+        custom_import,
+        metadata_answers=None,
+        on_loaded=None,
+        on_failed=None,
+        on_cancelled=None,
+    ):
         """Read a localization file on a worker, then apply it on the GUI thread.
 
         Picking the file stays here: a modal file dialog belongs to the gesture
@@ -1193,25 +1217,38 @@ class napari_storm(NapariStormGUI):
                 file_type_recognizer=file_recognition,
                 custom_import=custom_import,
                 handle=handle,
+                metadata_answers=metadata_answers,
             )
 
         def _apply(datasets):
-            if datasets:
-                try:
-                    self._apply_loaded_datasets(datasets, merge=merge)
-                except ValueError as error:
-                    # e.g. no finite position at all: refused before the session
-                    # is touched, and said so rather than lost in a Qt slot
-                    _failed(error)
+            if not datasets:
+                # The importer declined -- an abort it already explained.
+                if on_failed is not None:
+                    on_failed(None)
+                return
+            try:
+                self._apply_loaded_datasets(datasets, merge=merge)
+            except (ValueError, DimensionError) as error:
+                # e.g. no finite position at all, or 2-D merged into 3-D:
+                # refused before the session is touched, and said so rather
+                # than lost in a Qt slot
+                _failed(error)
+                return
+            if on_loaded is not None:
+                on_loaded(datasets)
 
         def _failed(error):
             self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
             self._warn_user(f"could not open {file_path}: {error}")
+            if on_failed is not None:
+                on_failed(error)
 
         def _cancelled():
             # The importers roll their own bookkeeping back on failure; this
             # re-syncs it against what is actually loaded either way.
             self.file_to_data_itf.sync_dataset_entries(self.localization_datasets)
+            if on_cancelled is not None:
+                on_cancelled()
 
         worker = load_in_background(
             _read,
@@ -1305,7 +1342,7 @@ class napari_storm(NapariStormGUI):
             return None
 
     def load_scene_dialog(self, *_):
-        """Ask which, then apply."""
+        """Ask which, then reopen its files and restore it."""
         from qtpy.QtWidgets import QFileDialog
 
         path, _filter = QFileDialog.getOpenFileName(
@@ -1313,154 +1350,60 @@ class napari_storm(NapariStormGUI):
         )
         if not path:
             return None
-        return self.load_scene_from(path)
+        return self.load_scene_from(
+            path, background=True, confirm=self._confirm_replacing_session
+        )
+
+    def _confirm_replacing_session(self, plan):
+        """Opening a scene's files replaces what is open now; ask first."""
+        if not self.localization_datasets:
+            return True
+        from qtpy.QtWidgets import QMessageBox
+
+        names = ", ".join(dataset.name for dataset in self.localization_datasets)
+        answer = QMessageBox.question(
+            self,
+            "Load scene",
+            f"Loading this scene opens {len(plan.files)} file(s) and closes the "
+            f"data open now ({names}). Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        return answer == QMessageBox.Yes
 
     def current_scene(self):
         """This session's decisions, as a value.
 
         Decisions only -- no localizations and no pixels. Reloading re-reads the
         files and re-applies these, so a scene cannot go stale against the data
-        it describes.
+        it describes. See `scene_session.capture`.
         """
-        from .core import (
-            CameraState,
-            ColorCodingEntry,
-            DatasetEntry,
-            ReferenceImageEntry,
-            Scene,
-        )
+        from . import scene_session
 
-        store = self.dataset_store
-        datasets = []
-        for dataset in self.localization_datasets:
-            state = store.state(getattr(dataset, "dataset_id", None))
-            datasets.append(
-                DatasetEntry(
-                    name=getattr(dataset, "name", "dataset"),
-                    source_path=getattr(dataset, "file_path", None),
-                    transform=state.transform if state else None or WorldTransform(),
-                    appearance=state.appearance if state else LayerAppearance(),
-                )
-            )
-
-        images = []
-        for controls in self.image_layer_controls:
-            layer = getattr(controls, "_layer", None)
-            if layer is None:
-                continue
-            translate = tuple(float(v) for v in layer.translate)
-            scale = tuple(float(v) for v in layer.scale)
-            images.append(
-                ReferenceImageEntry(
-                    name=layer.name,
-                    source_path=getattr(controls, "_file_path", None),
-                    orientation=getattr(controls, "_orientation", "XY"),
-                    pixel_size_xy_nm=scale[1],
-                    pixel_size_z_nm=scale[0],
-                    offset_nm=translate,
-                    appearance=LayerAppearance(
-                        opacity=float(layer.opacity), visible=bool(layer.visible)
-                    ),
-                )
-            )
-
-        camera = self.viewer.camera
-        return Scene(
-            datasets=tuple(datasets),
-            reference_images=tuple(images),
-            gaussian=self.data_to_layer_itf.gaussian_settings(),
-            color_coding=ColorCodingEntry(
-                color_by=self.render_config.color_by,
-                colormap=self.render_config.color_colormap,
-                limits=self.render_config.color_limits,
-            ),
-            camera=CameraState(
-                center_nm=tuple(float(v) for v in camera.center),
-                zoom=float(camera.zoom),
-                angles=tuple(float(v) for v in camera.angles),
-                ndisplay=int(self.viewer.dims.ndisplay),
-            ),
-        )
+        return scene_session.capture(self)
 
     def save_scene_to(self, path):
-        """Write the current scene to *path*."""
+        """Write the current scene to *path*, saying what it cannot hold."""
+        from . import scene_session
         from .core import save_scene
 
-        return save_scene(path, self.current_scene())
+        written = save_scene(path, self.current_scene())
+        for note in scene_session.unsaved_state(self):
+            self._warn_user(note)
+        return written
 
-    def apply_scene(self, scene):
+    def apply_scene(self, scene, fresh=()):
         """Re-apply a scene's decisions to whatever is loaded now.
 
-        Deliberately does *not* open files: which datasets are loaded is the
-        user's business, and a scene that silently loaded four gigabytes on
-        open would be a surprise rather than a convenience. Entries are matched
-        to loaded datasets by name; anything unmatched is reported, not guessed
-        at.
+        Does not open files; `load_scene_from` does that first when the scene
+        names files that are not open. Entries are matched to loaded datasets
+        by source file, then by name; anything unmatched is reported, not
+        guessed at. See `scene_session.apply` for *fresh* and the order things
+        are restored in.
         """
-        from .core import WorldTransform as _WorldTransform
+        from . import scene_session
 
-        by_name = {
-            getattr(dataset, "name", None): dataset
-            for dataset in self.localization_datasets
-        }
-        unmatched = []
-        restored_style = {}
-        restored_traces = {}
-        # Before the per-dataset appearance: switching colour coding resets
-        # each channel's contrast, which the scene's own contrast then replaces.
-        self._restore_color_coding(scene.color_coding)
-        for entry in scene.datasets:
-            dataset = by_name.get(entry.name)
-            if dataset is None:
-                unmatched.append(entry.name)
-                continue
-            dataset_id = getattr(dataset, "dataset_id", None)
-            if dataset_id is None:
-                continue
-            self.dataset_store.set_transform(
-                dataset_id, entry.transform or _WorldTransform()
-            )
-            appearance = entry.appearance
-            if appearance is not None:
-                self.data_to_layer_itf.set_appearance(
-                    dataset,
-                    colormap=appearance.colormap,
-                    opacity=appearance.opacity,
-                    contrast_limits=appearance.contrast_limits,
-                    visible=appearance.visible,
-                )
-                if appearance.footprint is not None:
-                    restored_style["footprint"] = appearance.footprint
-                if appearance.min_size_px is not None:
-                    restored_style["min_size_px"] = appearance.min_size_px
-                # One trace style for the session, like the footprint: any
-                # dataset that drew traces turns them on.
-                if appearance.traces is not None:
-                    restored_traces["traces"] = bool(
-                        restored_traces.get("traces") or appearance.traces
-                    )
-                if appearance.trace_color_by is not None:
-                    restored_traces["trace_color_by"] = appearance.trace_color_by
-                if appearance.trace_width_px is not None:
-                    restored_traces["trace_width_px"] = appearance.trace_width_px
-        if restored_style:
-            self._restore_rendering_style(**restored_style)
-        if restored_traces:
-            self._restore_trace_style(**restored_traces)
-
-        camera = scene.camera
-        self.viewer.dims.ndisplay = camera.ndisplay
-        self.viewer.camera.center = camera.center_nm
-        self.viewer.camera.zoom = camera.zoom
-        self.viewer.camera.angles = camera.angles
-
-        if unmatched:
-            self._warn_user(
-                "the scene refers to datasets that are not loaded: "
-                + ", ".join(unmatched)
-                + ". Open them and load the scene again to place them."
-            )
-        return unmatched
+        return scene_session.apply(self, scene, fresh=fresh)
 
     def _restore_color_coding(self, entry):
         """Put a saved colour coding back, or say why it cannot be."""
@@ -1488,8 +1431,26 @@ class napari_storm(NapariStormGUI):
             limits=entry.limits if color_by is not None else None,
         )
 
-    def load_scene_from(self, path):
-        """Read a scene from *path* and apply it."""
+    def load_scene_from(
+        self, path, open_files=True, background=False, confirm=None, on_done=None
+    ):
+        """Read a scene from *path*, open the files it names, and restore it.
+
+        When every dataset the scene names is loaded already, it is applied in
+        place. Otherwise the scene's files are opened -- at their saved paths,
+        or beside the scene file if the folder moved -- replacing the current
+        session, and the scene is applied once they are in. Answers typed in
+        when a file was first opened are replayed, so nothing is asked twice.
+
+        *open_files=False* only re-applies, as Load Scene did before it could
+        open files. *confirm*, if given, is asked with the
+        `scene_session.ReopenPlan` before anything is opened, and returning
+        False cancels. With *background* the files are read behind the usual
+        progress dialog and *on_done* is called once the scene is applied.
+
+        Returns the scene, or None if it could not be read or was declined.
+        """
+        from . import scene_session
         from .core import SceneFormatError, load_scene
 
         try:
@@ -1497,7 +1458,25 @@ class napari_storm(NapariStormGUI):
         except (OSError, SceneFormatError) as error:
             self._warn_user(f"could not load scene: {error}")
             return None
-        self.apply_scene(scene)
+
+        if open_files:
+            plan = scene_session.plan_reopen(self, scene)
+            if plan.needed:
+                if confirm is not None and not confirm(plan):
+                    return None
+                scene_session.reopen_and_apply(
+                    self, scene, plan, background=background, on_done=on_done
+                )
+                return scene
+            if plan.missing:
+                self._warn_user(
+                    "the scene's files for "
+                    + ", ".join(plan.missing)
+                    + " were not found at their saved paths or beside the scene"
+                )
+        unmatched = self.apply_scene(scene)
+        if on_done is not None:
+            on_done(unmatched)
         return scene
 
     def export_image(
@@ -1617,6 +1596,7 @@ class napari_storm(NapariStormGUI):
         controls = ImageLayerControls(layer=layer, result=result, dock_widget=self)
         self.image_layer_controls.append(controls)
         self.channel_controls_widget_layout.insertRow(0, controls)
+        return controls
 
     def create_layer(self, dataset, idx=-1, merge=False):
         self.adjust_available_options_to_data_dimension()
