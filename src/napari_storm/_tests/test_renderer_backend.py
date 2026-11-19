@@ -19,6 +19,7 @@ from napari_storm.core.renderer import (
 from napari_storm.napari_particles.instanced_renderer import InstancedRenderer
 from napari_storm.napari_particles.points_renderer import NapariPointsRenderer
 from napari_storm.napari_particles.renderer import NapariParticlesRenderer
+from napari_storm.napari_particles.vispy_renderer import VispyInstancedRenderer
 
 #: Every Level 3 candidate, including the one that won.  Every contract test
 #: below runs against all of them, which is the only thing that makes "swap the
@@ -521,3 +522,185 @@ def test_either_backend_can_run_the_application(make_napari_viewer, backend_clas
 
     assert widget.data_to_layer_itf.renderer.is_open(dataset.dataset_id)
     assert dataset.number_of_active_entries() < 20
+
+
+# ------------------------------------------------ the plain-VisPy backend
+#
+# `VispyInstancedRenderer` has no napari viewer, so the napari backend tests
+# above run on it here, through a fixture that makes its canvas: napari's layer
+# list becomes the view's scene, and a napari layer the dataset's mesh visual.
+# The tests that need the napari host (the widget, the layer list's events, the
+# backend selection) have no counterpart.
+
+
+def _shown_vispy_renderer():
+    """A VispyInstancedRenderer on a shown canvas with a current OpenGL 3+
+    context, or a skip: none can be made on Qt's offscreen platform, without
+    instancing, or with an OpenGL older than 3."""
+    from qtpy.QtGui import QGuiApplication
+
+    platform = QGuiApplication.platformName()
+    if platform in ("offscreen", "minimal"):
+        pytest.skip(f"no OpenGL context on the Qt '{platform}' platform")
+    try:
+        made = VispyInstancedRenderer(size=(320, 240))
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
+    made.canvas.show()
+    made.canvas.app.process_events()
+    try:
+        made.canvas.render()  # makes the context current; fails without one
+        from vispy.gloo import gl
+
+        version = gl.glGetParameter(gl.GL_VERSION)
+    except Exception as exc:  # noqa: BLE001 - any failure: no usable context
+        made.canvas.close()
+        pytest.skip(f"no OpenGL context: {exc}")
+    if int(str(version).split(".")[0]) < 3:
+        made.canvas.close()
+        pytest.skip(f"OpenGL {version} has no instanced drawing")
+    return made
+
+
+@pytest.fixture
+def vispy_renderer(qapp):
+    made = _shown_vispy_renderer()
+    yield made
+    made.close_all()
+    made.canvas.close()
+
+
+def test_the_vispy_backend_without_instancing_says_so(monkeypatch):
+    """No fallback: a session without gl+ is told why, before any canvas."""
+    from napari_storm.napari_particles import vispy_renderer
+
+    monkeypatch.setattr(vispy_renderer, "instancing_available", lambda: False)
+    with pytest.raises(RuntimeError, match=r"gl\+"):
+        vispy_renderer.VispyInstancedRenderer()
+
+
+@pytest.mark.gl
+class TestVispyInstancedRenderer:
+    """The napari backend tests, by the same names, on the plain-VisPy one."""
+
+    def test_open_adds_a_layer_and_hands_back_a_handle(self, vispy_renderer):
+        layer = vispy_renderer.open(7, _request(name="channel"))
+
+        assert vispy_renderer.layer(7) is layer
+        assert vispy_renderer.is_open(7)
+        assert layer.parent is vispy_renderer.view.scene
+        assert layer.name == "channel"
+        # The Gaussian is drawn by the billboard filter; the mesh is unshaded.
+        assert vispy_renderer.appearance(7).footprint == "gaussian"
+        assert layer.shading is None
+
+    def test_update_keeps_the_layer(self, vispy_renderer):
+        """The contract: an update must not replace the host resource."""
+        scene = vispy_renderer.view.scene
+        layer = vispy_renderer.open(7, _request(n=8))
+        n_layers = len(scene.children)
+
+        vispy_renderer.update(7, _request(n=3))
+
+        assert vispy_renderer.layer(7) is layer
+        assert len(scene.children) == n_layers
+        assert len(vispy_renderer._layers[7].coords) == 3  # one row each
+
+    def test_a_billboard_update_keeps_the_vispy_visual(self, vispy_renderer):
+        """Backend-specific: what it must retain, the visual and its filter."""
+        layer = vispy_renderer.open(7, _request(n=8))
+        entry = vispy_renderer._layers[7]
+        billboards = entry.filter
+
+        vispy_renderer.update(7, _request(n=3))
+
+        assert vispy_renderer.layer(7) is layer
+        assert entry.filter is billboards and billboards._attached
+        assert len(entry.coords) == 3
+
+    def test_update_before_open_is_an_error(self, vispy_renderer):
+        with pytest.raises(KeyError):
+            vispy_renderer.update(7, _request())
+
+    def test_reopening_replaces_rather_than_accumulates(self, vispy_renderer):
+        first = vispy_renderer.open(7, _request())
+        second = vispy_renderer.open(7, _request())
+
+        assert second is not first
+        assert first.parent is None
+        assert len(vispy_renderer.layers) == 1
+
+    def test_close_removes_the_layer_and_releases_what_it_installed(
+        self, vispy_renderer
+    ):
+        """Closing leaves the scene as it found it: the summed-contrast pass
+        gives the visual its own draw back, and the filter comes off."""
+        layer = vispy_renderer.open(7, _request())
+        billboards = vispy_renderer._layers[7].filter
+        assert "draw" in vars(layer) and billboards._attached
+
+        vispy_renderer.close(7)
+
+        assert not vispy_renderer.is_open(7)
+        assert layer.parent is None
+        assert "draw" not in vars(layer)
+        assert not billboards._attached
+
+    def test_set_visible_does_not_discard_resources(self, vispy_renderer):
+        layer = vispy_renderer.open(7, _request())
+
+        vispy_renderer.set_visible(7, False)
+        assert layer.visible is False
+        assert vispy_renderer.layer(7) is layer
+
+        vispy_renderer.set_visible(7, True)
+        assert layer.visible is True
+
+    def test_visibility_on_an_absent_dataset_is_a_no_op(self, vispy_renderer):
+        vispy_renderer.set_visible(404, False)
+
+    def test_every_backend_reports_its_own_memory(self, vispy_renderer):
+        """The decision turns on this number, so all report it the same way."""
+        assert vispy_renderer.host_bytes(7) == 0
+
+        vispy_renderer.open(7, _request(n=100))
+        per_localization = vispy_renderer.host_bytes(7) / 100
+
+        assert per_localization > 0
+        vispy_renderer.close(7)
+        assert vispy_renderer.host_bytes(7) == 0
+
+    def test_it_draws_a_gaussian_at_each_localization(self, vispy_renderer):
+        """Four localizations through the planner, 200 nm apart: lit where each
+        one is, dark between them and at the corner."""
+        from vispy.gloo import gl
+
+        from napari_storm.core import (
+            DatasetTraits,
+            GaussianSettings,
+            LocalizationTable,
+            RenderPlanner,
+        )
+
+        dtype = [("x_pos_nm", "f4"), ("y_pos_nm", "f4")]
+        records = np.rec.array(np.zeros(4, dtype=dtype))
+        records.x_pos_nm = [0.0, 200.0, 0.0, 200.0]
+        records.y_pos_nm = [0.0, 0.0, 200.0, 200.0]
+        request = RenderPlanner().plan(
+            LocalizationTable(records),
+            GaussianSettings(),
+            DatasetTraits(),
+            name="four",
+        )
+        layer = vispy_renderer.open(1, request)
+
+        image = vispy_renderer.canvas.render(alpha=False)
+        renderer_name = gl.glGetParameter(gl.GL_RENDERER)
+        print(f"\nGL: {renderer_name}, OpenGL {gl.glGetParameter(gl.GL_VERSION)}")
+        to_canvas = layer.get_transform("visual", "canvas")
+        centres = to_canvas.map(request.coords[:, ::-1])
+        pixels = np.round(centres[:, :2] / centres[:, 3:]).astype(int)
+        middle = np.round(pixels.mean(axis=0)).astype(int)
+        assert min(int(image[y, x].max()) for x, y in pixels) > 100
+        assert int(image[middle[1], middle[0]].max()) < 10
+        assert int(image[0, 0].max()) < 10

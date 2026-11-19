@@ -13,4 +13,5 @@ testpaths = ["src/napari_storm/_tests"]
 # suite's wall time.
 markers = [
     "slow: spawns a subprocess and builds a GL context; deselect with -m 'not slow'",
+    "gl: builds an in-process OpenGL context with instancing (VisPy gl+) for the plain-VisPy backend; skipped where none can be made",
 ]
