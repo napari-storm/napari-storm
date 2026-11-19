@@ -40,11 +40,15 @@ py-comet`): both install the same `comet` package. See
 [Post-processing](docs/post-processing.md) for the workflow and how
 memory is managed (the tab runs COMET's CPU backend).
 
-To work on napari-storm itself, install from a clone instead:
+To work on napari-storm itself, install from a clone instead. The drawing
+core, [smlm-view3d](smlm-view3d), lives in this repository and is not on PyPI
+yet, so it goes in first:
 
     git clone https://github.com/napari-storm/napari-storm
 
     cd napari-storm
+
+    pip install -e ./smlm-view3d
 
     pip install -e ".[dev,pyqt6]"
 
