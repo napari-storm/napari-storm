@@ -143,7 +143,10 @@ class DataAdjustmentInterface:
             QMessageBox.warning(self.daw, "Cannot adjust dataset", str(error))
             return
         if update_layers:
-            self.parent.data_to_layer_itf.set_render_range_and_offset()
+            # Re-centre only when the arithmetic moved the data.
+            self.parent.data_to_layer_itf.set_render_range_and_offset(
+                recenter="if_changed"
+            )
             self.parent.data_to_layer_itf.update_layers()
 
     def clear_entries(self):

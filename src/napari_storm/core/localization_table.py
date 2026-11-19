@@ -424,6 +424,9 @@ class LocalizationTable:
         if values.shape != (len(self),):
             raise ValueError("Side columns need one value per row")
         self._side_columns[name] = _readonly(values.copy())
+        # Caches keyed on the version (auto colour limits) hold values of the
+        # columns too, and these just changed.
+        self.selection_version = getattr(self, "selection_version", 0) + 1
         # A derived copy of the old values must not outlive them.
         key = ("field", name)
         for cache in (

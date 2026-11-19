@@ -24,6 +24,7 @@ from .dataset_store import (
     DatasetStore,
     StoreCleared,
 )
+from .density import DEFAULT_DENSITY_RADIUS_NM, DENSITY_COLUMN, local_density
 from .footprints import (
     BLEND_ADDITIVE,
     BLEND_OPAQUE,
@@ -78,6 +79,8 @@ from .scene import (
     record_edit,
     resolve_source_path,
     save_scene,
+    split_lineage,
+    split_point,
 )
 from .traces import (
     BUILTIN_COLOR_BY,
@@ -114,6 +117,11 @@ __all__ = [
     "record_edit",
     "resolve_source_path",
     "save_scene",
+    "split_lineage",
+    "split_point",
+    "DEFAULT_DENSITY_RADIUS_NM",
+    "DENSITY_COLUMN",
+    "local_density",
     "AXES",
     "FILTERED",
     "TableSelection",

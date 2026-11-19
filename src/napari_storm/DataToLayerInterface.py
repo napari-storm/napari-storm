@@ -313,12 +313,33 @@ class DataToLayerInterface:  # localization always with z # switch info with cha
         """How many datasets the renderer holds state for."""
         return len(self.render_state)
 
-    def set_render_range_and_offset(self):
+    def set_render_range_and_offset(self, recenter=True):
+        """Measure the loaded data's extent again, from every localization.
+
+        *recenter* moves the camera to the middle of the render range: True
+        always, False never, ``"if_changed"`` only when the extent moved. An
+        edit that leaves positions alone -- a filter, arithmetic on photons --
+        must not throw away where the user was looking.
+        """
+        before = self._render_extent()
         self.reset_render_range_and_offset()
         for dataset in self.parent.localization_datasets:
             coords = self.get_coords_from_all_locs(dataset=dataset)
             self.set_render_range(zdim=dataset.zdim_present, coords=coords)
-        self.parent.move_camera_center_to_render_range_center()
+        if recenter == "if_changed":
+            recenter = self._render_extent() != before
+        if recenter:
+            self.parent.move_camera_center_to_render_range_center()
+
+    def _render_extent(self):
+        return tuple(
+            tuple(float(v) for v in axis_range)
+            for axis_range in (
+                self.render_range_x,
+                self.render_range_y,
+                self.render_range_z,
+            )
+        )
 
     @staticmethod
     def percent_to_absolute(axis_range, percent_pair):

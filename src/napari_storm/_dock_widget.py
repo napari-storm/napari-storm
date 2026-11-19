@@ -773,6 +773,14 @@ class napari_storm(NapariStormGUI):
                 and table.records.dtype[name].kind in "iuf"
                 and table.records.dtype[name].shape == ()
             ]
+            # Derived columns too: local density is worth colouring by.
+            names += [
+                name
+                for name in table.side_column_names
+                if name not in names
+                and table.column(name).dtype.kind in "iuf"
+                and table.column(name).ndim == 1
+            ]
             common = names if common is None else [n for n in common if n in set(names)]
         return common or []
 

@@ -51,26 +51,14 @@ class RangeSlider3(QDoubleRangeSlider):
             return
         if self.ax.lines:
             self.ax.lines[0].remove()
-        tmp_max = np.max(
-            getattr(
-                self.data_filter_itf.list_of_datasets[
-                    self.data_filter_itf.current_dataset_idx
-                ].locs_active,
-                self.data_filter_itf.list_of_filterable_parameters[
-                    self.data_filter_itf.current_parameter_idx
-                ],
-            )
-        )
-        tmp_min = np.min(
-            getattr(
-                self.data_filter_itf.list_of_datasets[
-                    self.data_filter_itf.current_dataset_idx
-                ].locs_active,
-                self.data_filter_itf.list_of_filterable_parameters[
-                    self.data_filter_itf.current_parameter_idx
-                ],
-            )
-        )
+        # Through the filter interface, which reads derived columns (local
+        # density) as well as measured ones; the record array has only those.
+        values = self.data_filter_itf.current_values()
+        if values.size == 0:
+            self.canvas.draw()
+            return
+        tmp_max = np.max(values)
+        tmp_min = np.min(values)
         x1 = (tmp_max - tmp_min) * self.value()[0] / self.Range + tmp_min
         x2 = (tmp_max - tmp_min) * self.value()[1] / self.Range + tmp_min
         ylim = self.ax.get_ylim()

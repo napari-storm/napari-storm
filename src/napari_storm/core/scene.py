@@ -52,6 +52,8 @@ __all__ = [
     "record_edit",
     "resolve_source_path",
     "save_scene",
+    "split_lineage",
+    "split_point",
 ]
 
 #: Written into every file so a reader can tell what it is holding.
@@ -485,7 +487,10 @@ def _object_or_none(raw, what):
 
 #: The edits a scene knows how to replay.  Anything else is refused rather
 #: than skipped: a dropped filter would show data the user had removed.
-EDIT_KINDS = ("filter", "adjust")
+#: ``filter`` a band, ``adjust`` column arithmetic, ``density`` a local
+#: density calculation, ``split`` the dataset cut in two by a band -- this
+#: entry being one of the two parts.
+EDIT_KINDS = ("filter", "adjust", "density", "split")
 
 
 def _edits_from_list(raw):
@@ -527,10 +532,37 @@ def edits_of(dataset):
 
 
 def drop_edits(dataset, kind):
-    """Forget every recorded edit of *kind*: what "Reset filters" undoes."""
+    """Forget the recorded edits of *kind*: what "Reset filters" undoes.
+
+    Only those after the last split. Everything up to a split is baked into
+    the rows the part holds, so it stays in the log: it is how the part is
+    made again.
+    """
     log = getattr(dataset, "scene_edits", None)
     if log:
-        log[:] = [edit for edit in log if edit.get("kind") != kind]
+        keep = split_point(log)
+        log[keep:] = [edit for edit in log[keep:] if edit.get("kind") != kind]
+
+
+def split_point(edits):
+    """How many leading edits a split has baked in: up to the last split."""
+    edits = list(edits)
+    for index in range(len(edits) - 1, -1, -1):
+        if edits[index].get("kind") == "split":
+            return index + 1
+    return 0
+
+
+def split_lineage(edits):
+    """The baked-in edits, as a key two equal lineages share.
+
+    Two parts of one file differ here and only here, so this is what tells
+    "the in part" from "the out part" when a scene is matched to data.
+    """
+    baked = list(edits)[: split_point(edits)]
+    if not baked:
+        return ""
+    return json.dumps(baked, sort_keys=True, default=float)
 
 
 def _answers_from_dict(raw):

@@ -75,10 +75,13 @@ pixel size and uncertainties. Nothing here can be changed.
 | **Filter mode:** | **Bandpass** keeps inside the range, **Bandstop** outside |
 | range slider | The band |
 | **Apply filter to current dataset**, **Apply filter to all datasets** | Applies the band |
+| **Split current dataset by last filter** | Replaces the dataset with two channels: what the last applied filter kept and what it removed |
 | **Reset all filtering** | Brings everything back |
 | **Number of bins:** | Histogram resolution |
+| **Search radius:**, **Calculate local density** | Counts, for each localization, the others within the radius, as a `local_density` parameter |
 
-See [Filtering](filtering.md#filtering).
+See [Filtering](filtering.md#filtering), [Local density](filtering.md#local-density)
+and [Splitting a dataset in two](filtering.md#splitting-a-dataset-in-two).
 
 <div style="clear: both"></div>
 

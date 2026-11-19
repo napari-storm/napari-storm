@@ -42,6 +42,8 @@ from .core import (
     WorldTransform,
     edits_of,
     resolve_source_path,
+    split_lineage,
+    split_point,
 )
 from .FileToLocalizationDataInterface import (
     IMPORT_ROUTE_CUSTOM,
@@ -68,6 +70,11 @@ _log = logging.getLogger(__name__)
 def _same_file_key(path):
     """A key two spellings of one path share, on any platform."""
     return os.path.normcase(os.path.abspath(str(path)))
+
+
+def _source_key(path, source_index):
+    """The same file, and the same dataset within it."""
+    return (_same_file_key(path), int(source_index or 0))
 
 
 def _channel_for(widget, dataset):
@@ -243,10 +250,10 @@ def unsaved_state(widget):
 def match_datasets(widget, scene):
     """Pair each scene entry with a loaded dataset.
 
-    By source first -- the same file, and the same dataset within it -- and by
-    name only for an entry or a dataset that has no source. Names alone are
-    fragile: they come from file names and get a suffix when taken, so two
-    channels or two files can trade them.
+    By source first -- the same file, the same dataset within it, and the
+    same split part of it -- and by name only for an entry or a dataset that
+    has no source. Names alone are fragile: they come from file names and get
+    a suffix when taken, so two channels or two files can trade them.
 
     Returns ``(pairs, unmatched_names)``.
     """
@@ -255,7 +262,9 @@ def match_datasets(widget, scene):
     for dataset in loaded:
         path = getattr(dataset, "file_path", None)
         if path:
-            key = (_same_file_key(path), int(getattr(dataset, "source_index", 0) or 0))
+            key = _source_key(path, getattr(dataset, "source_index", 0)) + (
+                split_lineage(edits_of(dataset)),
+            )
             by_source.setdefault(key, dataset)
     by_name = {}
     for dataset in loaded:
@@ -266,7 +275,9 @@ def match_datasets(widget, scene):
         dataset = None
         path = resolve_source_path(entry, scene.base_dir)
         if path is not None:
-            dataset = by_source.get((_same_file_key(path), int(entry.source_index)))
+            dataset = by_source.get(
+                _source_key(path, entry.source_index) + (split_lineage(entry.edits),)
+            )
         if dataset is None:
             candidate = by_name.get(entry.name)
             # A dataset that has a source of its own is someone else's match.
@@ -425,6 +436,9 @@ def apply(widget, scene, fresh=()):
 
     Returns the names of scene entries that matched no loaded dataset.
     """
+    fresh = set(fresh)
+    if fresh:
+        fresh |= _realize_splits(widget, scene, fresh)
     pairs, unmatched = match_datasets(widget, scene)
 
     _replay_edits(widget, pairs, fresh)
@@ -465,22 +479,129 @@ def apply(widget, scene, fresh=()):
     return unmatched
 
 
+def _realize_splits(widget, scene, fresh):
+    """Cut the files just reopened into the split parts the scene names.
+
+    A part is made the way it was the first time: the original's edits are
+    replayed up to the split, then the same band splits it. Parts split
+    again are cut again, further down. Returns the ``id()`` of every part
+    made, whose remaining edits `_replay_edits` then replays.
+    """
+    groups, whole = {}, set()
+    for entry in scene.datasets:
+        path = resolve_source_path(entry, scene.base_dir)
+        if path is None:
+            continue
+        key = _source_key(path, entry.source_index)
+        if split_point(entry.edits):
+            groups.setdefault(key, []).append(entry)
+        else:
+            whole.add(key)
+    if not groups:
+        return set()
+
+    sources = {}
+    for dataset in widget.localization_datasets:
+        path = getattr(dataset, "file_path", None)
+        if id(dataset) in fresh and path and not edits_of(dataset):
+            sources.setdefault(_source_key(path, dataset.source_index), dataset)
+
+    made = set()
+    for key, entries in groups.items():
+        source = sources.get(key)
+        if source is None:
+            continue
+        try:
+            if key in whole:
+                # The scene shows the uncut dataset as well: cut a duplicate.
+                duplicate = source.subset(
+                    np.ones(source.number_of_entries(), dtype=bool), name=source.name
+                )
+                widget._apply_loaded_datasets([duplicate], merge=True)
+                made.add(id(duplicate))
+                source = duplicate
+            _split_down(widget, source, entries, made)
+        except (KeyError, ValueError, AttributeError) as error:
+            widget._warn_user(f"could not split {source.name} as saved: {error}")
+    return made
+
+
+def _next_split(edits, start):
+    for index in range(start, len(edits)):
+        if edits[index].get("kind") == "split":
+            return index
+    return None
+
+
+def _split_down(widget, dataset, entries, made):
+    """Replay up to the next split the *entries* share, split, and go on."""
+    from .dataset_split import SPLIT_PARTS, split_dataset
+
+    done = len(edits_of(dataset))
+    ahead = [e for e in entries if _next_split(e.edits, done) is not None]
+    if not ahead:
+        return
+    at = _next_split(ahead[0].edits, done)
+    lead = list(ahead[0].edits)
+    same = [
+        e
+        for e in ahead
+        if _next_split(e.edits, done) == at
+        and list(e.edits[done:at]) == lead[done:at]
+        and {k: v for k, v in e.edits[at].items() if k != "part"}
+        == {k: v for k, v in lead[at].items() if k != "part"}
+    ]
+    if len(same) < len(ahead):
+        widget._warn_user(
+            "the scene splits "
+            + dataset.name
+            + " in more than one way; only one of them was made: "
+            + ", ".join(e.name for e in ahead if e not in same)
+            + " could not be"
+        )
+    for edit in lead[done:at]:
+        _replay_one(widget, dataset, edit)
+    wanted = {e.edits[at].get("part") for e in same}
+    parts = [part for part in SPLIT_PARTS if part in wanted]
+    pieces = split_dataset(widget, dataset, lead[at], parts=parts)
+    for part, piece in pieces.items():
+        made.add(id(piece))
+        _split_down(
+            widget, piece, [e for e in same if e.edits[at].get("part") == part], made
+        )
+
+
+def _replay_one(widget, dataset, edit):
+    """Redo one recorded edit on *dataset*."""
+    kind = edit["kind"]
+    if kind == "adjust":
+        _replay_adjustment(dataset, edit)
+    elif kind == "filter":
+        widget.data_filter_itf.replay_band(dataset, edit)
+    elif kind == "density":
+        widget.data_filter_itf.replay_density(dataset, edit)
+    else:
+        raise ValueError(f"a {kind} edit cannot be redone in place")
+
+
 def _replay_edits(widget, pairs, fresh):
     changed = False
     differs = []
     for entry, dataset in pairs:
         if not entry.edits:
             continue
+        done = edits_of(dataset)
         if id(dataset) not in fresh:
-            if tuple(entry.edits) != edits_of(dataset):
+            if tuple(entry.edits) != done:
                 differs.append(entry.name)
             continue
-        for edit in entry.edits:
+        if tuple(entry.edits[: len(done)]) != done:
+            # A split part made from other edits than the scene's own.
+            differs.append(entry.name)
+            continue
+        for edit in entry.edits[len(done) :]:
             try:
-                if edit["kind"] == "adjust":
-                    _replay_adjustment(dataset, edit)
-                else:
-                    widget.data_filter_itf.replay_band(dataset, edit)
+                _replay_one(widget, dataset, edit)
             except (KeyError, ValueError, AttributeError) as error:
                 widget._warn_user(
                     f"could not replay {edit.get('kind')} on {dataset.name}: {error}"
@@ -490,6 +611,10 @@ def _replay_edits(widget, pairs, fresh):
     if changed:
         widget.data_to_layer_itf.set_render_range_and_offset()
         widget.data_to_layer_itf.update_layers()
+        # A density calculation adds a parameter to filter and colour by.
+        if widget.localization_datasets:
+            widget.data_filter_itf.current_dataset_changed()
+        widget._sync_color_coding_controls()
     if differs:
         widget._warn_user(
             "the scene's filters and adjustments differ from those on the "

@@ -29,6 +29,48 @@ from them.
 
 <div style="clear: both"></div>
 
+## Local density
+
+Isolated localizations -- background, stray blinks -- sit far from any
+other, while labelled structure is crowded. **Local density** measures that
+for every localization: how many *other* localizations lie within the
+**Search radius:** of it, in a sphere for 3-D data and a circle for 2-D. It is
+the same count daxview uses, with the same default radius of 35 nm.
+
+1. Apply the filters that remove what you do not trust (dim localizations,
+   poor precision) first: only localizations that pass the filters applied so
+   far count as neighbours. The render range does not limit it, so cropping
+   does not make the edges of the view look sparse.
+2. Set the **Search radius:** and press **Calculate local density**. Every
+   loaded dataset, each channel on its own, gets a `local_density` parameter,
+   and the histogram shows it.
+3. Filter on it like any other parameter -- a **Bandpass** from a threshold
+   upwards keeps the crowded localizations -- or colour by it with
+   **Colour code by** on the Render options tab.
+
+Calculating again replaces the values. **Reset all filtering** counts again
+with the same radius, now over everything.
+
+## Splitting a dataset in two
+
+Apply a filter, look at what it leaves, and if you like it press
+**Split current dataset by last filter**. The current dataset becomes two
+channels: what the last filter kept -- what you see now -- named
+`<name> in`, and what it removed, `<name> out`. Each has its own colour,
+contrast and visibility, and can be filtered further, coloured or exported on
+its own. Split after a local density threshold to show the dense and sparse
+localizations side by side in two colours.
+
+The two channels replace the original. Localizations removed by filters
+applied *before* the last one go to neither part. A dataset is not split
+before a filter has been applied to it, when the last filter removed nothing,
+while drift correction is applied, or when the local density was calculated
+after the last filter (apply the filter again, then split).
+
+A [scene](export.md#scenes) remembers the split: loading it opens the file,
+replays the filters and density calculation that came before, and splits it
+again into the same two channels.
+
 ## Adjusting values
 
 ![The Data adjustment tab](images/tab-data-adjustment.png){ .dock align=right }

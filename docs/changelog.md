@@ -5,6 +5,25 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
 ## Unreleased
 
+* **Local density.** **Calculate local density** on the Data Filter tab gives
+  every localization a `local_density` parameter: how many other localizations
+  lie within a search radius (35 nm by default; a sphere in 3-D, a circle in
+  2-D), counting only those the filters applied so far keep -- the measure
+  daxview uses. Filter on it to remove isolated localizations, or colour by
+  it. See [Local density](filtering.md#local-density).
+* **Split a dataset by a filter.** Apply a filter, then **Split current
+  dataset by last filter**: the dataset becomes two channels, what the filter
+  kept and what it removed, each in its own colour -- dense and sparse
+  localizations side by side, for instance. Scenes make the split again when
+  they are loaded. See
+  [Splitting a dataset in two](filtering.md#splitting-a-dataset-in-two).
+* **Derived columns can be filtered and coloured by.** Group ids from STORM
+  grouping now appear in the Data Filter tab and under **Colour code by**,
+  like local density.
+* **Applying a filter keeps the view.** **Apply filter** no longer re-centres
+  the camera on the whole dataset, and Data adjustment arithmetic re-centres
+  only when it moves the data. A click on the Data Filter tab's background no
+  longer raises an error.
 * **Load Scene reopens the data.** A scene is now a saved view: **Load
   Scene…** opens the files it names -- at their saved paths, or beside the
   scene if the folder moved -- replays the filters and adjustments, and
