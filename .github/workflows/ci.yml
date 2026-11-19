@@ -133,9 +133,12 @@ jobs:
         with:
           qt: true
 
+      # storm-drawing (napari-storm's drawing core without napari) lives in
+      # this repository and is not on PyPI, so it goes in first.
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e ./storm-drawing
           python -m pip install -e ".[dev,pyqt6]"
 
       - name: Run tests
@@ -157,20 +160,25 @@ jobs:
         with:
           qt: true
 
+      # storm-drawing is built into its own folder, so dist/ still holds
+      # napari-storm's distribution alone.
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build
           python -m build
+          python -m build storm-drawing --outdir dist-storm-drawing
 
       # A successful build is not evidence the artifact is usable: the previous
       # configuration built a wheel containing only metadata.
       - name: Inspect wheel contents
         run: python scripts/check_wheel_contents.py dist/*.whl
 
+      # storm-drawing first: napari-storm requires it, and it is not on PyPI.
       - name: Install the built wheel into a clean environment
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/python -m pip install --upgrade pip
+          /tmp/clean/bin/python -m pip install dist-storm-drawing/*.whl
           wheel_path=$(find dist -name '*.whl' -print -quit)
           /tmp/clean/bin/python -m pip install "${wheel_path}[pyqt6]"
 
