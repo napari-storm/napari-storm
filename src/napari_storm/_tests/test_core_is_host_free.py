@@ -45,9 +45,10 @@ sys.meta_path.insert(0, _Blocker())
 """
 
 
-def _run_headless(body):
-    """Run *body* in a subprocess where Qt, napari and VisPy cannot be imported."""
-    script = _BLOCKER.format(forbidden=FORBIDDEN_ROOTS) + textwrap.dedent(body)
+def _run_headless(body, forbidden=FORBIDDEN_ROOTS):
+    """Run *body* in a subprocess where Qt, napari and VisPy (or the roots in
+    *forbidden*) cannot be imported."""
+    script = _BLOCKER.format(forbidden=forbidden) + textwrap.dedent(body)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     return subprocess.run(
@@ -247,6 +248,51 @@ def test_the_blocker_itself_works():
     result = _run_headless("import qtpy\n")
     assert result.returncode != 0
     assert "must not import qtpy" in result.stderr
+
+
+def test_the_drawing_package_imports_without_napari():
+    """The split's gate: ``smlm_view3d.core`` needs no Qt, napari or VisPy,
+    and its VisPy drawing and plain-VisPy backend need no napari or Qt."""
+    result = _run_headless("""
+        import smlm_view3d.core as core
+
+        assert core.RenderPlanner is not None and core.NullRenderer is not None
+        assert "napari_storm" not in sys.modules
+        print("OK")
+        """)
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
+
+    result = _run_headless(
+        """
+        import numpy as np
+        from vispy.visuals.filters import Filter
+
+        from smlm_view3d.core import LocalizationRenderer
+        from smlm_view3d.particles import (
+            billboard_filter, footprint_shaders, instanced, summed_contrast,
+            vispy_compat, vispy_renderer,
+        )
+
+        billboard = billboard_filter.InstancedBillboardsFilter()
+        assert isinstance(billboard, Filter)
+        billboard.set_instances(np.zeros((3, 3)), np.ones((3, 3)), np.ones(3))
+        assert issubclass(
+            vispy_renderer.VispyInstancedRenderer, LocalizationRenderer
+        )
+        assert "napari_storm" not in sys.modules
+        try:
+            import qtpy
+        except ImportError:
+            pass
+        else:
+            raise AssertionError("the blocker let Qt in")
+        print("OK")
+        """,
+        forbidden=("qtpy", "PyQt5", "PyQt6", "PySide2", "PySide6", "napari"),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
 
 
 def test_postprocessing_imports_without_a_host_or_comet():
