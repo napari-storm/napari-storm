@@ -1,0 +1,45 @@
+[build-system]
+# 77 for the SPDX `license` string and `license-files`.
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# A working name: the package's real name is still to be chosen.
+name = "storm-drawing"
+version = "0.1.0"
+description = "napari-storm's drawing core without napari: the localization table, the render planner and the instanced VisPy billboards."
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Lenny Reinkensmeier" }, { name = "Mark Bates" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+# No napari and no Qt binding: VisPy reaches whichever Qt the host has.
+# PyOpenGL is VisPy's gl+ GL backend, the only one with instanced drawing.
+dependencies = [
+    "numpy",
+    "vispy",
+    "PyOpenGL",
+]
+
+[project.optional-dependencies]
+# Imported only when called: core.density.local_density needs scipy, and
+# core.ome_export's writer needs tifffile.
+density = ["scipy"]
+ome-tiff = ["tifffile"]
+
+[project.urls]
+"Source Code" = "https://github.com/napari-storm/napari-storm"
+"Bug Tracker" = "https://github.com/napari-storm/napari-storm/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"storm_drawing.particles" = ["NOTICE"]
