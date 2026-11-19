@@ -14,6 +14,12 @@ name: Release
 # Publishing is gated on a *published GitHub release* rather than a bare tag
 # push so that a release is always a deliberate, documented act.  CI's full
 # test grid runs on the v* tag independently.
+#
+# smlm-view3d, the drawing core in smlm-view3d/, is published by the same job
+# and needs the same trusted publisher on pypi.org for project "smlm-view3d".
+# napari-storm requires it, so it goes first.  It keeps its own version: a
+# napari-storm release that leaves smlm-view3d's version unchanged skips it
+# rather than failing on a file PyPI already has.
 
 on:
   release:
@@ -30,10 +36,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      # smlm-view3d is built into its own folder, so dist/ still holds
+      # napari-storm's distribution alone (as in CI).
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build twine
           python -m build
+          python -m build smlm-view3d --outdir dist-smlm-view3d
 
       # The same gate CI applies: a successful build is not evidence the
       # artifact is usable.
@@ -41,7 +50,7 @@ jobs:
         run: python scripts/check_wheel_contents.py dist/*.whl
 
       - name: Check metadata renders on PyPI
-        run: python -m twine check --strict dist/*
+        run: python -m twine check --strict dist/* dist-smlm-view3d/*
 
       # A release tagged v2.1.0 must ship version 2.1.0.  setup.cfg is the
       # single source of the version, so the tag has to be checked against
@@ -64,6 +73,11 @@ jobs:
           name: release-dist
           path: dist/
 
+      - uses: actions/upload-artifact@v6
+        with:
+          name: smlm-view3d-dist
+          path: dist-smlm-view3d/
+
   publish:
     name: Publish to PyPI
     needs: build
@@ -82,4 +96,18 @@ jobs:
           name: release-dist
           path: dist/
 
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/download-artifact@v6
+        with:
+          name: smlm-view3d-dist
+          path: dist-smlm-view3d/
+
+      # First, because napari-storm requires it.  skip-existing: a release
+      # that leaves smlm-view3d's version unchanged uploads nothing here.
+      - name: Publish smlm-view3d
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-smlm-view3d/
+          skip-existing: true
+
+      - name: Publish napari-storm
+        uses: pypa/gh-action-pypi-publish@release/v1
