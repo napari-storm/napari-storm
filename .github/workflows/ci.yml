@@ -13,13 +13,22 @@ name: CI
 # Linux, plus one job each on Windows and macOS so that no platform goes
 # ungated, while keeping pull-request feedback fast.  The full grid runs
 # weekly, on release tags, and on demand.
+#
+# Each change is tested once, on its pull request.  A push to main is not run
+# again (it is the merge of a pull request just tested; the weekly run covers
+# anything pushed to main directly), and a pull request that changes only
+# documentation or the release workflow runs nothing.
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "design-notes/**"
+      - ".github/workflows/release.yml"
   schedule:
     # Mondays, 04:00 UTC.  Catches breakage from dependency releases on the
     # combinations a pull request no longer covers.
