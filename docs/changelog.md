@@ -3,7 +3,7 @@
 What changed for users in each release. Developers will find the full history
 in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
-## Unreleased
+## 3.3.0 -- 2026-11-19
 
 * **Scenes use the data already open.** Loading a scene no longer reads a file
   again that is open as it was loaded: split parts are cut from it, and
@@ -59,6 +59,12 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
   localizations blend to their mean colour, so dense regions no longer turn
   white, and the contrast slider sets brightness from density. Colour coding
   is saved in scenes. See [Colour](rendering.md#colour).
+
+## 3.2.0 -- 2026-10-11, tagged only
+
+The tag's package still called itself 3.1.0 and was not published; 3.3.0
+includes everything here.
+
 * **Drift correction with COMET.** A new **Post-proc.** tab runs
   [COMET](https://github.com/gpufit/Comet) drift correction in the background,
   with progress, Cancel and a memory estimate before each run, and optional
