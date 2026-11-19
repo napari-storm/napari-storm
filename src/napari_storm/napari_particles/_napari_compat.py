@@ -11,12 +11,23 @@ through the codebase, every private lookup lives here so that:
 Verified against napari 0.4.x - 0.7.x.  ``Window.qt_viewer`` emits a
 FutureWarning from 0.6 onward and is slated for removal in 0.8, so
 ``Window._qt_viewer`` is preferred when present.
+
+The parts that need no napari live elsewhere and are imported here, so every
+old import keeps working: ``NapariInternalsChanged`` and
+``mesh_vertex_buffer`` in `billboard_filter`, and ``ADDITIVE_BLEND_STATE``,
+``enable_instanced_backend`` and ``instancing_available`` in `vispy_compat`.
 """
 
 import warnings
 import weakref
 
 from ..core.footprints import BLEND_OPAQUE, footprint_named
+from .billboard_filter import NapariInternalsChanged, mesh_vertex_buffer
+from .vispy_compat import (  # noqa: F401 - re-exported: moved, importable here
+    ADDITIVE_BLEND_STATE,
+    enable_instanced_backend,
+    instancing_available,
+)
 
 __all__ = [
     "NapariInternalsChanged",
@@ -32,20 +43,8 @@ __all__ = [
     "release_additive_blending",
 ]
 
-#: True additive blending: add the source, keep the destination.  Depth testing
-#: is off because splats are order-independent once they only ever sum.
-ADDITIVE_BLEND_STATE = {
-    "blend": True,
-    "depth_test": False,
-    "blend_func": ("src_alpha", "one"),
-}
-
 #: Visual -> its own unwrapped ``set_gl_state``, for visuals we have forced.
 _FORCED_BLENDING = weakref.WeakKeyDictionary()
-
-
-class NapariInternalsChanged(RuntimeError):
-    """Raised when a required napari internal is missing on this version."""
 
 
 def get_qt_viewer(viewer):
@@ -180,27 +179,6 @@ def apply_footprint_blending(layer, visual, footprint):
         force_additive_blending(visual)
 
 
-def mesh_vertex_buffer(visual):
-    """The VertexBuffer a mesh visual draws its vertices from, in drawn order.
-
-    A shader that needs each vertex's own position reads it from here instead
-    of recovering it by inverting the transforms.  Through a perspective
-    projection that inversion loses a vertex far from the camera entirely:
-    VisPy puts the near plane at 1/3162 of the eye distance, so for anything
-    much farther away the depth row subtracts two all-but-equal float32
-    numbers, and the error is multiplied by the camera's distance from the
-    vertex.  It is VisPy's private ``MeshVisual._vertices``, filled with the
-    face-expanded vertices that ``position`` is bound to, so it cannot
-    disagree with what is drawn.
-    """
-    buffer = getattr(visual, "_vertices", None)
-    if buffer is None:
-        raise NapariInternalsChanged(
-            "the mesh visual no longer exposes its vertex buffer as _vertices"
-        )
-    return buffer
-
-
 def get_layer_controls(viewer, layer):
     """Return the Qt controls widget for *layer*, or ``None`` if unavailable.
 
@@ -240,39 +218,6 @@ def set_builtin_layer_docks_visible(viewer, visible):
             dock.setVisible(bool(visible))
             changed = True
     return changed
-
-
-# ----------------------------------------------------------------------
-# Instanced rendering (Level 3 prototype)
-# ----------------------------------------------------------------------
-
-
-def enable_instanced_backend():
-    """Select VisPy's ``gl+`` backend, which is the only one with instancing.
-
-    Must run before *any* GL context exists — so before napari builds its
-    canvas, which in practice means before ``napari.Viewer()``. The choice is
-    process-global: every layer in the viewer, not only ours, then renders
-    through PyOpenGL. That cost is real and is recorded in
-    ``docs/backend-comparison.md``; this function exists so it is at least made
-    deliberately and in one place.
-
-    Returns True if instancing is available afterwards.
-    """
-    import vispy
-
-    try:
-        vispy.use(gl="gl+")
-    except Exception:  # noqa: BLE001 - a context already exists, or no PyOpenGL
-        pass
-    return instancing_available()
-
-
-def instancing_available():
-    """True when the active GL backend can issue instanced draw calls."""
-    from vispy.gloo import gl
-
-    return hasattr(gl.current_backend, "glDrawElementsInstanced")
 
 
 # ----------------------------------------------------------------------
