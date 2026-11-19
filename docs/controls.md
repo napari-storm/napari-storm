@@ -15,6 +15,8 @@ are written as the interface shows them.
 | **Custom** | Runs your own import function | [Formats it does not know](importing.md#formats-it-does-not-know) |
 | **Import Reference Image…** | Overlays a TIFF, PNG or JPEG | [Reference images](importing.md#reference-images) |
 | **Reset view:** XY / YZ / XZ | Looks at one plane (3-D data) | [Views](navigating.md#views) |
+| **Rotation:** about the middle of the view | Starting a rotation puts its centre on the data in the middle | [The centre of rotation](navigating.md#the-centre-of-rotation) |
+| **Focus mode:**, radius, outside | Fades out what lies beyond the radius from the centre of the view | [Focus mode](navigating.md#focus-mode) |
 | **Rendering options:** | Fixed-size or variable-size Gaussians | [Gaussian width](rendering.md#gaussian-width) |
 | **FWHM in XY [nm]:**, **FWHM in Z [nm]:** | Width of every Gaussian (in variable mode: of the PSF) | [Gaussian width](rendering.md#gaussian-width) |
 | **Min. FWHM in XY [nm]:**, **Min. FWHM in Z [nm]:** | Smallest width in variable mode | [Gaussian width](rendering.md#gaussian-width) |
@@ -75,7 +77,7 @@ pixel size and uncertainties. Nothing here can be changed.
 | **Filter mode:** | **Bandpass** keeps inside the range, **Bandstop** outside |
 | range slider | The band |
 | **Apply filter to current dataset**, **Apply filter to all datasets** | Applies the band |
-| **Split current dataset by last filter** | Replaces the dataset with two channels: what the last applied filter kept and what it removed |
+| **Split current dataset: shown / filtered out** | Replaces the dataset with two channels: what the filters kept and everything they removed |
 | **Reset all filtering** | Brings everything back |
 | **Number of bins:** | Histogram resolution |
 | **Search radius:**, **Calculate local density** | Counts, for each localization, the others within the radius, as a `local_density` parameter |

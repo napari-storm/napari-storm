@@ -9,6 +9,36 @@ napari's own controls apply. In 3-D, drag to rotate and hold
 <kbd>Shift</kbd> while dragging to pan; in 2-D, drag to pan. Scroll to zoom in
 either.
 
+## The centre of rotation
+
+A 3-D view turns about one point, the centre of the view. Panning slides that
+point sideways but never in depth, so on its own it drifts in front of or
+behind what you are looking at, and every turn swings the structure away.
+napari-storm keeps it on the data:
+
+* **When you start rotating**, the centre moves along your line of sight onto
+  the localizations in the middle of the view. Nothing moves on screen; the
+  structure in the middle simply stays there as you turn. Switch this off by
+  unticking **Rotation: about the middle of the view** on the Data Controls
+  tab, under **Reset view**.
+* **Double-click a structure** to make it the centre and bring it to the middle
+  of the view. In 2-D, double-click zooms in as napari does.
+
+While the camera moves -- rotating, panning or zooming -- a small grey dot
+shows where the centre is, and it goes again a moment after the camera stops.
+
+## Focus mode
+
+Tick **Focus mode:** on the Data Controls tab, under **Reset view**, to fade
+out localizations further than the **radius** from the centre of the view --
+the centre of rotation, where the grey dot appears -- down to the
+**outside** opacity (0 % hides them). The region follows the camera as you pan,
+double-click or start a rotation, so you can move through crowded data and see
+only what is around the structure in the middle. In 2-D the region is a circle
+in x and y; in 3-D a sphere. Scenes save it. It needs instanced rendering,
+which napari-storm uses wherever the graphics driver supports it; otherwise
+the checkbox is disabled.
+
 ## Keyboard
 
 napari-storm adds these keys to the viewer:

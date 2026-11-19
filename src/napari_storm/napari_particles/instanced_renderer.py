@@ -33,6 +33,7 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
             )
         self.viewer = viewer
         self._layers = {}
+        self._focus = None
         self._closing = set()
         self.on_layer_removed_by_host = None
         viewer.layers.events.removed.connect(self._on_layer_removed)
@@ -90,6 +91,8 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
             name=request.name,
         )
         layer.add_to_viewer(self.viewer)
+        if self._focus is not None:
+            layer.set_focus(self._focus)
         self._layers[dataset_id] = layer
         self._traces.open(dataset_id, request)
         self._pairs.open(dataset_id, request)
@@ -121,6 +124,13 @@ class InstancedRenderer(TracesMixin, LocalizationRenderer):
         self._traces.set_shown(dataset_id, True)
         self._pairs.set_shown(dataset_id, True)
         return layer
+
+    supports_focus = True
+
+    def set_focus(self, focus):
+        self._focus = focus
+        for layer in self._layers.values():
+            layer.set_focus(focus)
 
     def set_visible(self, dataset_id, visible):
         layer = self._layers.get(dataset_id)

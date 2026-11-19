@@ -180,6 +180,12 @@ class ViewState:
     grid_z_position: int = None
     grid_opacity: int = None
     grid_color_index: int = None
+    #: Focus mode, about the camera centre; None in scenes from before it.
+    focus: bool = None
+    focus_radius_nm: float = None
+    focus_outside_opacity: float = None
+    #: Whether rotating re-centres on the middle of the view.
+    auto_pivot: bool = None
 
 
 @dataclass

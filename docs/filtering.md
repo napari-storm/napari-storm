@@ -53,19 +53,18 @@ with the same radius, now over everything.
 
 ## Splitting a dataset in two
 
-Apply a filter, look at what it leaves, and if you like it press
-**Split current dataset by last filter**. The current dataset becomes two
-channels: what the last filter kept -- what you see now -- named
-`<name> in`, and what it removed, `<name> out`. Each has its own colour,
-contrast and visibility, and can be filtered further, coloured or exported on
-its own. Split after a local density threshold to show the dense and sparse
-localizations side by side in two colours.
+Apply one or more filters, look at what they leave, and if you like it press
+**Split current dataset: shown / filtered out**. The current dataset becomes
+two channels: what you see now, named `<name> in`, and everything any of the
+filters removed, `<name> out`. Together they hold every localization of the
+dataset. Each has its own colour, contrast and visibility, and can be
+filtered further, coloured or exported on its own. Split after a local
+density threshold to show the dense and sparse localizations side by side in
+two colours.
 
-The two channels replace the original. Localizations removed by filters
-applied *before* the last one go to neither part. A dataset is not split
-before a filter has been applied to it, when the last filter removed nothing,
-while drift correction is applied, or when the local density was calculated
-after the last filter (apply the filter again, then split).
+The two channels replace the original. A dataset is not split before a filter
+has been applied to it, when the filters removed nothing, or while drift
+correction is applied.
 
 A [scene](export.md#scenes) remembers the split: loading it opens the file,
 replays the filters and density calculation that came before, and splits it

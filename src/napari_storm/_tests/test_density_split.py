@@ -21,7 +21,7 @@ from napari_storm.core import (
     record_edit,
     split_lineage,
 )
-from napari_storm.dataset_split import split_by_last_filter, split_dataset
+from napari_storm.dataset_split import split_by_filters, split_dataset
 
 # ----------------------------------------------------------------- the measure
 
@@ -270,11 +270,18 @@ def test_splitting_by_density_makes_two_channels_in_place_of_one(
     colours = [channel.Colormap_selector.currentText() for channel in widget.channel]
     assert colours[0] != colours[1]
     # Each part remembers how it was made.
-    assert [edit["kind"] for edit in edits_of(pieces["out"])] == ["density", "split"]
-    assert edits_of(pieces["out"])[-1]["part"] == "out"
+    assert [edit["kind"] for edit in edits_of(pieces["out"])] == [
+        "density",
+        "filter",
+        "split",
+    ]
+    assert edits_of(pieces["out"])[-1] == {"kind": "split", "part": "out"}
 
 
-def test_a_split_leaves_out_what_earlier_filters_removed(make_napari_viewer, tmp_path):
+def test_a_split_recorded_with_a_band_still_divides_what_the_filters_keep(
+    make_napari_viewer, tmp_path
+):
+    """How splits were first recorded; scenes saved then still load."""
     widget = _widget(make_napari_viewer)
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
     itf = widget.data_filter_itf
@@ -293,28 +300,27 @@ def test_a_split_leaves_out_what_earlier_filters_removed(make_napari_viewer, tmp
     assert pieces["out"].number_of_entries() == SCATTERED - 5
 
 
-def test_splitting_by_the_last_filter_sets_aside_what_earlier_filters_removed(
-    make_napari_viewer, tmp_path
-):
+def test_out_holds_everything_any_filter_removed(make_napari_viewer, tmp_path):
+    """Two filters, then a split: 'out' is what either removed, not the last."""
     widget = _widget(make_napari_viewer)
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
     itf = widget.data_filter_itf
-    # An earlier filter drops the last five lone localizations...
+    # One filter drops the last five lone localizations...
     itf.replay_band(
         dataset,
         {"parameter": "x_pos_nm", "low": 0.0, "high": 34_500.0, "mode": "Bandpass"},
     )
     itf.calculate_local_density(35.0)
 
-    # ... then a density threshold, and the split.
+    # ... a density threshold the other fifteen, then the split.
     pieces = _filter_then_split(itf)
 
     assert pieces["in"].number_of_entries() == CLUSTER
-    assert pieces["out"].number_of_entries() == SCATTERED - 5
-    # The threshold became the split; the earlier filter is baked in.
+    assert pieces["out"].number_of_entries() == SCATTERED
     assert [edit["kind"] for edit in edits_of(pieces["out"])] == [
         "filter",
         "density",
+        "filter",
         "split",
     ]
 
@@ -325,11 +331,11 @@ def test_there_is_nothing_to_split_by_before_a_filter_is_applied(
     widget = _widget(make_napari_viewer)
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
 
-    with pytest.raises(ValueError, match="Apply one"):
-        split_by_last_filter(widget, dataset)
+    with pytest.raises(ValueError, match="Apply one or more"):
+        split_by_filters(widget, dataset)
 
 
-def test_a_filter_that_removed_nothing_is_not_split_by(make_napari_viewer, tmp_path):
+def test_filters_that_removed_nothing_are_not_split_by(make_napari_viewer, tmp_path):
     widget = _widget(make_napari_viewer)
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
     itf = widget.data_filter_itf
@@ -338,13 +344,12 @@ def test_a_filter_that_removed_nothing_is_not_split_by(make_napari_viewer, tmp_p
     itf.apply_filtering(0)
 
     with pytest.raises(ValueError, match="removed nothing"):
-        split_by_last_filter(widget, dataset)
+        split_by_filters(widget, dataset)
 
 
-def test_density_counted_after_the_last_filter_stops_a_split(
+def test_density_counted_after_a_filter_splits_as_it_was_counted(
     make_napari_viewer, tmp_path
 ):
-    """The parts' density would be counted over both; replayed, over one."""
     widget = _widget(make_napari_viewer)
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
     itf = widget.data_filter_itf
@@ -354,8 +359,10 @@ def test_density_counted_after_the_last_filter_stops_a_split(
     )
     itf.calculate_local_density(35.0)
 
-    with pytest.raises(ValueError, match="after the last filter"):
-        split_by_last_filter(widget, dataset)
+    pieces = split_by_filters(widget, dataset)
+
+    assert pieces["out"].number_of_entries() == 5
+    assert pieces["in"].number_of_entries() == CLUSTER + SCATTERED - 5
 
 
 def test_a_split_that_would_leave_a_part_empty_is_refused(make_napari_viewer, tmp_path):
@@ -363,7 +370,7 @@ def test_a_split_that_would_leave_a_part_empty_is_refused(make_napari_viewer, tm
     dataset = _open(widget, _write_points(tmp_path / "cells.ns"))
     band = {"parameter": "x_pos_nm", "low": 0.0, "high": 1e9, "mode": "Bandpass"}
 
-    with pytest.raises(ValueError, match="outside"):
+    with pytest.raises(ValueError, match="out part"):
         split_dataset(widget, dataset, band)
 
     assert widget.localization_datasets[0] is dataset
@@ -399,6 +406,7 @@ def test_resetting_filters_on_a_part_keeps_its_rows_and_recounts_density(
     assert _density(inside).tolist() == [CLUSTER - 1] * CLUSTER
     assert [edit["kind"] for edit in edits_of(inside)] == [
         "density",
+        "filter",
         "split",
         "density",
     ]
@@ -454,3 +462,57 @@ def test_loading_a_split_scene_onto_its_own_parts_changes_nothing(
 
     assert widget.reported == []
     assert list(widget.localization_datasets) == [pieces["in"], pieces["out"]]
+
+
+def _refuse_reopening(widget, monkeypatch):
+    def reopen(*_args, **_kwargs):
+        raise AssertionError("the scene read its file again")
+
+    monkeypatch.setattr(widget, "open_localization_data_file_and_get_dataset", reopen)
+
+
+def test_a_split_scene_cuts_the_file_already_open_rather_than_reopening_it(
+    make_napari_viewer, tmp_path, monkeypatch
+):
+    """Reported: the file was open, and loading the scene read it again."""
+    data = _write_points(tmp_path / "cells.ns")
+    before = _widget(make_napari_viewer)
+    _open(before, data)
+    before.data_filter_itf.calculate_local_density(35.0)
+    saved = _filter_then_split(before.data_filter_itf)
+    path = tmp_path / "split.json"
+    before.save_scene_to(path)
+
+    after = _widget(make_napari_viewer)
+    _open(after, data)  # the file, as it opens
+    _refuse_reopening(after, monkeypatch)
+    after.load_scene_from(path)
+
+    assert after.reported == []
+    assert [d.name for d in after.localization_datasets] == ["cells in", "cells out"]
+    for part, made in zip(("in", "out"), after.localization_datasets):
+        assert made.number_of_entries() == saved[part].number_of_entries()
+        assert edits_of(made) == edits_of(saved[part])
+
+
+def test_a_scene_replays_its_filters_onto_the_file_opened_by_hand(
+    make_napari_viewer, tmp_path, monkeypatch
+):
+    data = _write_points(tmp_path / "cells.ns")
+    before = _widget(make_napari_viewer)
+    filtered = _open(before, data)
+    before.data_filter_itf.replay_band(
+        filtered,
+        {"parameter": "x_pos_nm", "low": 0.0, "high": 25_000.0, "mode": "Bandpass"},
+    )
+    removed = before.data_filter_itf.indices_for(filtered).copy()
+    path = tmp_path / "filtered.json"
+    before.save_scene_to(path)
+
+    after = _widget(make_napari_viewer)
+    opened = _open(after, data)
+    _refuse_reopening(after, monkeypatch)
+    after.load_scene_from(path)
+
+    assert after.reported == []
+    np.testing.assert_array_equal(after.data_filter_itf.indices_for(opened), removed)

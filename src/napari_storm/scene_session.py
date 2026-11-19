@@ -166,6 +166,10 @@ def _capture_view(widget):
         grid_z_position=int(widget.Sgrid_z_pos.value()),
         grid_opacity=int(widget.Sgrid_plane_opacity.value()),
         grid_color_index=int(widget.Bgrid_plane_color.currentIndex()),
+        focus=bool(widget.Cfocus.isChecked()),
+        focus_radius_nm=float(widget.SBfocus_radius.value()),
+        focus_outside_opacity=widget.SBfocus_outside.value() / 100.0,
+        auto_pivot=bool(widget.Cauto_pivot.isChecked()),
     )
 
 
@@ -336,7 +340,15 @@ def plan_reopen(widget, scene):
         for entry in scene.datasets
         if resolve_source_path(entry, scene.base_dir) is None
     ]
-    reopenable = [name for name in unmatched if name not in missing]
+    # Split parts that can be cut from a dataset already open need no file.
+    derivable = {
+        entry.name
+        for _source, entries, _duplicate in _split_sources(widget, scene).values()
+        for entry in entries
+    }
+    reopenable = [
+        name for name in unmatched if name not in missing and name not in derivable
+    ]
     if not reopenable:
         return ReopenPlan(files=[], missing=missing)
 
@@ -429,19 +441,21 @@ def reopen_and_apply(widget, scene, plan, background=False, on_done=None):
 def apply(widget, scene, fresh=()):
     """Put *scene* back onto the datasets loaded now.
 
-    *fresh* holds the ``id()`` of datasets just opened by the scene itself:
-    their recorded edits are replayed. On datasets that were already open
-    they are not -- replaying an adjustment twice would apply it twice -- and
-    a difference is reported instead.
+    Each dataset gets the scene's edits beyond those it already has: a file
+    just opened gets them all, data the scene was saved from gets none --
+    replaying an adjustment twice would apply it twice -- and data whose own
+    edits went another way gets none and is reported. Split parts the scene
+    names are cut from the dataset they came from when it is open.
+
+    *fresh* is accepted for callers that still pass it; what a dataset
+    already has is read off its own edit log instead.
 
     Returns the names of scene entries that matched no loaded dataset.
     """
-    fresh = set(fresh)
-    if fresh:
-        fresh |= _realize_splits(widget, scene, fresh)
+    _realize_splits(widget, scene)
     pairs, unmatched = match_datasets(widget, scene)
 
-    _replay_edits(widget, pairs, fresh)
+    _replay_edits(widget, pairs)
 
     for entry, dataset in pairs:
         dataset_id = getattr(dataset, "dataset_id", None)
@@ -469,6 +483,7 @@ def apply(widget, scene, fresh=()):
     _restore_camera(widget, scene.camera)
     if scene.view is not None:
         _restore_scalebar(widget, scene.view)
+        _restore_focus(widget, scene.view)
 
     if unmatched:
         widget._warn_user(
@@ -479,47 +494,74 @@ def apply(widget, scene, fresh=()):
     return unmatched
 
 
-def _realize_splits(widget, scene, fresh):
-    """Cut the files just reopened into the split parts the scene names.
+def _is_prefix(done, edits):
+    """Whether a dataset with edits *done* is on the way to *edits*."""
+    done = tuple(done)
+    return tuple(edits[: len(done)]) == done
 
-    A part is made the way it was the first time: the original's edits are
-    replayed up to the split, then the same band splits it. Parts split
-    again are cut again, further down. Returns the ``id()`` of every part
-    made, whose remaining edits `_replay_edits` then replays.
+
+def _split_sources(widget, scene):
+    """The loaded dataset to cut each file's missing split parts from.
+
+    ``{source key: (dataset, entries, duplicate)}``, for the scene's split
+    parts that no loaded dataset matches. A dataset qualifies when it comes
+    from the same file and its own edits are where every one of those parts
+    began -- usually none: the file as it was opened, whether just now by the
+    scene or earlier by hand. *duplicate* says the scene shows the uncut
+    dataset too, so the parts must be cut from a copy of it; only a dataset
+    with no edits of its own can be copied that way.
     """
+    pairs, _unmatched = match_datasets(widget, scene)
+    matched = {id(entry) for entry, _dataset in pairs}
     groups, whole = {}, set()
     for entry in scene.datasets:
         path = resolve_source_path(entry, scene.base_dir)
         if path is None:
             continue
         key = _source_key(path, entry.source_index)
-        if split_point(entry.edits):
-            groups.setdefault(key, []).append(entry)
-        else:
+        if not split_point(entry.edits):
             whole.add(key)
-    if not groups:
-        return set()
+        elif id(entry) not in matched:
+            groups.setdefault(key, []).append(entry)
 
-    sources = {}
-    for dataset in widget.localization_datasets:
-        path = getattr(dataset, "file_path", None)
-        if id(dataset) in fresh and path and not edits_of(dataset):
-            sources.setdefault(_source_key(path, dataset.source_index), dataset)
-
-    made = set()
+    found = {}
     for key, entries in groups.items():
-        source = sources.get(key)
-        if source is None:
-            continue
+        duplicate = key in whole
+        for dataset in widget.localization_datasets:
+            path = getattr(dataset, "file_path", None)
+            if not path or _source_key(path, dataset.source_index) != key:
+                continue
+            done = edits_of(dataset)
+            if duplicate and done:
+                continue
+            if all(
+                _is_prefix(done, entry.edits) and len(done) < split_point(entry.edits)
+                for entry in entries
+            ):
+                found[key] = (dataset, entries, duplicate)
+                break
+    return found
+
+
+def _realize_splits(widget, scene):
+    """Cut the split parts the scene names from the datasets they came from.
+
+    A part is made the way it was the first time: the original's edits are
+    replayed up to the split, then the split cuts it. Parts split again are
+    cut again, further down. Returns the ``id()`` of every part made, whose
+    remaining edits `_replay_edits` then replays.
+    """
+    made = set()
+    for source, entries, duplicate in _split_sources(widget, scene).values():
         try:
-            if key in whole:
+            if duplicate:
                 # The scene shows the uncut dataset as well: cut a duplicate.
-                duplicate = source.subset(
+                copy = source.subset(
                     np.ones(source.number_of_entries(), dtype=bool), name=source.name
                 )
-                widget._apply_loaded_datasets([duplicate], merge=True)
-                made.add(id(duplicate))
-                source = duplicate
+                widget._apply_loaded_datasets([copy], merge=True)
+                made.add(id(copy))
+                source = copy
             _split_down(widget, source, entries, made)
         except (KeyError, ValueError, AttributeError) as error:
             widget._warn_user(f"could not split {source.name} as saved: {error}")
@@ -563,7 +605,10 @@ def _split_down(widget, dataset, entries, made):
         _replay_one(widget, dataset, edit)
     wanted = {e.edits[at].get("part") for e in same}
     parts = [part for part in SPLIT_PARTS if part in wanted]
-    pieces = split_dataset(widget, dataset, lead[at], parts=parts)
+    # A split records a band only in scenes from before splits cut by every
+    # filter; without one it cuts by the filters just replayed.
+    band = lead[at] if "parameter" in lead[at] else None
+    pieces = split_dataset(widget, dataset, band, parts=parts)
     for part, piece in pieces.items():
         made.add(id(piece))
         _split_down(
@@ -584,19 +629,16 @@ def _replay_one(widget, dataset, edit):
         raise ValueError(f"a {kind} edit cannot be redone in place")
 
 
-def _replay_edits(widget, pairs, fresh):
+def _replay_edits(widget, pairs):
+    """Give each dataset the scene's edits beyond those it already has."""
     changed = False
     differs = []
     for entry, dataset in pairs:
         if not entry.edits:
             continue
         done = edits_of(dataset)
-        if id(dataset) not in fresh:
-            if tuple(entry.edits) != done:
-                differs.append(entry.name)
-            continue
-        if tuple(entry.edits[: len(done)]) != done:
-            # A split part made from other edits than the scene's own.
+        if not _is_prefix(done, entry.edits):
+            # Its own edits went another way: replaying would mix the two.
             differs.append(entry.name)
             continue
         for edit in entry.edits[len(done) :]:
@@ -942,6 +984,33 @@ def _restore_camera(widget, camera):
         viewer.camera.angles,
     ]
     widget.zoom = viewer.camera.zoom
+
+
+def _restore_focus(widget, view):
+    """Focus mode and the rotation choice, after the camera they centre on."""
+    if view.auto_pivot is not None:
+        widget.Cauto_pivot.setChecked(bool(view.auto_pivot))
+    if view.focus is None:
+        return  # a scene from before focus mode: leave it as it is
+    for control, value in (
+        (widget.SBfocus_radius, view.focus_radius_nm),
+        (
+            widget.SBfocus_outside,
+            (
+                None
+                if view.focus_outside_opacity is None
+                else int(round(view.focus_outside_opacity * 100))
+            ),
+        ),
+    ):
+        if value is not None:
+            control.blockSignals(True)
+            control.setValue(value)
+            control.blockSignals(False)
+    widget.Cfocus.blockSignals(True)
+    widget.Cfocus.setChecked(bool(view.focus) and widget.Cfocus.isEnabled())
+    widget.Cfocus.blockSignals(False)
+    widget._focus_controls_changed()
 
 
 def _restore_scalebar(widget, view):

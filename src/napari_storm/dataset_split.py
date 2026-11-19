@@ -1,15 +1,14 @@
-"""Cutting one dataset in two by a filter, each part a channel of its own.
+"""Cutting one dataset in two by its filters, each part a channel of its own.
 
-The way in is :func:`split_by_last_filter`: apply a filter, look at what it
-leaves, then split. What the last filter kept -- what is on screen -- becomes
-``<name> in`` and what it removed ``<name> out``. Localizations removed by
-filters applied before it go to neither part, so a split of photon-filtered
-data does not bring the dim ones back in "out". The original is replaced: its
-rows now live in the parts.
+The way in is :func:`split_by_filters`: apply filters, look at what they
+leave, then split. What is on screen -- what every filter kept -- becomes
+``<name> in``, and everything any filter removed ``<name> out``. Together the
+two are the whole dataset. The original is replaced: its rows now live in the
+parts.
 
 Each part remembers how it was made. Its scene edit log is the original's,
-with the last filter turned into the split, so a scene can open the file
-again, redo the edits and the split, and end up with the same two channels.
+filters and all, followed by the split, so a scene can open the file again,
+redo the edits and the split, and end up with the same two channels.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ from .core import edits_of, record_edit, split_point
 
 __all__ = [
     "SPLIT_PARTS",
-    "split_by_last_filter",
+    "split_by_filters",
     "split_dataset",
     "split_masks",
 ]
@@ -39,20 +38,22 @@ def _band(band):
     }
 
 
-def split_masks(widget, dataset, band, kept=None):
+def split_masks(widget, dataset, band=None):
     """``{"in": mask, "out": mask}`` over *dataset*'s canonical rows.
 
-    *kept* are the rows that may go into either part; by default those every
-    filter applied to *dataset* keeps.
+    Without *band*: what the filters keep, and what they removed. With one --
+    how splits were recorded at first, and still read from scenes -- the
+    rows the filters keep, divided by the band.
     """
     from .DataFilter import DataFilterInterface
 
     n = dataset.number_of_entries()
+    kept = np.ones(n, dtype=bool)
+    kept[widget.data_filter_itf.indices_for(dataset)] = False
+    if band is None:
+        return {"in": kept, "out": ~kept}
     if not dataset.table.has_field(band["parameter"]):
         raise ValueError(f"{dataset.name} has no parameter {band['parameter']!r}")
-    if kept is None:
-        kept = np.ones(n, dtype=bool)
-        kept[widget.data_filter_itf.indices_for(dataset)] = False
     removed_indices = DataFilterInterface.band_indices(dataset, **_band(band))
     if removed_indices is None:
         raise ValueError(f"unknown filter mode {band['mode']!r}")
@@ -61,86 +62,55 @@ def split_masks(widget, dataset, band, kept=None):
     return {"in": kept & ~removed, "out": kept & removed}
 
 
-def split_by_last_filter(widget, dataset):
-    """Split *dataset* into what its last filter kept and what it removed.
-
-    The filter becomes the split: it leaves the parts' edit logs, where the
-    split takes its place, because a scene that replayed both would filter
-    out everything the "out" part is made of before splitting it off.
-    """
-    log = list(edits_of(dataset))
-    filters = [
-        index
-        for index in range(split_point(log), len(log))
-        if log[index].get("kind") == "filter"
-    ]
-    steps = widget.data_filter_itf.filter_steps_for(dataset)
-    if not filters or len(steps) < len(filters):
+def split_by_filters(widget, dataset):
+    """Split *dataset* into what its filters kept and everything they removed."""
+    log = edits_of(dataset)
+    if not any(edit.get("kind") == "filter" for edit in log[split_point(log) :]):
         raise ValueError(
-            f"No filter has been applied to {dataset.name} yet. Apply one, "
-            "then split: the parts are what it kept and what it removed."
+            f"No filter has been applied to {dataset.name} yet. Apply one or "
+            "more, then split: the parts are what you see and what the "
+            "filters removed."
         )
-    at = filters[-1]
-    if any(edit.get("kind") == "density" for edit in log[at + 1 :]):
-        raise ValueError(
-            "Local density was calculated after the last filter, so it counted "
-            "neither part on its own. Apply the filter again after calculating "
-            "the density, then split."
-        )
-    kept = np.ones(dataset.number_of_entries(), dtype=bool)
-    for removed in steps[:-1]:
-        kept[removed] = False
-    masks = split_masks(widget, dataset, log[at], kept=kept)
+    masks = split_masks(widget, dataset)
     if not masks["out"].any():
         raise ValueError(
-            f"The last filter removed nothing from {dataset.name} that earlier "
-            "filters kept, so there is nothing to split off."
+            f"The filters removed nothing from {dataset.name}, so there is "
+            "nothing to split off."
         )
     if not masks["in"].any():
         raise ValueError(
-            f"The last filter kept nothing of {dataset.name}, so there is "
-            "nothing to split."
+            f"The filters kept nothing of {dataset.name}, so there is nothing "
+            "to split."
         )
-    return split_dataset(
-        widget, dataset, log[at], kept=kept, before=log[:at], after=log[at + 1 :]
-    )
+    return split_dataset(widget, dataset)
 
 
-def split_dataset(
-    widget, dataset, band, parts=SPLIT_PARTS, *, kept=None, before=None, after=()
-):
-    """Replace *dataset* in *widget*'s session by its *parts* along *band*.
+def split_dataset(widget, dataset, band=None, parts=SPLIT_PARTS):
+    """Replace *dataset* in *widget*'s session by its *parts*.
 
-    *kept* limits the rows either part may take (default: what the filters
-    keep). Each part's edit log is *before* (default: the dataset's own),
-    the split, then *after* -- edits made after the filter the split stands
-    for, already in the values the parts copy.
+    Divided by the filters applied to it, or by *band* as well when given
+    (see `split_masks`). Each part's edit log is the dataset's own followed
+    by the split.
 
     Returns ``{part: new dataset}``. Raises ValueError, leaving the session
     as it was, when a part would be empty or the dataset cannot be split
     (drift correction applied, an unknown parameter or mode).
     """
-    band = _band(band)
-    masks = split_masks(widget, dataset, band, kept=kept)
+    band = None if band is None else _band(band)
+    masks = split_masks(widget, dataset, band)
     empty = [part for part in parts if not masks[part].any()]
     if empty:
         raise ValueError(
-            "the band leaves nothing "
-            + (
-                "inside it"
-                if empty == ["in"]
-                else "outside it" if empty == ["out"] else "at all"
-            )
-            + f" for {dataset.name}, so there is nothing to split"
+            f"the {' and '.join(empty)} part of {dataset.name} would be empty, "
+            "so there is nothing to split"
         )
 
-    before = list(edits_of(dataset) if before is None else before)
+    before = [dict(edit) for edit in edits_of(dataset)]
     pieces = {}
     for part in parts:
         piece = dataset.subset(masks[part], name=f"{dataset.name} {part}")
         piece.scene_edits = [dict(edit) for edit in before]
-        record_edit(piece, {"kind": "split", **band, "part": part})
-        piece.scene_edits.extend(dict(edit) for edit in after)
+        record_edit(piece, {"kind": "split", **(band or {}), "part": part})
         pieces[part] = piece
 
     store = widget.dataset_store

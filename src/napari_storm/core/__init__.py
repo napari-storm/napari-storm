@@ -25,6 +25,14 @@ from .dataset_store import (
     StoreCleared,
 )
 from .density import DEFAULT_DENSITY_RADIUS_NM, DENSITY_COLUMN, local_density
+from .focus import (
+    DEFAULT_FOCUS_RADIUS_NM,
+    DEFAULT_OUTSIDE_OPACITY,
+    FocusState,
+    focus_weight,
+    pivot_on_view_axis,
+    point_under_ray,
+)
 from .footprints import (
     BLEND_ADDITIVE,
     BLEND_OPAQUE,
@@ -122,6 +130,12 @@ __all__ = [
     "DEFAULT_DENSITY_RADIUS_NM",
     "DENSITY_COLUMN",
     "local_density",
+    "DEFAULT_FOCUS_RADIUS_NM",
+    "DEFAULT_OUTSIDE_OPACITY",
+    "FocusState",
+    "focus_weight",
+    "pivot_on_view_axis",
+    "point_under_ray",
     "AXES",
     "FILTERED",
     "TableSelection",

@@ -1,4 +1,5 @@
 import logging
+import os
 import weakref
 
 import napari
@@ -184,6 +185,17 @@ class napari_storm(NapariStormGUI):
             lambda event=None: guard_camera_drag_state(napari_viewer)
         )
 
+        # Where the 3-D view rotates, and focus mode: the Decorators tab's View
+        # section drives it.
+        from .view_focus import ViewFocus
+
+        self.view_focus = ViewFocus(self)
+        self.Cauto_pivot.toggled.connect(self._auto_pivot_toggled)
+        self.Cfocus.toggled.connect(self._focus_controls_changed)
+        self.SBfocus_radius.valueChanged.connect(self._focus_controls_changed)
+        self.SBfocus_outside.valueChanged.connect(self._focus_controls_changed)
+        self._sync_focus_controls()
+
         # Init Function Calls
         custom_keys_and_scalebar(self)
         self.hide_non_available_widgets()
@@ -197,6 +209,35 @@ class napari_storm(NapariStormGUI):
     def dataset_store(self):
         return self._dataset_store
 
+    # ------------------------------------------------------------------
+    # Rotation centre and focus mode
+    # ------------------------------------------------------------------
+
+    def _auto_pivot_toggled(self, checked):
+        self.view_focus.auto_pivot = bool(checked)
+
+    def _focus_controls_changed(self, *_):
+        self.SBfocus_radius.setEnabled(self.Cfocus.isChecked())
+        self.SBfocus_outside.setEnabled(self.Cfocus.isChecked())
+        self.view_focus.set_focus(
+            enabled=self.Cfocus.isChecked(),
+            radius_nm=self.SBfocus_radius.value(),
+            outside_opacity=self.SBfocus_outside.value() / 100.0,
+        )
+
+    def _sync_focus_controls(self):
+        """Offer focus mode only where the renderer can fade."""
+        supported = self.view_focus.supported
+        self.Cfocus.setEnabled(supported)
+        self.Cfocus.setToolTip(
+            self.Cfocus.toolTip()
+            if supported
+            else "Focus mode needs instanced rendering (OpenGL with instancing), "
+            "which this session is not using."
+        )
+        self.SBfocus_radius.setEnabled(supported and self.Cfocus.isChecked())
+        self.SBfocus_outside.setEnabled(supported and self.Cfocus.isChecked())
+
     def close_session(self):
         """Release everything this dock owns.  Safe to call more than once.
 
@@ -207,6 +248,8 @@ class napari_storm(NapariStormGUI):
         if getattr(self, "_closed", False):
             return
         self._closed = True
+        if getattr(self, "view_focus", None) is not None:
+            self.view_focus.detach()
         self.postprocessing.close()
         for listener in list(self._store_listeners):
             self._dataset_store.unsubscribe(listener)
@@ -1334,12 +1377,38 @@ class napari_storm(NapariStormGUI):
     # Scene persistence
     # ------------------------------------------------------------------
 
+    #: What a scene file's name ends in.
+    SCENE_SUFFIX = ".napari-storm.json"
+
+    def default_scene_path(self):
+        """Where the scene dialogs start: beside the current dataset's file.
+
+        ``(folder, file name)``: the folder the current dataset -- the one the
+        Data Filter tab shows, else the first with a file -- was loaded from,
+        and that file's name with the scene suffix in place of its extension,
+        ``cells.h5`` -> ``cells.napari-storm.json``. With nothing loaded from a
+        file, no folder and ``session.napari-storm.json``.
+        """
+        datasets = list(self.localization_datasets)
+        index = getattr(self.data_filter_itf, "current_dataset_idx", 0)
+        if 0 <= index < len(datasets):
+            datasets.insert(0, datasets[index])
+        source = next(
+            (d.file_path for d in datasets if getattr(d, "file_path", None)), None
+        )
+        if not source:
+            return "", "session" + self.SCENE_SUFFIX
+        folder, name = os.path.split(os.path.abspath(source))
+        stem = os.path.splitext(name)[0] or name
+        return folder, stem + self.SCENE_SUFFIX
+
     def save_scene_dialog(self, *_):
         """Ask where, then save."""
         from qtpy.QtWidgets import QFileDialog
 
+        folder, name = self.default_scene_path()
         path, _filter = QFileDialog.getSaveFileName(
-            self, "Save scene", "session.napari-storm.json", "Scene (*.json)"
+            self, "Save scene", os.path.join(folder, name), "Scene (*.json)"
         )
         if not path:
             return None
@@ -1353,8 +1422,13 @@ class napari_storm(NapariStormGUI):
         """Ask which, then reopen its files and restore it."""
         from qtpy.QtWidgets import QFileDialog
 
+        folder, name = self.default_scene_path()
+        start = os.path.join(folder, name)
         path, _filter = QFileDialog.getOpenFileName(
-            self, "Load scene", "", "Scene (*.json)"
+            self,
+            "Load scene",
+            start if folder and os.path.isfile(start) else folder,
+            "Scene (*.json)",
         )
         if not path:
             return None

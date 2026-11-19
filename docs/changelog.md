@@ -5,17 +5,33 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
 ## Unreleased
 
+* **Scenes use the data already open.** Loading a scene no longer reads a file
+  again that is open as it was loaded: split parts are cut from it, and
+  filters and density the scene records are replayed onto it. **Save
+  Scene…** and **Load Scene…** start in the folder of the current dataset,
+  with a name taken from its file (`cells.h5` -> `cells.napari-storm.json`).
+* **The view rotates about what you are looking at.** Starting a rotation in
+  3-D moves the centre of rotation along the line of sight onto the
+  localizations in the middle of the view, so the structure there stays put
+  as you turn; double-click a structure to make it the centre. A grey dot
+  marks the centre while the camera moves. See [The centre of
+  rotation](navigating.md#the-centre-of-rotation).
+* **Focus mode** fades out localizations further than a radius from the centre
+  of the view, down to an opacity you choose, and follows the camera. It sits
+  under **Reset view** on the Data Controls tab, with the rotation option, and
+  is saved in scenes. See [Focus mode](navigating.md#focus-mode).
+* **The XY / YZ / XZ buttons are evenly spaced** whatever the display scaling.
 * **Local density.** **Calculate local density** on the Data Filter tab gives
   every localization a `local_density` parameter: how many other localizations
   lie within a search radius (35 nm by default; a sphere in 3-D, a circle in
   2-D), counting only those the filters applied so far keep -- the measure
   daxview uses. Filter on it to remove isolated localizations, or colour by
   it. See [Local density](filtering.md#local-density).
-* **Split a dataset by a filter.** Apply a filter, then **Split current
-  dataset by last filter**: the dataset becomes two channels, what the filter
-  kept and what it removed, each in its own colour -- dense and sparse
-  localizations side by side, for instance. Scenes make the split again when
-  they are loaded. See
+* **Split a dataset by its filters.** Apply filters, then **Split current
+  dataset: shown / filtered out**: the dataset becomes two channels, what you
+  see and everything the filters removed, each in its own colour -- dense and
+  sparse localizations side by side, for instance. Scenes make the split again
+  when they are loaded. See
   [Splitting a dataset in two](filtering.md#splitting-a-dataset-in-two).
 * **Derived columns can be filtered and coloured by.** Group ids from STORM
   grouping now appear in the Data Filter tab and under **Colour code by**,

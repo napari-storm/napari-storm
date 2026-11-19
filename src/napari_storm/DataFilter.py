@@ -85,12 +85,11 @@ class DataFilterWindow(QWidget):
         self.Breset_filters.setText("Reset all filtering")
 
         self.Bsplit = QPushButton()
-        self.Bsplit.setText("Split current dataset by last filter")
+        self.Bsplit.setText("Split current dataset: shown / filtered out")
         self.Bsplit.setToolTip(
-            "Apply a filter first. This replaces the current dataset with two "
-            "channels: what the last filter kept ('in', what you see now) and "
-            "what it removed ('out'), each with its own colour. Localizations "
-            "removed by earlier filters go to neither."
+            "Apply one or more filters first. This replaces the current "
+            "dataset with two channels: what you see now ('in') and everything "
+            "the filters removed ('out'), each with its own colour."
         )
 
         self.Sfilter_slider = RangeSlider3(canvas=self.CanvasWidget.Canvas)
@@ -241,9 +240,6 @@ class DataFilterInterface:
         # `while len - 1 <= idx: append` loop and popped by position on unload:
         # one misordered call and a dataset inherited its neighbour's filter.
         self.filter_indices = {}
-        # What each filter removed, in the order applied, per dataset id: a
-        # split separates what the last one removed from what is still kept.
-        self.filter_steps = {}
         self.xrange_slider_values_decimal = (0, 1)
 
         self.typing_timer_nbins = QtCore.QTimer()
@@ -265,10 +261,8 @@ class DataFilterInterface:
         """
         if isinstance(event, DatasetClosed):
             self.filter_indices.pop(event.dataset_id, None)
-            self.filter_steps.pop(event.dataset_id, None)
         elif isinstance(event, StoreCleared):
             self.filter_indices.clear()
-            self.filter_steps.clear()
 
     def indices_for(self, dataset):
         """Removal indices recorded for *dataset*, or an empty array."""
@@ -280,14 +274,9 @@ class DataFilterInterface:
         """Add *indices* to whatever is already filtered out of *dataset*."""
         existing = self.indices_for(dataset)
         indices = np.asarray(indices, dtype=np.int32).ravel()
-        self.filter_steps.setdefault(dataset.dataset_id, []).append(indices.copy())
         if existing.size:
             indices = np.concatenate((existing, indices), dtype=np.int32)
         self.filter_indices[dataset.dataset_id] = np.unique(indices)
-
-    def filter_steps_for(self, dataset):
-        """What each filter applied to *dataset* removed, oldest first."""
-        return list(self.filter_steps.get(dataset.dataset_id, ()))
 
     @property
     def parent(self):
@@ -426,7 +415,6 @@ class DataFilterInterface:
         split baked into a part's rows stays: the part has no others.
         """
         self.filter_indices.clear()
-        self.filter_steps.clear()
         for dataset in self.list_of_datasets:
             dataset.reset_filters()
             drop_edits(dataset, "filter")
@@ -511,14 +499,14 @@ class DataFilterInterface:
     # ------------------------------------------------------------------
 
     def split_current_dataset(self):
-        """Replace the current dataset with what the last filter kept and removed."""
+        """Replace the current dataset with what is shown and what is filtered out."""
         if not self.list_of_datasets:
             return None
-        from .dataset_split import split_by_last_filter
+        from .dataset_split import split_by_filters
 
         dataset = self.list_of_datasets[self.current_dataset_idx]
         try:
-            return split_by_last_filter(self.parent, dataset)
+            return split_by_filters(self.parent, dataset)
         except ValueError as error:
             QMessageBox.warning(self.dfw, "Cannot split dataset", str(error))
             return None
@@ -531,7 +519,6 @@ class DataFilterInterface:
         self.list_of_filterable_parameters = []
         self.active_filters = []
         self.filter_indices.clear()
-        self.filter_steps.clear()
         self.dfw.clear_entries()
 
     def remove_dataset_entry(self, dataset_index):

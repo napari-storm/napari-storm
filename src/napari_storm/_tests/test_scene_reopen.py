@@ -96,6 +96,19 @@ def test_a_dataset_is_named_after_its_file_whichever_separator_the_path_uses():
 # ----------------------------------------------------------- saving sources
 
 
+def test_the_scene_dialogs_start_beside_the_data_named_after_it(
+    make_napari_viewer, tmp_path
+):
+    widget = _widget(make_napari_viewer)
+    assert widget.default_scene_path() == ("", "session.napari-storm.json")
+
+    _open(widget, _write_ns(tmp_path / "cells.ns"))
+
+    folder, name = widget.default_scene_path()
+    assert os.path.samefile(folder, tmp_path)
+    assert name == "cells.napari-storm.json"
+
+
 def test_a_saved_scene_says_which_file_each_dataset_came_from(
     make_napari_viewer, tmp_path
 ):
