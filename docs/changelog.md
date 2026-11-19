@@ -9,7 +9,8 @@ in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
   again that is open as it was loaded: split parts are cut from it, and
   filters and density the scene records are replayed onto it. **Save
   Scene…** and **Load Scene…** start in the folder of the current dataset,
-  with a name taken from its file (`cells.h5` -> `cells.napari-storm.json`).
+  with a numbered name taken from its file (`cells.h5` ->
+  `cells.napari_storm_scene_001.json`, then `_002`, ...).
 * **The view rotates about what you are looking at.** Starting a rotation in
   3-D moves the centre of rotation along the line of sight onto the
   localizations in the middle of the view, so the structure there stays put

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import weakref
 
 import napari
@@ -1377,17 +1378,20 @@ class napari_storm(NapariStormGUI):
     # Scene persistence
     # ------------------------------------------------------------------
 
-    #: What a scene file's name ends in.
-    SCENE_SUFFIX = ".napari-storm.json"
+    #: What a suggested scene name puts between the data's name and a number.
+    SCENE_TAG = ".napari_storm_scene_"
 
-    def default_scene_path(self):
+    def default_scene_path(self, latest=False):
         """Where the scene dialogs start: beside the current dataset's file.
 
         ``(folder, file name)``: the folder the current dataset -- the one the
         Data Filter tab shows, else the first with a file -- was loaded from,
-        and that file's name with the scene suffix in place of its extension,
-        ``cells.h5`` -> ``cells.napari-storm.json``. With nothing loaded from a
-        file, no folder and ``session.napari-storm.json``.
+        and a numbered name made from that file's: ``cells.h5`` ->
+        ``cells.napari_storm_scene_001.json``, the first number not taken in
+        that folder, so another view of the same data never overwrites one
+        saved before. With *latest*, the highest-numbered scene already there
+        instead, or None when there is none. With nothing loaded from a file,
+        no folder and ``session.napari_storm_scene_001.json``.
         """
         datasets = list(self.localization_datasets)
         index = getattr(self.data_filter_itf, "current_dataset_idx", 0)
@@ -1397,10 +1401,24 @@ class napari_storm(NapariStormGUI):
             (d.file_path for d in datasets if getattr(d, "file_path", None)), None
         )
         if not source:
-            return "", "session" + self.SCENE_SUFFIX
-        folder, name = os.path.split(os.path.abspath(source))
-        stem = os.path.splitext(name)[0] or name
-        return folder, stem + self.SCENE_SUFFIX
+            folder, stem = "", "session"
+        else:
+            folder, name = os.path.split(os.path.abspath(source))
+            stem = os.path.splitext(name)[0] or name
+        taken = []
+        if folder and os.path.isdir(folder):
+            numbered = re.compile(re.escape(stem + self.SCENE_TAG) + r"(\d+)\.json$")
+            for entry in os.listdir(folder):
+                match = numbered.match(entry)
+                if match:
+                    taken.append(int(match.group(1)))
+        if latest:
+            if not taken:
+                return folder, None
+            number = max(taken)
+        else:
+            number = max(taken, default=0) + 1
+        return folder, f"{stem}{self.SCENE_TAG}{number:03d}.json"
 
     def save_scene_dialog(self, *_):
         """Ask where, then save."""
@@ -1422,12 +1440,11 @@ class napari_storm(NapariStormGUI):
         """Ask which, then reopen its files and restore it."""
         from qtpy.QtWidgets import QFileDialog
 
-        folder, name = self.default_scene_path()
-        start = os.path.join(folder, name)
+        folder, latest = self.default_scene_path(latest=True)
         path, _filter = QFileDialog.getOpenFileName(
             self,
             "Load scene",
-            start if folder and os.path.isfile(start) else folder,
+            os.path.join(folder, latest) if latest else folder,
             "Scene (*.json)",
         )
         if not path:

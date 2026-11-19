@@ -45,8 +45,12 @@ in the [Data adjustment](filtering.md#adjusting-values) tab.
 A scene is a saved *view*: load it later, on this computer or another, and
 napari-storm opens the same files and shows them exactly as they were.
 
-**Save Scene…** writes this session to a small JSON file,
-`session.napari-storm.json` by default:
+**Save Scene…** writes this session to a small JSON file. It starts in the
+folder the current dataset came from and suggests a numbered name made from
+that file's, the next one free -- `cells.h5` gives
+`cells.napari_storm_scene_001.json`, then `_002`, and so on -- so another view
+of the same data never overwrites one saved before; any name will do.
+**Load Scene…** starts on the highest-numbered one. A scene holds:
 
 * each dataset's file -- by absolute path, and relative to the scene file --
   and how it was opened, including anything you typed in at the time, such as

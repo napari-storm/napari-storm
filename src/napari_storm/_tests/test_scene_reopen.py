@@ -100,13 +100,28 @@ def test_the_scene_dialogs_start_beside_the_data_named_after_it(
     make_napari_viewer, tmp_path
 ):
     widget = _widget(make_napari_viewer)
-    assert widget.default_scene_path() == ("", "session.napari-storm.json")
+    assert widget.default_scene_path() == ("", "session.napari_storm_scene_001.json")
 
     _open(widget, _write_ns(tmp_path / "cells.ns"))
 
     folder, name = widget.default_scene_path()
     assert os.path.samefile(folder, tmp_path)
-    assert name == "cells.napari-storm.json"
+    assert name == "cells.napari_storm_scene_001.json"
+    assert widget.default_scene_path(latest=True)[1] is None
+
+
+def test_each_new_scene_gets_the_next_number_and_load_offers_the_latest(
+    make_napari_viewer, tmp_path
+):
+    widget = _widget(make_napari_viewer)
+    _open(widget, _write_ns(tmp_path / "cells.ns"))
+    for number in (1, 2, 7):  # a gap is not refilled
+        widget.save_scene_to(tmp_path / f"cells.napari_storm_scene_{number:03d}.json")
+
+    assert widget.default_scene_path()[1] == "cells.napari_storm_scene_008.json"
+    assert widget.default_scene_path(latest=True)[1] == (
+        "cells.napari_storm_scene_007.json"
+    )
 
 
 def test_a_saved_scene_says_which_file_each_dataset_came_from(
