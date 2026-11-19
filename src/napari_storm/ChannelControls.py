@@ -388,9 +388,12 @@ class ChannelControls(QWidget):
         self.Slider_opacity.setVisible(shown and coding)
 
     def adjust_color_coding_opacity(self):
-        self.data_to_layer_itf.set_appearance(
-            self.dataset, opacity=self.Slider_opacity.value() / 100.0
+        # Every layer refresh calls this.  Reading the slider alone showed a
+        # hidden channel again on the next filter, crop or width change.
+        opacity = (
+            self.Slider_opacity.value() / 100.0 if self.show_channel_state else 0.0
         )
+        self.data_to_layer_itf.set_appearance(self.dataset, opacity=opacity)
 
     def reset(self):
         """Reset to cutoff=0, factor=1, opacity=100%."""

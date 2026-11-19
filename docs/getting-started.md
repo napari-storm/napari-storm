@@ -127,6 +127,7 @@ range and the grid plane.
 ## 7. Keep what you did
 
 **Export OME-TIFF…** writes the reconstruction as a calibrated image, and
-**Save Scene…** saves your settings -- colours, widths, camera, alignment --
-so that **Load Scene…** can restore them later. See
+**Save Scene…** saves the view -- the files, filters, colours, widths,
+render range, camera and alignment -- so that **Load Scene…** can reopen the
+data and show it exactly as it was. See
 [Export and scenes](export.md).

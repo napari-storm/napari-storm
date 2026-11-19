@@ -89,6 +89,7 @@ class InstancedBillboardsFilter(Filter):
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 v_disc_inv;
+        varying float v_focus;
 
         void apply(){
             // The quad corner, in visual units, read from the mesh's own
@@ -160,6 +161,19 @@ class InstancedBillboardsFilter(Filter):
             v_z_center = center.z/center.w;
             v_instance_value = $instance_value;
 
+            // Focus mode: what this localization keeps of its opacity, 1
+            // within the radius of the focus centre and easing down to the
+            // outside opacity across the edge -- core.focus.focus_weight, on
+            // the GPU, so the region follows the camera without a redraw of
+            // the data.  $focus_axes zeroes the line of sight in a 2-D view.
+            v_focus = 1.0;
+            if ($focus_on > 0.5) {
+                vec3 offset = ($vertex_center - $focus_center) * $focus_axes;
+                float over = (length(offset) - $focus_radius) / $focus_edge;
+                v_focus = mix(1.0, $focus_floor,
+                              smoothstep(0.0, 1.0, clamp(over, 0.0, 1.0)));
+            }
+
             // Where this corner sits on the quad, in [-0.5, 0.5], taken from
             // the geometry rather than from a parallel attribute that would
             // have to agree with the drawn vertex order.
@@ -170,8 +184,13 @@ class InstancedBillboardsFilter(Filter):
         varying float v_z_center;
         varying float v_instance_value;
         varying mat2 v_disc_inv;
+        varying float v_focus;
 
         void apply() {
+            // Faded out completely by focus mode: nothing to draw.
+            if (v_focus <= 0.0) {
+                discard;
+            }
             // Window-space depth, which is what the depth test compares: NDC
             // mapped onto the default depth range [0, 1], which neither VisPy
             // nor napari changes.  This used to write v_z_center itself -- NDC,
@@ -226,8 +245,9 @@ class InstancedBillboardsFilter(Filter):
                 // channel by the alpha written: RGB adds colour * w and alpha
                 // adds w, with no change of blend state.  The value is already
                 // a position on the colormap; the window acts on the weight.
+                // Focus mode scales the weight: fainter, same colour.
                 vec4 weight = $shape(x, q, 0.25 * q, vec4(1.0));
-                float root = sqrt(max(weight.r * weight.a, 0.0));
+                float root = sqrt(max(weight.r * weight.a * v_focus, 0.0));
                 vec3 colour = $cmap(clamp(v_instance_value, 0.0, 1.0)).rgb;
                 gl_FragColor = vec4(colour * root, root);
             } else if ($accumulate > 0.5) {
@@ -238,7 +258,8 @@ class InstancedBillboardsFilter(Filter):
                 // window, colormap and opacity are applied once, to the sum.
                 vec4 weight = $shape(x, q, 0.25 * q, vec4(1.0));
                 gl_FragColor = vec4(
-                    v_instance_value * weight.r * weight.a, 0.0, 0.0, 1.0
+                    v_instance_value * weight.r * weight.a * v_focus,
+                    0.0, 0.0, 1.0
                 );
             } else {
                 vec4 drawn = $shape(x, q, 0.25 * q,
@@ -246,6 +267,7 @@ class InstancedBillboardsFilter(Filter):
                 if ($opaque > 0.5) {
                     drawn.a = 1.0;
                 }
+                drawn.a *= v_focus;
                 gl_FragColor = drawn;
             }
         }
@@ -268,6 +290,13 @@ class InstancedBillboardsFilter(Filter):
         ffunc["mean_colour"] = 0.0
         vfunc["quad_scale"] = 1.0
         vfunc["min_half_px"] = 0.0
+        # Focus mode off until `set_focus` says otherwise.
+        vfunc["focus_on"] = 0.0
+        vfunc["focus_center"] = (0.0, 0.0, 0.0)
+        vfunc["focus_axes"] = (1.0, 1.0, 1.0)
+        vfunc["focus_radius"] = 1.0
+        vfunc["focus_edge"] = 1.0
+        vfunc["focus_floor"] = 1.0
 
         self._texcoord_varying = Varying("v_texcoord", "vec2")
         vfunc["inverse"] = vmat_inv
@@ -336,6 +365,22 @@ class InstancedBillboardsFilter(Filter):
         self.vshader["min_half_px"] = (
             0.0 if footprint.reconstruction else 0.5 * float(min_size_px)
         )
+
+    def set_focus(self, center_xyz=None, radius=1.0, edge=1.0, floor=1.0, planar=False):
+        """Fade instances away from *center_xyz*, or stop fading with None.
+
+        In the order the instance buffers hold positions: x, y, z, in the
+        layer's own data coordinates.
+        """
+        if center_xyz is None:
+            self.vshader["focus_on"] = 0.0
+            return
+        self.vshader["focus_on"] = 1.0
+        self.vshader["focus_center"] = tuple(float(v) for v in center_xyz)
+        self.vshader["focus_axes"] = (1.0, 1.0, 0.0) if planar else (1.0, 1.0, 1.0)
+        self.vshader["focus_radius"] = float(radius)
+        self.vshader["focus_edge"] = max(float(edge), 1e-6)
+        self.vshader["focus_floor"] = float(floor)
 
     def set_instances(self, centers, sigmas, values):
         """Upload one row per localization."""
@@ -657,6 +702,30 @@ class InstancedParticles(Surface):
         """The resolve pass applies opacity itself; the splats no longer see it."""
         if self._summed_pass is not None:
             self._summed_pass.opacity = float(self.opacity)
+
+    def set_focus(self, focus):
+        """Fade what lies outside a `core.FocusState`; None stops fading.
+
+        The centre arrives in world coordinates and goes to the shader in this
+        layer's own, so a dataset shifted in world space fades about the same
+        point as the others.
+        """
+        if focus is None:
+            self._billboard_filter.set_focus(None)
+        else:
+            center = np.asarray(
+                self.world_to_data(np.asarray(focus.center_world, dtype=float)),
+                dtype=float,
+            )
+            self._billboard_filter.set_focus(
+                center_xyz=center[::-1],
+                radius=focus.radius_nm,
+                edge=focus.edge_nm,
+                floor=focus.outside_opacity,
+                planar=focus.planar,
+            )
+        if self._visual is not None:
+            self._visual.update()
 
     def close(self):
         self._layer_event_connections = []

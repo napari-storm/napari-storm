@@ -8,6 +8,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from .core import record_edit
 from .CustomErrors import ParentError
 
 
@@ -126,15 +127,26 @@ class DataAdjustmentInterface:
         try:
             if self.math_modes[self.math_mode_active_idx] == self.math_modes[0]:
                 dataset.adjust_column(parameter, offset=self.value)
+                edit = {"kind": "adjust", "column": parameter, "offset": self.value}
             elif self.math_modes[self.math_mode_active_idx] == self.math_modes[1]:
                 dataset.adjust_column(parameter, scale=self.value)
+                edit = {"kind": "adjust", "column": parameter, "scale": self.value}
+            else:
+                edit = None
+            # The arithmetic changes the data in place and leaves no other
+            # trace; a scene replays this to get the same values back.
+            if edit is not None:
+                record_edit(dataset, {**edit, "column": str(parameter)})
         except ValueError as error:
             from qtpy.QtWidgets import QMessageBox
 
             QMessageBox.warning(self.daw, "Cannot adjust dataset", str(error))
             return
         if update_layers:
-            self.parent.data_to_layer_itf.set_render_range_and_offset()
+            # Re-centre only when the arithmetic moved the data.
+            self.parent.data_to_layer_itf.set_render_range_and_offset(
+                recenter="if_changed"
+            )
             self.parent.data_to_layer_itf.update_layers()
 
     def clear_entries(self):

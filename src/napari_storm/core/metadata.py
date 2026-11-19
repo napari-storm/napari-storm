@@ -20,6 +20,7 @@ from __future__ import annotations
 
 __all__ = [
     "MetadataProvider",
+    "RecordingMetadataProvider",
     "StaticMetadataProvider",
     "PIXEL_SIZE_NM",
     "ZDIM_PRESENT",
@@ -59,15 +60,54 @@ class StaticMetadataProvider(MetadataProvider):
     >>> provider = StaticMetadataProvider({PIXEL_SIZE_NM: "100"})
     >>> provider.ask_text(PIXEL_SIZE_NM, "Enter the pixelsize [nm]")
     '100'
+
+    A question it has no answer for goes to *fallback* when one is given --
+    which is how reopening a scene's files answers what was answered last time
+    and still asks the user anything new, rather than failing the import.
     """
 
-    def __init__(self, answers=None):
+    def __init__(self, answers=None, fallback=None):
         self.answers = dict(answers or {})
+        self.fallback = fallback
 
     def ask_yes_no(self, key, question):
         answer = self.answers.get(key)
+        if answer is None and self.fallback is not None:
+            return self.fallback.ask_yes_no(key, question)
         return None if answer is None else bool(answer)
 
     def ask_text(self, key, question):
         answer = self.answers.get(key)
+        if answer is None and self.fallback is not None:
+            return self.fallback.ask_text(key, question)
         return None if answer is None else str(answer)
+
+
+class RecordingMetadataProvider(MetadataProvider):
+    """Passes every question to *inner* and remembers what came back.
+
+    A file that does not carry its own pixel size has it typed in when it is
+    opened. A scene that reopens the file later should not have to ask again,
+    and cannot know the answer unless it was kept: this keeps it, keyed the
+    same way the question was, so it can be replayed through
+    :class:`StaticMetadataProvider`.
+
+    Only real answers are kept. ``None`` -- a dismissed dialog -- is not an
+    answer, and replaying it would turn "ask me" into "refuse".
+    """
+
+    def __init__(self, inner=None):
+        self.inner = inner if inner is not None else MetadataProvider()
+        self.answers = {}
+
+    def ask_yes_no(self, key, question):
+        answer = self.inner.ask_yes_no(key, question)
+        if answer is not None:
+            self.answers[key] = bool(answer)
+        return answer
+
+    def ask_text(self, key, question):
+        answer = self.inner.ask_text(key, question)
+        if answer is not None:
+            self.answers[key] = str(answer)
+        return answer

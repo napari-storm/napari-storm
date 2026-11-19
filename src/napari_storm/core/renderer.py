@@ -296,6 +296,18 @@ class LocalizationRenderer:
     def draws_pairs(self, dataset_id):
         return False
 
+    #: Whether :meth:`set_focus` fades anything.  A backend that cannot
+    #: inherits False, and the focus controls say so instead of doing nothing.
+    supports_focus = False
+
+    def set_focus(self, focus):
+        """Fade every dataset outside a :class:`~napari_storm.core.FocusState`.
+
+        None turns focus mode off. It applies to datasets opened later as
+        well. Not abstract: a backend without it draws everything at full
+        opacity, which is what focus mode off looks like.
+        """
+
     def draws_traces(self, dataset_id):
         """Whether *dataset_id*'s trace overlay is on screen now.
 
@@ -343,6 +355,13 @@ class NullRenderer(LocalizationRenderer):
     visibility: dict = field(default_factory=dict)
     appearances: dict = field(default_factory=dict)
     calls: list = field(default_factory=list)
+    #: The last :meth:`set_focus`, for tests to read.
+    focus: object = None
+    supports_focus = True
+
+    def set_focus(self, focus):
+        self.calls.append(("set_focus", focus))
+        self.focus = focus
 
     def open(self, dataset_id, request):
         self.calls.append(("open", dataset_id))

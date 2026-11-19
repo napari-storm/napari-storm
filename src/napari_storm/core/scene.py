@@ -29,6 +29,7 @@ a text editor, and read back without a viewer.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field, replace
 
 from .render_planner import GaussianSettings
@@ -44,8 +45,15 @@ __all__ = [
     "ReferenceImageEntry",
     "Scene",
     "SceneFormatError",
+    "ViewState",
+    "drop_edits",
+    "edits_of",
     "load_scene",
+    "record_edit",
+    "resolve_source_path",
     "save_scene",
+    "split_lineage",
+    "split_point",
 ]
 
 #: Written into every file so a reader can tell what it is holding.
@@ -72,6 +80,9 @@ class CameraState:
     zoom: float = 1.0
     angles: tuple = (0.0, 0.0, 90.0)
     ndisplay: int = 3
+    #: napari's field of view in degrees; 0 is orthographic.  A scene written
+    #: before this was saved reads as 0, which is also napari's default.
+    perspective: float = 0.0
 
 
 @dataclass
@@ -91,12 +102,38 @@ class ColorCodingEntry:
 
 @dataclass
 class DatasetEntry:
-    """One localization dataset: where it came from, and every decision made."""
+    """One localization dataset: where it came from, and every decision made.
+
+    The source fields are what reopening needs: *source_path* says which file,
+    *source_index* which of the datasets read from it (a molecule set holds one
+    per channel), *import_route* how it was opened, and *import_answers* what
+    was typed in while it was -- a pixel size the file did not carry, say -- so
+    that reopening it does not ask again.
+    """
 
     name: str
     source_path: str = None
     transform: WorldTransform = field(default_factory=WorldTransform)
     appearance: LayerAppearance = field(default_factory=LayerAppearance)
+    source_index: int = 0
+    import_route: str = "known"
+    import_answers: dict = None
+    #: What was done to the data after it was read, in order: filter bands and
+    #: Data adjustment arithmetic, as recorded by `record_edit`.  Replayed on
+    #: the reopened file, so the scene stays a list of decisions rather than a
+    #: copy of which rows survived.
+    edits: tuple = ()
+    #: The channel card as the user left it: ``colormap`` (the channel's own,
+    #: which `appearance.colormap` loses while colour coding), ``contrast``
+    #: (the slider's two positions), ``color_coding_opacity`` and ``hidden``.
+    #: Restored through the card so that the card and the picture agree --
+    #: restoring only the picture was undone by the card's next refresh.
+    channel: dict = None
+    #: *source_path* relative to the scene file's folder, as read from a file;
+    #: the fallback when the absolute path is gone -- a folder of data and
+    #: scene moved, or opened on another machine.  Not set by hand: it is
+    #: derived when saving.
+    source_path_relative: str = None
 
 
 @dataclass
@@ -113,6 +150,42 @@ class ReferenceImageEntry:
     #: between.
     offset_nm: tuple = (0.0, 0.0, 0.0)
     appearance: LayerAppearance = field(default_factory=LayerAppearance)
+    #: See `DatasetEntry.source_path_relative`.
+    source_path_relative: str = None
+    #: The layer's own ``scale`` and ``rotate``, in its ``(z, y, x)`` order.
+    #: The pixel sizes above say what was typed at import; these say where the
+    #: layer ended up, after the scale fields and the 90-degree buttons.
+    scale_nm: tuple = None
+    rotate: tuple = None
+
+
+@dataclass
+class ViewState:
+    """What the canvas shows beyond the datasets themselves.
+
+    *render_range_nm* holds the crop window per axis in world nanometres, not
+    the sliders' percentages: a percentage is relative to an extent that
+    depends on load history, and the same file reopened can have another.
+    ``None`` for an axis means "the full extent".
+    """
+
+    render_range_nm: dict = None
+    scalebar: bool = False
+    scalebar_size_nm: float = None
+    grid_plane: bool = False
+    grid_line_distance_um: float = None
+    grid_margin_percent: float = None
+    #: The Decorators tab's sliders, 0..100, as the user left them.
+    grid_line_thickness: int = None
+    grid_z_position: int = None
+    grid_opacity: int = None
+    grid_color_index: int = None
+    #: Focus mode, about the camera centre; None in scenes from before it.
+    focus: bool = None
+    focus_radius_nm: float = None
+    focus_outside_opacity: float = None
+    #: Whether rotating re-centres on the middle of the view.
+    auto_pivot: bool = None
 
 
 @dataclass
@@ -126,11 +199,21 @@ class Scene:
     #: None when the scene says nothing about colour coding -- one written
     #: before it was saved -- so loading it leaves colour coding as it is.
     color_coding: ColorCodingEntry = None
+    #: None when the scene predates it, so loading leaves the view alone.
+    view: ViewState = None
+    #: The folder the scene was read from, which relative source paths are
+    #: relative to.  Set by `load_scene`; never written.
+    base_dir: str = None
 
     # ------------------------------------------------------------------
 
-    def to_dict(self):
-        """A plain dict, ready for json.dump."""
+    def to_dict(self, relative_to=None):
+        """A plain dict, ready for json.dump.
+
+        With *relative_to* -- the folder the file is being written to -- each
+        source path is also written relative to it, which is what lets a
+        folder holding a scene and its data be moved or shared and still open.
+        """
         return {
             "format": SCENE_FORMAT,
             "version": SCENE_VERSION,
@@ -144,10 +227,13 @@ class Scene:
                 if self.color_coding is None
                 else {"color_coding": _color_coding_to_dict(self.color_coding)}
             ),
+            **({} if self.view is None else {"view": _jsonable(asdict(self.view))}),
             "datasets": [
                 {
                     "name": entry.name,
                     "source_path": entry.source_path,
+                    **_relative_path_field(entry.source_path, relative_to),
+                    **_source_fields(entry),
                     "transform": {
                         "scale": list(entry.transform.scale),
                         "translation_nm": list(entry.transform.translation_nm),
@@ -160,10 +246,21 @@ class Scene:
                 {
                     "name": entry.name,
                     "source_path": entry.source_path,
+                    **_relative_path_field(entry.source_path, relative_to),
                     "orientation": entry.orientation,
                     "pixel_size_xy_nm": entry.pixel_size_xy_nm,
                     "pixel_size_z_nm": entry.pixel_size_z_nm,
                     "offset_nm": list(entry.offset_nm),
+                    **(
+                        {}
+                        if entry.scale_nm is None
+                        else {"scale_nm": _jsonable(entry.scale_nm)}
+                    ),
+                    **(
+                        {}
+                        if entry.rotate is None
+                        else {"rotate": _jsonable(entry.rotate)}
+                    ),
                     "appearance": _appearance_to_dict(entry.appearance),
                 }
                 for entry in self.reference_images
@@ -194,6 +291,12 @@ class Scene:
                 DatasetEntry(
                     name=item.get("name", "dataset"),
                     source_path=item.get("source_path"),
+                    source_path_relative=item.get("source_path_relative"),
+                    source_index=int(item.get("source_index", 0)),
+                    import_route=item.get("import_route", "known"),
+                    import_answers=_answers_from_dict(item.get("import_answers")),
+                    edits=_edits_from_list(item.get("edits")),
+                    channel=_object_or_none(item.get("channel"), "channel"),
                     transform=_transform_from_dict(item.get("transform")),
                     appearance=_appearance_from_dict(item.get("appearance")),
                 )
@@ -203,10 +306,13 @@ class Scene:
                 ReferenceImageEntry(
                     name=item.get("name", "image"),
                     source_path=item.get("source_path"),
+                    source_path_relative=item.get("source_path_relative"),
                     orientation=item.get("orientation", "XY"),
                     pixel_size_xy_nm=float(item.get("pixel_size_xy_nm", 1.0)),
                     pixel_size_z_nm=float(item.get("pixel_size_z_nm", 1.0)),
                     offset_nm=tuple(item.get("offset_nm", (0.0, 0.0, 0.0))),
+                    scale_nm=_tuple_or_none(item.get("scale_nm")),
+                    rotate=_tuple_or_none(item.get("rotate")),
                     appearance=_appearance_from_dict(item.get("appearance")),
                 )
                 for item in raw.get("reference_images", [])
@@ -214,6 +320,11 @@ class Scene:
             gaussian=_dataclass_from_dict(GaussianSettings, raw.get("gaussian")),
             camera=_dataclass_from_dict(CameraState, raw.get("camera")),
             color_coding=_color_coding_from_dict(raw),
+            view=(
+                _dataclass_from_dict(ViewState, raw["view"])
+                if isinstance(raw.get("view"), dict)
+                else None
+            ),
         )
 
 
@@ -311,6 +422,181 @@ def _color_coding_from_dict(raw):
     return None
 
 
+def _relative_path_field(path, relative_to):
+    """``{"source_path_relative": ...}``, or nothing when there is none.
+
+    Windows has no relative path between drives, and a scene written without
+    a destination has nothing to be relative to; both just omit the field.
+    """
+    if not path or relative_to is None:
+        return {}
+    try:
+        relative = os.path.relpath(os.path.abspath(path), os.path.abspath(relative_to))
+    except ValueError:
+        return {}
+    # Forward slashes, so a scene written on Windows reads on Linux and back.
+    return {"source_path_relative": relative.replace(os.sep, "/")}
+
+
+def _source_fields(entry):
+    """How a dataset was opened, written only when it says something.
+
+    A single-dataset file opened by type with nothing asked is the common case
+    and the default; leaving it out keeps those scenes as they always were.
+    """
+    raw = {}
+    if entry.source_index:
+        raw["source_index"] = int(entry.source_index)
+    if entry.import_route and entry.import_route != "known":
+        raw["import_route"] = entry.import_route
+    if entry.import_answers:
+        raw["import_answers"] = dict(entry.import_answers)
+    if entry.edits:
+        raw["edits"] = [_jsonable(dict(edit)) for edit in entry.edits]
+    if entry.channel:
+        raw["channel"] = _jsonable(dict(entry.channel))
+    return raw
+
+
+def _jsonable(value):
+    """*value* with numpy scalars and arrays turned into plain Python.
+
+    Values read off Qt widgets and napari layers arrive as numpy types, which
+    `json.dump` refuses.
+    """
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if hasattr(value, "tolist"):  # numpy array or scalar
+        return _jsonable(value.tolist())
+    return value
+
+
+def _tuple_or_none(raw):
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        return tuple(
+            _tuple_or_none(item) if isinstance(item, list) else item for item in raw
+        )
+    raise SceneFormatError(f"expected a list, not {raw!r}")
+
+
+def _object_or_none(raw, what):
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SceneFormatError(f"{what} must be an object, not {raw!r}")
+    return dict(raw)
+
+
+#: The edits a scene knows how to replay.  Anything else is refused rather
+#: than skipped: a dropped filter would show data the user had removed.
+#: ``filter`` a band, ``adjust`` column arithmetic, ``density`` a local
+#: density calculation, ``split`` the dataset cut in two by a band -- this
+#: entry being one of the two parts.
+EDIT_KINDS = ("filter", "adjust", "density", "split")
+
+
+def _edits_from_list(raw):
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise SceneFormatError(f"edits must be a list, not {raw!r}")
+    edits = []
+    for edit in raw:
+        if not isinstance(edit, dict) or edit.get("kind") not in EDIT_KINDS:
+            raise SceneFormatError(f"unknown edit {edit!r}")
+        edits.append(dict(edit))
+    return tuple(edits)
+
+
+# ---------------------------------------------------------------------------
+# The edit log a scene replays
+# ---------------------------------------------------------------------------
+
+
+def record_edit(dataset, edit):
+    """Append *edit* to the log a scene saves for *dataset*.
+
+    Kept on the dataset object, so it lives exactly as long as the data it
+    describes and goes away when that is unloaded.
+    """
+    if edit.get("kind") not in EDIT_KINDS:
+        raise ValueError(f"unknown edit kind {edit.get('kind')!r}")
+    log = getattr(dataset, "scene_edits", None)
+    if log is None:
+        log = []
+        dataset.scene_edits = log
+    log.append(dict(edit))
+
+
+def edits_of(dataset):
+    """The edits recorded for *dataset*, oldest first."""
+    return tuple(getattr(dataset, "scene_edits", None) or ())
+
+
+def drop_edits(dataset, kind):
+    """Forget the recorded edits of *kind*: what "Reset filters" undoes.
+
+    Only those after the last split. Everything up to a split is baked into
+    the rows the part holds, so it stays in the log: it is how the part is
+    made again.
+    """
+    log = getattr(dataset, "scene_edits", None)
+    if log:
+        keep = split_point(log)
+        log[keep:] = [edit for edit in log[keep:] if edit.get("kind") != kind]
+
+
+def split_point(edits):
+    """How many leading edits a split has baked in: up to the last split."""
+    edits = list(edits)
+    for index in range(len(edits) - 1, -1, -1):
+        if edits[index].get("kind") == "split":
+            return index + 1
+    return 0
+
+
+def split_lineage(edits):
+    """The baked-in edits, as a key two equal lineages share.
+
+    Two parts of one file differ here and only here, so this is what tells
+    "the in part" from "the out part" when a scene is matched to data.
+    """
+    baked = list(edits)[: split_point(edits)]
+    if not baked:
+        return ""
+    return json.dumps(baked, sort_keys=True, default=float)
+
+
+def _answers_from_dict(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SceneFormatError(f"import answers must be an object, not {raw!r}")
+    return {str(key): value for key, value in raw.items()}
+
+
+def resolve_source_path(entry, base_dir=None):
+    """The file *entry* refers to, if it can be found; otherwise None.
+
+    The absolute path first -- it is what was opened -- then the path relative
+    to the scene's folder, for a scene that moved together with its data.
+    """
+    candidates = []
+    if entry.source_path:
+        candidates.append(entry.source_path)
+    relative = getattr(entry, "source_path_relative", None)
+    if relative and base_dir:
+        candidates.append(os.path.normpath(os.path.join(base_dir, relative)))
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
 def _transform_from_dict(raw):
     if not isinstance(raw, dict):
         return WorldTransform()
@@ -341,8 +627,11 @@ def save_scene(path, scene, indent=2):
     Indented on purpose: a scene is small, and being able to read and diff one
     in a text editor is worth more than the bytes.
     """
+    folder = os.path.dirname(os.path.abspath(path))
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(scene.to_dict(), handle, indent=indent, sort_keys=False)
+        json.dump(
+            scene.to_dict(relative_to=folder), handle, indent=indent, sort_keys=False
+        )
         handle.write("\n")
     return path
 
@@ -354,4 +643,6 @@ def load_scene(path):
             raw = json.load(handle)
     except json.JSONDecodeError as error:
         raise SceneFormatError(f"{path} is not valid JSON: {error}") from error
-    return Scene.from_dict(raw)
+    scene = Scene.from_dict(raw)
+    scene.base_dir = os.path.dirname(os.path.abspath(path))
+    return scene

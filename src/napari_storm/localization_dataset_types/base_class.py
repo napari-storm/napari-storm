@@ -130,6 +130,47 @@ class LocalizationDataBaseClass:
         """Replace one canonical column outright."""
         self._table.set_column(prop, values)
 
+    def subset(self, rows, name=None):
+        """A new, unloaded dataset of the same kind holding only *rows*.
+
+        *rows* is a boolean mask or indices over the canonical rows. The copy
+        keeps everything that describes the data -- its format, units, source
+        file and import answers -- plus derived side columns and fiducial
+        exclusions for the rows it holds. It does not keep the filters or the
+        scene edit log: those belong to whoever makes the copy.
+
+        Refused while drift correction is applied, because the rows would
+        carry the corrected positions as if they had been measured.
+        """
+        import copy
+
+        from ..core.localization_table import ExclusionReason
+
+        table = self._table
+        if table is None:
+            raise ValueError("this dataset holds no localizations")
+        table.check_position_write()
+        rows = np.asarray(rows)
+        if rows.dtype == np.bool_:
+            rows = np.flatnonzero(rows)
+
+        part = copy.copy(self)
+        part.__dict__.pop("dataset_id", None)
+        part.__dict__.pop("scene_edits", None)
+        part._table = None
+        if isinstance(getattr(self, "import_answers", None), dict):
+            part.import_answers = dict(self.import_answers)
+        if name is not None:
+            part.name = name
+        # Indexing keeps the record-array type that attribute access needs.
+        part.locs_all = table.records[rows].copy()
+        for column in table.side_column_names:
+            part.table.set_side_column(column, table.column(column)[rows])
+        fiducial = (table.excluded[rows] & int(ExclusionReason.FIDUCIAL)) != 0
+        if fiducial.any():
+            part.table.set_excluded(fiducial, ExclusionReason.FIDUCIAL)
+        return part
+
     # ------------------------------------------------------------------
     # Coordinates
     # ------------------------------------------------------------------

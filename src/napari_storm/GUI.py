@@ -7,6 +7,7 @@ from qtpy.QtGui import QDoubleValidator, QFont, QIcon
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -23,6 +24,7 @@ from qtpy.QtWidgets import (
 )
 
 from napari_storm.colormap_factory import colormap_pixmap
+from napari_storm.core.focus import DEFAULT_FOCUS_RADIUS_NM, DEFAULT_OUTSIDE_OPACITY
 from napari_storm.core.footprints import DEFAULT_MIN_SIZE_PX, PALETTE
 from napari_storm.core.traces import (
     COLOR_BY_PROGRESS,
@@ -166,48 +168,98 @@ class NapariStormGUI(QWidget):
         self.Lresetview.setText("Reset view:")
         self.data_controls_tab_layout.addWidget(self.Lresetview, 4, 0)
 
+        # The three buttons share one row of their own.  Placed in the grid's
+        # columns they took those columns' widths, which other rows set -- a
+        # wider "Auto-detect Format" above opened a gap between YZ and XZ.
         self.Baxis_xy = QPushButton()
         self.Baxis_xy.setText("XY")
         self.Baxis_xy.clicked.connect(lambda: self.change_camera(set_view_to="XY"))
-        self.Baxis_xy.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_xy, 4, 1)
-
         self.Baxis_yz = QPushButton()
         self.Baxis_yz.setText("YZ")
         self.Baxis_yz.clicked.connect(lambda: self.change_camera(set_view_to="YZ"))
-        self.Baxis_yz.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_yz, 4, 2)
-
         self.Baxis_xz = QPushButton()
         self.Baxis_xz.setText("XZ")
         self.Baxis_xz.clicked.connect(lambda: self.change_camera(set_view_to="XZ"))
-        self.Baxis_xz.setFixedSize(75, 20)
-        self.data_controls_tab_layout.addWidget(self.Baxis_xz, 4, 3)
+        axis_buttons = QWidget()
+        axis_row = QHBoxLayout(axis_buttons)
+        axis_row.setContentsMargins(0, 0, 0, 0)
+        for button in (self.Baxis_xy, self.Baxis_yz, self.Baxis_xz):
+            button.setFixedSize(75, 20)
+            axis_row.addWidget(button)
+        axis_row.addStretch(1)
+        self.data_controls_tab_layout.addWidget(axis_buttons, 4, 1, 1, 3)
+
+        # Where the 3-D view rotates, and focus mode.  See view_focus.
+        self.Lrotation = QLabel("Rotation:")
+        self.data_controls_tab_layout.addWidget(self.Lrotation, 5, 0)
+        self.Cauto_pivot = QCheckBox("about the middle of the view")
+        self.Cauto_pivot.setChecked(True)
+        self.Cauto_pivot.setToolTip(
+            "When you start rotating a 3-D view, the centre of rotation moves "
+            "along the line of sight onto the localizations in the middle of "
+            "the view, so what you are looking at stays put. Double-click a "
+            "structure to make it the centre and bring it to the middle."
+        )
+        self.data_controls_tab_layout.addWidget(self.Cauto_pivot, 5, 1, 1, 3)
+
+        self.Lfocus = QLabel("Focus mode:")
+        self.data_controls_tab_layout.addWidget(self.Lfocus, 6, 0)
+        self.Cfocus = QCheckBox()
+        self.Cfocus.setToolTip(
+            "Fade out localizations further than the radius from the middle of "
+            "the view -- the centre of rotation -- down to the opacity set "
+            "beside it. The region follows the camera."
+        )
+        self.SBfocus_radius = QDoubleSpinBox()
+        self.SBfocus_radius.setRange(10.0, 1_000_000.0)
+        self.SBfocus_radius.setDecimals(0)
+        self.SBfocus_radius.setSingleStep(100.0)
+        self.SBfocus_radius.setSuffix(" nm")
+        self.SBfocus_radius.setValue(DEFAULT_FOCUS_RADIUS_NM)
+        self.SBfocus_radius.setToolTip("Focus radius")
+        self.SBfocus_outside = QSpinBox()
+        self.SBfocus_outside.setRange(0, 100)
+        self.SBfocus_outside.setSuffix(" %")
+        self.SBfocus_outside.setValue(int(round(DEFAULT_OUTSIDE_OPACITY * 100)))
+        self.SBfocus_outside.setToolTip(
+            "How much of a localization far outside the focus region is still "
+            "drawn. 0 % hides it."
+        )
+        focus_controls = QWidget()
+        focus_row = QHBoxLayout(focus_controls)
+        focus_row.setContentsMargins(0, 0, 0, 0)
+        focus_row.addWidget(self.Cfocus)
+        focus_row.addWidget(QLabel("radius"))
+        focus_row.addWidget(self.SBfocus_radius)
+        focus_row.addWidget(QLabel("outside"))
+        focus_row.addWidget(self.SBfocus_outside)
+        focus_row.addStretch(1)
+        self.data_controls_tab_layout.addWidget(focus_controls, 6, 1, 1, 3)
 
         self.Lrenderoptions = QLabel()
         self.Lrenderoptions.setText("Rendering options:")
-        self.data_controls_tab_layout.addWidget(self.Lrenderoptions, 5, 0)
+        self.data_controls_tab_layout.addWidget(self.Lrenderoptions, 7, 0)
 
         self.Brenderoptions = QComboBox()
         self.Brenderoptions.addItems(self.gaussian_render_modes)
         self.Brenderoptions.currentIndexChanged.connect(self._render_options_changed)
-        self.data_controls_tab_layout.addWidget(self.Brenderoptions, 5, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Brenderoptions, 7, 1, 1, 3)
 
         self.Lsigma_xy = QLabel()
         self.Lsigma_xy.setText("FWHM in XY [nm]:")
-        self.data_controls_tab_layout.addWidget(self.Lsigma_xy, 6, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy, 8, 0)
 
         self.Lsigma_z = QLabel()
         self.Lsigma_z.setText("FWHM in Z [nm]:")
-        self.data_controls_tab_layout.addWidget(self.Lsigma_z, 7, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z, 9, 0)
 
         self.Lsigma_xy_min = QLabel()
         self.Lsigma_xy_min.setText("Min. FWHM in XY [nm]:")
-        self.data_controls_tab_layout.addWidget(self.Lsigma_xy_min, 8, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_xy_min, 10, 0)
 
         self.Lsigma_z_min = QLabel()
         self.Lsigma_z_min.setText("Min. FWHM in Z [nm]:")
-        self.data_controls_tab_layout.addWidget(self.Lsigma_z_min, 9, 0)
+        self.data_controls_tab_layout.addWidget(self.Lsigma_z_min, 11, 0)
 
         self.Esigma_xy = QLineEdit()
         self.Esigma_xy.setValidator(self._make_fwhm_validator())
@@ -215,7 +267,7 @@ class NapariStormGUI(QWidget):
         self.Esigma_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_xy, 6, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_xy, 8, 1, 1, 3)
         self.typing_timer_sigma = QtCore.QTimer()
         self.typing_timer_sigma.setSingleShot(True)
         self.typing_timer_sigma.timeout.connect(self.update_sigma)
@@ -226,7 +278,7 @@ class NapariStormGUI(QWidget):
         self.Esigma_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_z, 7, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_z, 9, 1, 1, 3)
 
         self.Esigma_min_xy = QLineEdit()
         self.Esigma_min_xy.setValidator(self._make_fwhm_validator())
@@ -236,7 +288,7 @@ class NapariStormGUI(QWidget):
         self.Esigma_min_xy.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_min_xy, 8, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_xy, 10, 1, 1, 3)
 
         self.Esigma_min_z = QLineEdit()
         self.Esigma_min_z.setValidator(self._make_fwhm_validator())
@@ -246,10 +298,10 @@ class NapariStormGUI(QWidget):
         self.Esigma_min_z.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sigma)
         )
-        self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 9, 1, 1, 3)
+        self.data_controls_tab_layout.addWidget(self.Esigma_min_z, 11, 1, 1, 3)
 
         self.HL1 = QHSeperationLine()
-        self.data_controls_tab_layout.addWidget(self.HL1, 10, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.HL1, 12, 0, 1, 4)
 
         # Issue #2: the three sliders and the button that resets them are one
         # control, so they are framed as one.  Placing them in a box of their
@@ -284,24 +336,26 @@ class NapariStormGUI(QWidget):
         self.Breset_render_range.clicked.connect(self.reset_render_range)
         self.render_range_group_layout.addWidget(self.Breset_render_range, 3, 0, 1, 2)
 
-        self.data_controls_tab_layout.addWidget(self.render_range_group, 11, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.render_range_group, 13, 0, 1, 4)
 
         self.Bsave_scene = QPushButton("Save Scene…")
         self.Bsave_scene.setToolTip(
-            "Save this session's decisions -- alignment, colours, render "
-            "settings, camera -- as a small JSON file. Localizations are not "
-            "copied into it; the scene points at the files it came from."
+            "Save this view -- the files, filters, alignment, colours, render "
+            "settings, render range, grid, scalebar and camera -- as a small "
+            "JSON file. Localizations are not copied into it; the scene points "
+            "at the files it came from."
         )
         self.Bsave_scene.clicked.connect(self.save_scene_dialog)
-        self.data_controls_tab_layout.addWidget(self.Bsave_scene, 22, 0, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bsave_scene, 24, 0, 1, 2)
 
         self.Bload_scene = QPushButton("Load Scene…")
         self.Bload_scene.setToolTip(
-            "Re-apply a saved scene to the datasets loaded now. It does not "
-            "open files: which data is loaded stays your choice."
+            "Open a saved scene: its files are opened -- at their saved paths, "
+            "or beside the scene file -- and the view is restored as it was "
+            "saved. If its data is open already, the scene is applied to it."
         )
         self.Bload_scene.clicked.connect(self.load_scene_dialog)
-        self.data_controls_tab_layout.addWidget(self.Bload_scene, 22, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Bload_scene, 24, 2, 1, 2)
 
         self.Bexport_image = QPushButton("Export OME-TIFF…")
         self.Bexport_image.setToolTip(
@@ -311,15 +365,15 @@ class NapariStormGUI(QWidget):
             "filters left active."
         )
         self.Bexport_image.clicked.connect(self.export_image)
-        self.data_controls_tab_layout.addWidget(self.Bexport_image, 12, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Bexport_image, 14, 0, 1, 4)
 
         self.HL2 = QHSeperationLine()
-        self.data_controls_tab_layout.addWidget(self.HL2, 15, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.HL2, 17, 0, 1, 4)
 
         self.Cscalebar = QCheckBox()
         self.Cscalebar.stateChanged.connect(self.scalebar_state_changed)
         self.Cscalebar.setText("Scalebar")
-        self.data_controls_tab_layout.addWidget(self.Cscalebar, 16, 0, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Cscalebar, 18, 0, 1, 1)
 
         # Colour coding: any property, not only z.  "Off" carries no data.
         self.Bcolor_by = QComboBox()
@@ -336,11 +390,11 @@ class NapariStormGUI(QWidget):
         color_by_layout.addWidget(self.Bcolor_by, 1)
         self.Wcolor_by = QWidget()
         self.Wcolor_by.setLayout(color_by_layout)
-        self.data_controls_tab_layout.addWidget(self.Wcolor_by, 16, 2, 1, 2)
+        self.data_controls_tab_layout.addWidget(self.Wcolor_by, 18, 2, 1, 2)
 
         self.Lscalebarsize = QLabel()
         self.Lscalebarsize.setText("Size of Scalebar [nm]:")
-        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 17, 0)
+        self.data_controls_tab_layout.addWidget(self.Lscalebarsize, 19, 0)
 
         self.Esbsize = QLineEdit()
         self.Esbsize.setValidator(QDoubleValidator(0.001, 1e9, 3, self))
@@ -348,7 +402,7 @@ class NapariStormGUI(QWidget):
         self.Esbsize.textChanged.connect(
             lambda: self._start_typing_timer(self.typing_timer_sbscale)
         )
-        self.data_controls_tab_layout.addWidget(self.Esbsize, 17, 1, 1, 1)
+        self.data_controls_tab_layout.addWidget(self.Esbsize, 19, 1, 1, 1)
         self.typing_timer_sbscale = QtCore.QTimer()
         self.typing_timer_sbscale.setSingleShot(True)
         self.typing_timer_sbscale.timeout.connect(self._sync_scalebar_config)
@@ -357,7 +411,7 @@ class NapariStormGUI(QWidget):
         self.channel_controls_widget_layout = QFormLayout()
         self.channel_controls_placeholder = QWidget()
         self.data_controls_tab_layout.addWidget(
-            self.channel_controls_placeholder, 20, 0, 1, 4
+            self.channel_controls_placeholder, 22, 0, 1, 4
         )
         self.channel_controls_placeholder.setLayout(self.channel_controls_widget_layout)
 
@@ -367,7 +421,7 @@ class NapariStormGUI(QWidget):
         self.Lcolor_encoding_bar.auto_toggled.connect(self._color_auto_toggled)
         self.Lcolor_encoding_bar.hide()
 
-        self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_bar, 21, 0, 1, 4)
+        self.data_controls_tab_layout.addWidget(self.Lcolor_encoding_bar, 23, 0, 1, 4)
 
         # infos tab
         self.infos_tab_layout = QGridLayout()

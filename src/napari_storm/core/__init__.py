@@ -24,6 +24,15 @@ from .dataset_store import (
     DatasetStore,
     StoreCleared,
 )
+from .density import DEFAULT_DENSITY_RADIUS_NM, DENSITY_COLUMN, local_density
+from .focus import (
+    DEFAULT_FOCUS_RADIUS_NM,
+    DEFAULT_OUTSIDE_OPACITY,
+    FocusState,
+    focus_weight,
+    pivot_on_view_axis,
+    point_under_ray,
+)
 from .footprints import (
     BLEND_ADDITIVE,
     BLEND_OPAQUE,
@@ -53,6 +62,7 @@ from .metadata import (
     SIGMA_PRESENT,
     ZDIM_PRESENT,
     MetadataProvider,
+    RecordingMetadataProvider,
     StaticMetadataProvider,
 )
 from .render_planner import DatasetTraits, GaussianSettings, RenderPlanner
@@ -70,8 +80,15 @@ from .scene import (
     ReferenceImageEntry,
     Scene,
     SceneFormatError,
+    ViewState,
+    drop_edits,
+    edits_of,
     load_scene,
+    record_edit,
+    resolve_source_path,
     save_scene,
+    split_lineage,
+    split_point,
 )
 from .traces import (
     BUILTIN_COLOR_BY,
@@ -101,8 +118,24 @@ __all__ = [
     "ReferenceImageEntry",
     "Scene",
     "SceneFormatError",
+    "ViewState",
+    "drop_edits",
+    "edits_of",
     "load_scene",
+    "record_edit",
+    "resolve_source_path",
     "save_scene",
+    "split_lineage",
+    "split_point",
+    "DEFAULT_DENSITY_RADIUS_NM",
+    "DENSITY_COLUMN",
+    "local_density",
+    "DEFAULT_FOCUS_RADIUS_NM",
+    "DEFAULT_OUTSIDE_OPACITY",
+    "FocusState",
+    "focus_weight",
+    "pivot_on_view_axis",
+    "point_under_ray",
     "AXES",
     "FILTERED",
     "TableSelection",
@@ -117,6 +150,7 @@ __all__ = [
     "DatasetStore",
     "StoreCleared",
     "MetadataProvider",
+    "RecordingMetadataProvider",
     "StaticMetadataProvider",
     "DATA_IN_NM",
     "PHOTON_COUNT_PRESENT",
