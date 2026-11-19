@@ -1,8 +1,8 @@
-"""napari-storm's drawing core, without napari (``storm_drawing`` is a working name).
+"""napari-storm's drawing core, without napari: the 3D view of SMLM localizations.
 
-- ``storm_drawing.core``: the localization table, the render planner, the
+- ``smlm_view3d.core``: the localization table, the render planner, the
   renderer contract and the scene; numpy only, with no Qt, napari or VisPy.
-- ``storm_drawing.particles``: the instanced VisPy billboards
+- ``smlm_view3d.particles``: the instanced VisPy billboards
   (``billboard_filter``, ``footprint_shaders``, ``summed_contrast``,
   ``vispy_compat`` and the ``instanced`` prototype) and the plain-VisPy
   backend, ``vispy_renderer.VispyInstancedRenderer``; VisPy and numpy, with no
@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _distribution_version
 
 try:
-    __version__ = _distribution_version("storm-drawing")
+    __version__ = _distribution_version("smlm-view3d")
 except PackageNotFoundError:  # running from a source tree without installation
     __version__ = "0.0.0+unknown"
 

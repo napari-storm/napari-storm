@@ -251,10 +251,10 @@ def test_the_blocker_itself_works():
 
 
 def test_the_drawing_package_imports_without_napari():
-    """The split's gate: ``storm_drawing.core`` needs no Qt, napari or VisPy,
+    """The split's gate: ``smlm_view3d.core`` needs no Qt, napari or VisPy,
     and its VisPy drawing and plain-VisPy backend need no napari or Qt."""
     result = _run_headless("""
-        import storm_drawing.core as core
+        import smlm_view3d.core as core
 
         assert core.RenderPlanner is not None and core.NullRenderer is not None
         assert "napari_storm" not in sys.modules
@@ -268,8 +268,8 @@ def test_the_drawing_package_imports_without_napari():
         import numpy as np
         from vispy.visuals.filters import Filter
 
-        from storm_drawing.core import LocalizationRenderer
-        from storm_drawing.particles import (
+        from smlm_view3d.core import LocalizationRenderer
+        from smlm_view3d.particles import (
             billboard_filter, footprint_shaders, instanced, summed_contrast,
             vispy_compat, vispy_renderer,
         )

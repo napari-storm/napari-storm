@@ -1,11 +1,11 @@
-# storm-drawing
+# smlm-view3d
 
-napari-storm's drawing core without napari. `storm-drawing` is a working name.
+napari-storm's drawing core without napari: the 3D view of SMLM localizations.
 
-- `storm_drawing.core`: the localization table, the render planner, the
+- `smlm_view3d.core`: the localization table, the render planner, the
   renderer contract and the scene. It needs numpy only: no Qt, no napari, no
   VisPy.
-- `storm_drawing.particles`: the instanced VisPy billboards and the plain-VisPy
+- `smlm_view3d.particles`: the instanced VisPy billboards and the plain-VisPy
   backend, `VispyInstancedRenderer`. It needs VisPy, PyOpenGL and numpy, and no
   napari. It reaches Qt only through VisPy's app.
 
@@ -19,7 +19,7 @@ the modules moved here) are the same module objects as this package's.
 From the repository root, before napari-storm:
 
 ```
-pip install -e ./storm-drawing
+pip install -e ./smlm-view3d
 pip install -e ".[dev,pyqt6]"
 ```
 
@@ -28,5 +28,5 @@ Extras: `density` (scipy, for `core.density.local_density`) and `ome-tiff`
 
 ## Licence
 
-BSD 3-Clause; see `LICENSE`. The modules in `storm_drawing/particles` are
+BSD 3-Clause; see `LICENSE`. The modules in `smlm_view3d/particles` are
 derived from napari-particles by Martin Weigert; see the `NOTICE` there.
