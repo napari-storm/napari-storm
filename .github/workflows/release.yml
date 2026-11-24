@@ -1,6 +1,16 @@
 name: Release
 
-# Publishes to PyPI when a GitHub release is published.
+# Publishes to PyPI when a GitHub release is published.  The release's tag says
+# what is released:
+#
+#   * v<version> (e.g. v3.3.1): napari-storm, with smlm-view3d.  Bump setup.cfg,
+#     merge, then publish a GitHub release tagged v<version>.
+#   * smlm-view3d-v<version> (e.g. smlm-view3d-v0.1.1): smlm-view3d alone.  Bump
+#     smlm-view3d/pyproject.toml, merge, then publish a GitHub release tagged
+#     smlm-view3d-v<version>.  napari-storm's version does not change: it is
+#     neither built nor published.
+#
+# Any other tag fails in the first step, naming the two forms.
 #
 # The old test_and_deploy.bak uploaded with twine and a TWINE_API_KEY secret,
 # which was never configured -- the package has in fact never reached PyPI.
@@ -13,13 +23,16 @@ name: Release
 #
 # Publishing is gated on a *published GitHub release* rather than a bare tag
 # push so that a release is always a deliberate, documented act.  CI's full
-# test grid runs on the v* tag independently.
+# test grid runs on the v* and smlm-view3d-v* tags independently.
 #
 # smlm-view3d, the drawing core in smlm-view3d/, is published by the same job
 # and needs the same trusted publisher on pypi.org for project "smlm-view3d".
-# napari-storm requires it, so it goes first.  It keeps its own version: a
-# napari-storm release that leaves smlm-view3d's version unchanged skips it
-# rather than failing on a file PyPI already has.
+# Both kinds of release run this one file in the one "pypi" environment, so
+# the two trusted publishers are unchanged.  On a napari-storm release,
+# napari-storm requires smlm-view3d, so it goes first.  It keeps its own
+# version: a napari-storm release that leaves smlm-view3d's version unchanged
+# skips it rather than failing on a file PyPI already has.  A release of
+# smlm-view3d alone does not skip: a version PyPI already has fails it.
 
 on:
   release:
@@ -29,16 +42,68 @@ jobs:
   build:
     name: Build and check the distribution
     runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.kind.outputs.kind }}
     steps:
+      # The tag says which release this is; any other tag stops here, before
+      # anything is built.
+      - name: Which release
+        id: kind
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            smlm-view3d-v*) kind=smlm-view3d ;;
+            v*) kind=napari-storm ;;
+            *)
+              echo "::error::release tag '$TAG' is neither v<version> (napari-storm," \
+                "with smlm-view3d) nor smlm-view3d-v<version> (smlm-view3d alone)"
+              exit 1
+              ;;
+          esac
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "releasing $kind, tag $TAG"
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
+      # --- smlm-view3d alone (tag smlm-view3d-v<version>) ---------------------
+
+      # smlm-view3d/pyproject.toml is the single source of its version, so the
+      # tag is checked against it before anything is built.
+      - name: Tag must match smlm-view3d's version
+        if: steps.kind.outputs.kind == 'smlm-view3d'
+        run: |
+          python - <<'EOF'
+          import os, sys, tomllib
+          tag = os.environ["GITHUB_REF_NAME"]
+          with open("smlm-view3d/pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          if tag != f"smlm-view3d-v{version}":
+              sys.exit(f"release tag {tag!r} does not match smlm-view3d's version "
+                       f"{version!r} in smlm-view3d/pyproject.toml; bump it or retag")
+          print(f"{tag} == smlm-view3d {version}")
+          EOF
+
+      - name: Build smlm-view3d
+        if: steps.kind.outputs.kind == 'smlm-view3d'
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build smlm-view3d --outdir dist-smlm-view3d
+
+      - name: Check smlm-view3d's metadata renders on PyPI
+        if: steps.kind.outputs.kind == 'smlm-view3d'
+        run: python -m twine check --strict dist-smlm-view3d/*
+
+      # --- napari-storm, with smlm-view3d (tag v<version>) --------------------
+
       # smlm-view3d is built into its own folder, so dist/ still holds
       # napari-storm's distribution alone (as in CI).
       - name: Build sdist and wheel
+        if: steps.kind.outputs.kind == 'napari-storm'
         run: |
           python -m pip install --upgrade pip build twine
           python -m build
@@ -47,15 +112,18 @@ jobs:
       # The same gate CI applies: a successful build is not evidence the
       # artifact is usable.
       - name: Inspect wheel contents
+        if: steps.kind.outputs.kind == 'napari-storm'
         run: python scripts/check_wheel_contents.py dist/*.whl
 
       - name: Check metadata renders on PyPI
+        if: steps.kind.outputs.kind == 'napari-storm'
         run: python -m twine check --strict dist/* dist-smlm-view3d/*
 
       # A release tagged v2.1.0 must ship version 2.1.0.  setup.cfg is the
       # single source of the version, so the tag has to be checked against
       # the built artifact rather than trusted.
       - name: Tag must match the packaged version
+        if: steps.kind.outputs.kind == 'napari-storm'
         run: |
           python - <<'EOF'
           import os, pathlib, re, sys
@@ -69,9 +137,12 @@ jobs:
           EOF
 
       - uses: actions/upload-artifact@v6
+        if: steps.kind.outputs.kind == 'napari-storm'
         with:
           name: release-dist
           path: dist/
+
+      # --- both ---------------------------------------------------------------
 
       - uses: actions/upload-artifact@v6
         with:
@@ -83,15 +154,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     # The environment name is part of the trusted-publisher identity on
-    # pypi.org; renaming it there and here must happen together.
+    # pypi.org; renaming it there and here must happen together.  The url is
+    # only the link GitHub shows: the project released.
     environment:
       name: pypi
-      url: https://pypi.org/p/napari-storm
+      url: ${{ needs.build.outputs.kind == 'smlm-view3d' && 'https://pypi.org/p/smlm-view3d' || 'https://pypi.org/p/napari-storm' }}
     permissions:
       # This is the OIDC grant that replaces the API token.
       id-token: write
     steps:
       - uses: actions/download-artifact@v6
+        if: needs.build.outputs.kind == 'napari-storm'
         with:
           name: release-dist
           path: dist/
@@ -101,13 +174,23 @@ jobs:
           name: smlm-view3d-dist
           path: dist-smlm-view3d/
 
+      # smlm-view3d alone: no skip-existing, so a version PyPI already has
+      # fails the release loudly instead of publishing nothing.
+      - name: Publish smlm-view3d alone
+        if: needs.build.outputs.kind == 'smlm-view3d'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-smlm-view3d/
+
       # First, because napari-storm requires it.  skip-existing: a release
       # that leaves smlm-view3d's version unchanged uploads nothing here.
       - name: Publish smlm-view3d
+        if: needs.build.outputs.kind == 'napari-storm'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist-smlm-view3d/
           skip-existing: true
 
       - name: Publish napari-storm
+        if: needs.build.outputs.kind == 'napari-storm'
         uses: pypa/gh-action-pypi-publish@release/v1

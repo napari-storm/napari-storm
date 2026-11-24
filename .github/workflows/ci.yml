@@ -12,7 +12,8 @@ name: CI
 # Pull requests run a four-job subset -- both ends of the Python range on
 # Linux, plus one job each on Windows and macOS so that no platform goes
 # ungated, while keeping pull-request feedback fast.  The full grid runs
-# weekly, on release tags, and on demand.
+# weekly, on release tags (v* for napari-storm, smlm-view3d-v* for smlm-view3d
+# alone, whose tests are napari-storm's), and on demand.
 #
 # Each change is tested once, on its pull request.  A push to main is not run
 # again (it is the merge of a pull request just tested; the weekly run covers
@@ -21,7 +22,7 @@ name: CI
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "smlm-view3d-v*"]
   pull_request:
     branches: [main]
     paths-ignore:
@@ -58,7 +59,7 @@ jobs:
       - name: Pick the subset or the full grid
         id: pick
         env:
-          FULL: ${{ github.event_name == 'schedule' || inputs.full-matrix || startsWith(github.ref, 'refs/tags/v') }}
+          FULL: ${{ github.event_name == 'schedule' || inputs.full-matrix || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/smlm-view3d-v') }}
         run: |
           if [ "$FULL" = "true" ]; then
             matrix=$(jq -cn '{include: [{
