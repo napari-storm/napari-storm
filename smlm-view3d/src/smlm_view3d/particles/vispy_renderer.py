@@ -11,9 +11,9 @@ with a VisPy scene where that one has napari:
   the billboard filter on it, the instance rows, the summed-contrast pass and
   the blend state.
 
-Each method's docstring names the napari backend's method it follows.  Traces,
-pairs and focus are not drawn: `draws_traces`, `draws_pairs` and
-`supports_focus` keep the contract's False.
+Each method's docstring names the napari backend's method it follows.  Traces
+and pairs are not drawn: `draws_traces` and `draws_pairs` keep the contract's
+False.  Focus is: `set_focus` fades every dataset's billboards, as there.
 
 Instancing needs VisPy's ``gl+`` GL backend (PyOpenGL), chosen before any GL
 context exists.  The constructor chooses it; if instancing is still not
@@ -304,6 +304,25 @@ class _Billboards:
             low, high = min(low, 0.0), max(high, 1.0)
         return low, high
 
+    def set_focus(self, focus):
+        """`InstancedParticles.set_focus`: fade what lies outside a
+        `core.FocusState`; None stops fading.
+
+        The scene has no world transform, so the centre's world (z, y, x) are
+        the billboards' own, reversed into the filter's x, y, z.
+        """
+        if focus is None:
+            self.filter.set_focus(None)
+        else:
+            self.filter.set_focus(
+                center_xyz=np.asarray(focus.center_world, dtype=float)[::-1],
+                radius=focus.radius_nm,
+                edge=focus.edge_nm,
+                floor=focus.outside_opacity,
+                planar=focus.planar,
+            )
+        self.mesh.update()
+
     def close(self):
         """`InstancedParticles.close`: the pass gives the draw back, the filter
         comes off, the mesh leaves the scene."""
@@ -349,6 +368,7 @@ class VispyInstancedRenderer(LocalizationRenderer):
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = scene.TurntableCamera(fov=0.0)
         self._layers: dict[Any, _Billboards] = {}
+        self._focus = None
 
     @property
     def widget(self):
@@ -396,6 +416,8 @@ class VispyInstancedRenderer(LocalizationRenderer):
         frame the view."""
         self.close(dataset_id)
         entry = _Billboards(request, parent=self.view.scene)
+        if self._focus is not None:
+            entry.set_focus(self._focus)
         self._layers[dataset_id] = entry
         self.reset_view()
         return entry.mesh
@@ -446,6 +468,20 @@ class VispyInstancedRenderer(LocalizationRenderer):
         """`InstancedRenderer.contrast_is_summed`."""
         entry = self._layers.get(dataset_id)
         return entry is not None and entry.contrast_is_summed
+
+    #: The contract's flag: `set_focus` fades the billboards.
+    supports_focus = True
+
+    def set_focus(self, focus):
+        """`InstancedRenderer.set_focus`: fade every dataset outside a
+        `core.FocusState`.
+
+        None turns focus mode off.  It applies to datasets opened later as
+        well.
+        """
+        self._focus = focus
+        for entry in self._layers.values():
+            entry.set_focus(focus)
 
     def close(self, dataset_id):
         """`InstancedRenderer.close`: release what the dataset installed and

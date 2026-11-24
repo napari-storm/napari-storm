@@ -670,6 +670,38 @@ class TestVispyInstancedRenderer:
         vispy_renderer.close(7)
         assert vispy_renderer.host_bytes(7) == 0
 
+    def test_focus_reaches_every_dataset_and_later_ones(self, vispy_renderer):
+        """`set_focus` sets each open dataset's fade, the centre in the
+        billboards' x, y, z; a dataset opened afterwards gets it too, and None
+        turns it off."""
+        from napari_storm.core import FocusState
+
+        def uniform(dataset_id, name):
+            value = vispy_renderer._layers[dataset_id].filter.vshader[name]
+            return getattr(value, "value", value)
+
+        assert vispy_renderer.supports_focus
+        vispy_renderer.open(1, _request())
+        vispy_renderer.open(2, _request())
+        focus = FocusState(
+            center_world=(10.0, 20.0, 30.0), radius_nm=400.0, outside_opacity=0.3
+        )
+
+        vispy_renderer.set_focus(focus)
+        vispy_renderer.open(3, _request())
+
+        for dataset_id in (1, 2, 3):
+            assert uniform(dataset_id, "focus_on") == 1.0
+            assert tuple(uniform(dataset_id, "focus_center")) == pytest.approx(
+                (30.0, 20.0, 10.0)
+            )
+            assert uniform(dataset_id, "focus_radius") == pytest.approx(400.0)
+            assert uniform(dataset_id, "focus_edge") == pytest.approx(focus.edge_nm)
+            assert uniform(dataset_id, "focus_floor") == pytest.approx(0.3)
+
+        vispy_renderer.set_focus(None)
+        assert all(uniform(dataset_id, "focus_on") == 0.0 for dataset_id in (1, 2, 3))
+
     def test_it_draws_a_gaussian_at_each_localization(self, vispy_renderer):
         """Four localizations through the planner, 200 nm apart: lit where each
         one is, dark between them and at the corner."""
