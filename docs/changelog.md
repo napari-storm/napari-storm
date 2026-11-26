@@ -3,6 +3,13 @@
 What changed for users in each release. Developers will find the full history
 in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
+## Unreleased
+
+* **Upgrading napari-storm upgrades smlm-view3d with it.** napari-storm now
+  requires the version of its drawing core, smlm-view3d, that it was tested
+  with, so `pip install -U napari-storm` no longer keeps an older
+  smlm-view3d that is already installed.
+
 ## 3.3.0 -- 2026-11-19
 
 * **Scenes use the data already open.** Loading a scene no longer reads a file
