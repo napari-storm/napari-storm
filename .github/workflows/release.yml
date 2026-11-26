@@ -5,6 +5,13 @@ name: Release
 #
 #   * v<version> (e.g. v3.3.1): napari-storm, with smlm-view3d.  Bump setup.cfg,
 #     merge, then publish a GitHub release tagged v<version>.
+#
+#     smlm-view3d goes up only when its version is new.  So a pull request
+#     that changes smlm-view3d's code bumps smlm-view3d/pyproject.toml and,
+#     to the same version, the smlm-view3d>= minimum in setup.cfg; CI fails it
+#     otherwise, and this workflow checks again before publishing
+#     (scripts/check_smlm_view3d_version.py).
+#
 #   * smlm-view3d-v<version> (e.g. smlm-view3d-v0.1.1): smlm-view3d alone.  Bump
 #     smlm-view3d/pyproject.toml, merge, then publish a GitHub release tagged
 #     smlm-view3d-v<version>.  napari-storm's version does not change: it is
@@ -118,6 +125,16 @@ jobs:
       - name: Check metadata renders on PyPI
         if: steps.kind.outputs.kind == 'napari-storm'
         run: python -m twine check --strict dist/* dist-smlm-view3d/*
+
+      # CI runs these on every pull request; again here, because main can also
+      # change by a direct push.  If PyPI already has smlm-view3d's version,
+      # the publish step below skips it, so its code must not have changed;
+      # and napari-storm must require that version, the one it was tested with.
+      - name: smlm-view3d's version follows its code, and the pin follows it
+        if: steps.kind.outputs.kind == 'napari-storm'
+        run: |
+          python scripts/check_smlm_view3d_version.py pin
+          python scripts/check_smlm_view3d_version.py published dist-smlm-view3d/*.whl
 
       # A release tagged v2.1.0 must ship version 2.1.0.  setup.cfg is the
       # single source of the version, so the tag has to be checked against

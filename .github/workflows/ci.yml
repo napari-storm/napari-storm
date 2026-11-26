@@ -144,7 +144,8 @@ jobs:
           qt: true
 
       # smlm-view3d (napari-storm's drawing core without napari) lives in
-      # this repository and is not on PyPI, so it goes in first.
+      # this repository.  It goes in first, so that napari-storm is tested
+      # with this tree's drawing core rather than PyPI's.
       - name: Install
         run: |
           python -m pip install --upgrade pip
@@ -183,7 +184,19 @@ jobs:
       - name: Inspect wheel contents
         run: python scripts/check_wheel_contents.py dist/*.whl
 
-      # smlm-view3d first: napari-storm requires it, and it is not on PyPI.
+      # smlm-view3d keeps its own version, and a napari-storm release skips a
+      # version PyPI already has.  So a change to its code needs a new
+      # version, and napari-storm's minimum has to follow that version, or
+      # napari-storm on PyPI runs on an older drawing core than it was tested
+      # with.  Checked here, on the pull request that makes the change, rather
+      # than when a release is already out.
+      - name: smlm-view3d's version follows its code, and the pin follows it
+        run: |
+          python scripts/check_smlm_view3d_version.py pin
+          python scripts/check_smlm_view3d_version.py published dist-smlm-view3d/*.whl
+
+      # smlm-view3d first, from this tree: napari-storm requires it, and this
+      # job tests the pair as it will be released, not PyPI's smlm-view3d.
       - name: Install the built wheel into a clean environment
         run: |
           python -m venv /tmp/clean
