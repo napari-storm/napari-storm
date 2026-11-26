@@ -3,6 +3,12 @@
 What changed for users in each release. Developers will find the full history
 in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
+## Unreleased
+
+* **`napari-storm FILE` opens the file.** Localization files named after the
+  `napari-storm` command are opened once the viewer is up, as **Open** would
+  open them; the second and later are merged into the first.
+
 ## 3.3.0 -- 2026-11-19
 
 * **Scenes use the data already open.** Loading a scene no longer reads a file

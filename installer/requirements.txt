@@ -1,0 +1,6 @@
+# The tools the desktop installers are built with, on top of napari-storm,
+# smlm-view3d and the pyqt6 extra (see installer/README.md).  Pinned so that a
+# release is frozen with what was last built and smoke-tested; bump them
+# deliberately, after a build that passes.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10

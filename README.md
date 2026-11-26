@@ -63,7 +63,10 @@ example -- run:
     napari-storm
 
 This opens napari with the napari-storm dock already docked on the right. `python -m napari_storm`
-does the same, and from a clone so does `python napari_start.py`.
+does the same, and from a clone so does `python napari_start.py`. Files named after the
+command are opened once the viewer is up, the second and later merged into the first:
+
+    napari-storm cells.h5
 
 Or start napari itself and open the dock from the Plugins menu:
 
