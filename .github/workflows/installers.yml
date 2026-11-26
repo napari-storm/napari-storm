@@ -1,0 +1,143 @@
+name: Installers
+
+# Desktop installers for people who do not use Python: a .dmg for macOS on
+# Apple Silicon and a setup .exe for 64-bit Windows, each holding napari, the
+# napari-storm dock and a Python of their own, frozen with PyInstaller.
+# installer/README.md says how they are made and what they leave out.
+#
+# A published v<version> release builds both and attaches them to the release
+# -- the same event release.yml publishes to PyPI on, in a workflow of its own
+# so that PyPI publishing is unchanged and does not wait for (or fail with)
+# the installers.  smlm-view3d-v<version> releases carry no app and build
+# nothing here.
+#
+# A pull request that touches the installer, the launcher it freezes or the
+# dependencies builds and smoke-tests both, and keeps the installers as
+# workflow artifacts; so does a manual run.  Nothing is attached to a release
+# then.
+#
+# Each build fails unless the frozen app, started on the sample data,
+# printed "GL backend: gl+ (instancing available)" and drew the data with the
+# instanced renderer (installer/build.py, installer/launcher.py).
+#
+# The installers are not signed: macOS Gatekeeper and Windows SmartScreen
+# warn before the first start.  installer/README.md lists what signing needs.
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+    paths:
+      - "installer/**"
+      - ".github/workflows/installers.yml"
+      - "src/napari_storm/__main__.py"
+      - "setup.cfg"
+      - "smlm-view3d/pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    # A release builds only for napari-storm's own v<version> tags.
+    if: github.event_name != 'release' || startsWith(github.ref_name, 'v')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS arm64 .dmg
+          - os: windows-latest
+            name: Windows x64 setup .exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      # The Python the app ships.  3.12, as release.yml builds with.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # The smoke test opens a GL context.  macOS runners have one; Windows
+      # runners have only GDI's OpenGL 1.1 until Mesa is installed, which the
+      # action does system-wide, so the frozen exe finds it too.
+      - uses: pyvista/setup-headless-display-action@v4
+        if: runner.os == 'Windows'
+        with:
+          pyvista: false
+
+      # Only what the app needs, in a fresh interpreter: whatever is
+      # installed here, PyInstaller may bundle.  The optional extras (comet,
+      # minflux) are left out; installer/README.md says what adding them takes.
+      - name: Install napari-storm and the build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./smlm-view3d
+          python -m pip install ".[pyqt6]" -r installer/requirements.txt
+
+      - name: Tag must match the packaged version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'EOF'
+          import os, sys
+          from importlib.metadata import version
+          tag, packaged = os.environ["TAG"], version("napari-storm")
+          if tag != f"v{packaged}":
+              sys.exit(f"release tag {tag!r} does not match napari-storm {packaged!r}")
+          print(f"{tag} == {packaged}")
+          EOF
+
+      - name: Freeze, smoke-test and package
+        id: build
+        run: python installer/build.py
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: smoke-report-${{ runner.os }}
+          path: build/smoke-report.txt
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: installer-${{ runner.os }}
+          path: ${{ steps.build.outputs.installer }}
+          if-no-files-found: error
+          # Already compressed, and large.
+          compression-level: 0
+
+  attach:
+    name: Attach to the release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    # The one job that can write to the repository, and it runs no build
+    # code: the installers were made with a read-only token.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: installer-*
+          path: installers
+          merge-multiple: true
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -l installers
+          gh release upload "$TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"

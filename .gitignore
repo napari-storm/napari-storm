@@ -82,3 +82,6 @@ venv/
 
 # written by setuptools_scm
 **/_version.py
+
+# ...except the desktop installer's own spec, which is written by hand
+!installer/*.spec
