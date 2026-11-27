@@ -114,6 +114,7 @@ without it.
 | **Fiducials** (collapsed) | **Detect fiducials**, tick candidates, **Exclude ticked fiducials** / **Restore fiducials** |
 | **Grouping** (collapsed, STORM) | **Max distance**, **Max dark frames**, **Max frames**; **Group localizations** |
 | **Max drift [nm]** | The largest distance the sample moved; COMET's pair radius |
+| **Remove beads from the estimate** | Thin fiducial beads out of COMET's input so they cannot blow up the pair count; every row is still corrected (comet-smlm 1.3+) |
 | **Localizations** / **Group means** | What COMET estimates from |
 | **Localizations per time window** | COMET's window size (means per window with group or trace means) |
 | **Keep localizations** | Random, reproducible share used when memory is short |

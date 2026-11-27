@@ -3,6 +3,18 @@
 What changed for users in each release. Developers will find the full history
 in the [git log](https://github.com/napari-storm/napari-storm/commits/main).
 
+## Unreleased
+
+* **Remove beads from the estimate.** A new box in the Drift correction section
+  of **Post-proc.** thins fiducial beads out of COMET's input, so they cannot
+  blow up the pair count: one bead in every frame of a 12,000-frame movie adds
+  73 million pairs. It uses COMET's own bead removal (comet-smlm 1.3 or later):
+  spots far busier than any ordinary structure are thinned, evenly in time, to
+  the level of the busiest structure, before **Estimate memory** and the memory
+  guard count the pairs. Beads moving with the sample still help the estimate;
+  beads moving on their own can no longer steer it. Every row is still
+  corrected. See [Beads](post-processing.md#beads).
+
 ## 3.3.0 -- 2026-11-19
 
 * **Scenes use the data already open.** Loading a scene no longer reads a file

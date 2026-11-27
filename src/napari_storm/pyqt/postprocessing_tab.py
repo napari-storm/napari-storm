@@ -20,6 +20,15 @@ from qtpy.QtWidgets import (
 
 
 class PostProcessingWindow(QScrollArea):
+    REMOVE_BEADS_TIP = (
+        "Fiducial beads can make COMET's pair count explode. Spots far busier "
+        "than any ordinary structure at the max-drift scale are taken to be "
+        "beads and thinned, evenly in time, to the level of the busiest "
+        "structure before the pairs are counted. Stable beads still help the "
+        "estimate; beads moving on their own can no longer steer it. Every row "
+        "is still corrected. Turn it on for data with beads."
+    )
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWidgetResizable(True)
@@ -110,6 +119,9 @@ class PostProcessingWindow(QScrollArea):
         self.comet_note.setWordWrap(True)
         self.comet_note.setStyleSheet("color: grey")
         layout.addWidget(self.comet_note)
+        self.remove_beads = QCheckBox("Remove beads from the estimate")
+        self.remove_beads.setToolTip(self.REMOVE_BEADS_TIP)
+        layout.addWidget(self.remove_beads)
         self.input_mode = QComboBox()
         self.input_mode.addItems(["Localizations", "Group means"])
         layout.addWidget(self.input_mode)

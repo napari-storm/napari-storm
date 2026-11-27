@@ -16,7 +16,10 @@ from .core.dataset_store import DatasetClosed, DatasetOpened, StoreCleared
 from .core.traces import find_trace_column
 from .postprocessing.comet_runner import (
     CometParameters,
+    bead_removal_available,
+    bead_text,
     prepare_input,
+    remove_beads,
     run_comet,
     subsample,
 )
@@ -48,6 +51,7 @@ class RunProgress:
         "preparing": "Preparing…",
         "counting pairs": "Counting pairs…",
         "memory estimate": "Checking memory…",
+        "removing beads": "Removing beads…",
         "loading COMET": "Loading COMET…",
         "segmentation": "Windows…",
         "pairs_start": "Pair search…",
@@ -274,6 +278,16 @@ class PostProcessingInterface:
         self.widget.input_mode.setEnabled(
             d is not None and not self.is_minflux(d) and not busy
         )
+        beads_available = available and bead_removal_available()
+        self.widget.remove_beads.setEnabled(
+            d is not None and not busy and beads_available
+        )
+        self.widget.remove_beads.setToolTip(
+            self.widget.REMOVE_BEADS_TIP
+            if beads_available or not available
+            else self.widget.REMOVE_BEADS_TIP
+            + "\n\nNeeds comet-smlm 1.3 or later: pip install -U comet-smlm"
+        )
         self.widget.actions["group"].setEnabled(
             d is not None and not self.is_minflux(d) and not busy
         )
@@ -391,6 +405,8 @@ class PostProcessingInterface:
             window=w["window"].value(),
             max_drift_nm=w["max_drift"].value(),
             keep_percent=self.widget.keep.value(),
+            remove_beads=self.widget.remove_beads.isChecked()
+            and bead_removal_available(),
         )
 
     def weights(self, d, ids):
@@ -518,9 +534,11 @@ class PostProcessingInterface:
         coords, times, _, _, _, time_origin = self.input(d, params)
 
         def work(progress):
-            data = subsample(
-                prepare_input(coords, times, params, time_origin=time_origin), params
-            )
+            data = prepare_input(coords, times, params, time_origin=time_origin)
+            if params.remove_beads:
+                progress("removing beads", {})
+            data, beads = remove_beads(data, params)
+            data = subsample(data, params)
             progress("counting pairs", {})
             estimate = estimate_memory(
                 data[:, :3],
@@ -528,9 +546,11 @@ class PostProcessingInterface:
                 total_rows=len(d.table),
                 frame_count=int(data[:, 3].max()) + 1,
             )
-            return estimate
+            return estimate, beads
 
-        def done(estimate):
+        def done(result):
+            estimate, beads = result
+            beads = f" · {bead_text(beads)}" if beads is not None else ""
             if not estimate.fits and estimate.pairs:
                 # pairs fall with the square of the share kept: suggest one that fits
                 room = (
@@ -542,12 +562,12 @@ class PostProcessingInterface:
                 suggestion = int(max(1, min(99, np.floor(params.keep_percent * share))))
                 self.widget.keep.setValue(suggestion)
                 self.widget.status.setText(
-                    f"{estimate.pairs:,} pairs · {estimate.additional_bytes/1e9:.2f} GB is over budget · "
+                    f"{estimate.pairs:,} pairs{beads} · {estimate.additional_bytes/1e9:.2f} GB is over budget · "
                     f"'Keep localizations' set to {suggestion} %; Estimate again to confirm"
                 )
                 return
             self.widget.status.setText(
-                f"{estimate.pairs:,} pairs · estimated additional memory {estimate.additional_bytes/1e9:.2f} GB · "
+                f"{estimate.pairs:,} pairs{beads} · estimated additional memory {estimate.additional_bytes/1e9:.2f} GB · "
                 + (
                     "within budget"
                     if estimate.fits
@@ -579,8 +599,10 @@ class PostProcessingInterface:
         self.pair_sets.pop(d.dataset_id, None)
         self.pair_keys.pop(d.dataset_id, None)
         self.store.set_drift(d.dataset_id, view)
+        beads = model.provenance.get("beads")
         self.widget.status.setText(
             f"Drift applied · anchored at start · {len(model.knots)} windows · {model.provenance.get('pairs', 0):,} pairs"
+            + (f" · {bead_text(beads)}" if beads is not None else "")
         )
         self.draw_plot(model, d)
         self.refresh_status(d)

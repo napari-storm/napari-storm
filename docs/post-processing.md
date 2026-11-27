@@ -32,6 +32,8 @@ work without COMET installed.
    STORM uses acquisition frames. Group-mean input counts means per window;
    MINFLUX counts trace means ordered by their measured mean time and applies
    one correction value per trace.
+   Tick **Remove beads from the estimate** for data with fiducial beads; see
+   [Beads](#beads).
 2. **Estimate memory** counts pairs exactly for the selected input. Filters and
    the render-range crop select the estimation region. Fiducials and invalid
    positions are excluded. When the run would be over the memory budget, the
@@ -79,6 +81,29 @@ also includes coordinate copies, dense per-frame interpolation, a fixed working
 allowance and the reserve above. These are memory safeguards, not scientific
 population thresholds. `python scripts/benchmark_comet_memory.py` measures a
 dense pair search on your machine.
+
+## Beads
+
+A fiducial bead is localized in most frames, and every localization of it lies
+within the max drift of every other, so a bead with `n` localizations adds about
+`n² / 2` pairs: one bead in each of 12,000 frames adds 73 million, as many as a
+whole field of a million ordinary localizations. **Remove beads from the
+estimate** uses COMET's own bead removal: spots far busier than any ordinary
+structure at the max-drift scale are taken to be beads, and each is thinned,
+evenly in time, to the level of the busiest structure before the pairs are
+counted. **Estimate memory** and the memory guard see the thinned input.
+
+A bead that moves with the sample keeps a few hundred localizations and still
+helps the estimate; one that moves on its own can no longer steer it. Every row,
+beads included, is still corrected, and the status line says how many beads
+were thinned and how many rows the estimate left out; the saved drift records
+it. Turn it on for data with beads — it assumes the busiest spots are beads.
+Max drift must be at least the real drift, as COMET needs anyway, or a bead's
+cloud spreads too thin to stand out.
+
+This needs comet-smlm 1.3 or later; with an older COMET the box is disabled and
+its tooltip says so. To review beads one by one, or remove them completely,
+use **Fiducials** below.
 
 ## Fiducials and grouping
 

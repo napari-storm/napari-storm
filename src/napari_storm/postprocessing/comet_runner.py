@@ -1,6 +1,8 @@
 """Use COMET 1.x localization-count windows without changing its optimizer."""
 
+import os
 from dataclasses import asdict, dataclass, field
+from importlib.util import find_spec
 
 import numpy as np
 
@@ -17,6 +19,9 @@ class CometParameters:
     #: budget is too small for all of them (pairs fall with its square).
     keep_percent: int = 100
     seed: int = 0
+    #: Thin fiducial beads out of the estimate (COMET's ``thin_beads``) so
+    #: they cannot blow up the pair count. Every row is still corrected.
+    remove_beads: bool = False
 
     def __post_init__(self):
         if (
@@ -58,6 +63,61 @@ def prepare_input(coords, times, params, *, time_origin=None):
     return np.column_stack((coords, times))
 
 
+def bead_removal_available():
+    """True when the installed COMET can remove beads (comet-smlm 1.3 and later).
+
+    Looks for the module on disk rather than importing COMET, which pulls in
+    numba and takes seconds; the dock asks on every refresh.
+    """
+    spec = find_spec("comet")
+    if spec is None or not spec.submodule_search_locations:
+        return False
+    return any(
+        os.path.exists(os.path.join(location, "core", "beads.py"))
+        for location in spec.submodule_search_locations
+    )
+
+
+def remove_beads(data, params):
+    """Thin fiducial beads out of COMET's input, evenly in time.
+
+    Returns the rows to estimate from and a plain-dict summary for the
+    provenance (None when bead removal is off). The drift is still applied to
+    every row of the dataset; only the estimate leaves the removed rows out.
+    """
+    if not params.remove_beads:
+        return data, None
+    import comet
+
+    thin = getattr(comet, "thin_beads", None)
+    if thin is None:
+        raise RuntimeError(
+            f"Removing beads needs comet-smlm 1.3 or later; {comet.__version__} is installed."
+        )
+    keep, report = thin(data, params.max_drift_nm)
+    summary = {
+        "n_beads": int(report.n_beads),
+        "n_locs_removed": int(report.n_locs_removed),
+        "n_bead_locs": int(report.n_bead_locs),
+        "cap": float(report.cap),
+        "budget_limited": bool(report.budget_limited),
+    }
+    return data[keep], summary
+
+
+def bead_text(summary):
+    """'6 beads thinned (68,808 rows left out of the estimate)', or ''."""
+    if not summary:
+        return ""
+    n = summary["n_beads"]
+    if not n:
+        return "no beads found"
+    return (
+        f"{n} bead{'s' if n != 1 else ''} thinned "
+        f"({summary['n_locs_removed']:,} rows left out of the estimate)"
+    )
+
+
 def subsample(data, params):
     """A reproducible random `keep_percent` of the rows, in their original order."""
     if params.keep_percent >= 100:
@@ -84,9 +144,7 @@ def run_comet(
     params = params or CometParameters()
     report = progress or (lambda stage, info=None: None)
     report("preparing", {})
-    data = subsample(
-        prepare_input(coords, times, params, time_origin=time_origin), params
-    )
+    data = prepare_input(coords, times, params, time_origin=time_origin)
     import comet
     from comet.core.segmenter import segment_by_num_locs_per_window
     from packaging.version import Version
@@ -97,6 +155,12 @@ def run_comet(
             'Run: pip uninstall py-comet, then pip install "napari-storm[comet]" '
             "(COMET is published as comet-smlm since 1.2)."
         )
+    if params.remove_beads:
+        report("removing beads", {})
+    # Before the subsample and the pair count: the beads are what blows the
+    # count up, and the budget must see the rows COMET will pair.
+    data, beads = remove_beads(data, params)
+    data = subsample(data, params)
     segmentation = segment_by_num_locs_per_window(data[:, 3], params.window)
     if segmentation.n_segments < 2:
         raise ValueError("Fewer than two windows; reduce localizations per window")
@@ -153,6 +217,8 @@ def run_comet(
         auto_downsampled=bool(details.auto_downsampled),
         windows=int(segmentation.n_segments),
     )
+    if beads is not None:
+        provenance["beads"] = beads
     valid = np.isfinite(details.knot_drift_nm).all(axis=1)
     return DriftModel(
         knots[valid],
